@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>civ-nova — 2D/3D切替モック v0</title>
+<style>
+  :root{--chrome:#23272e;--chrome2:#2c313a;--ink:#e8eaed;--ink2:#9aa3af;--accent:#d9b23a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+    background:var(--chrome);color:var(--ink);overflow:hidden;display:flex;flex-direction:column}
+  #topbar{height:46px;flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:0 14px;
+    background:var(--chrome);border-bottom:1px solid #171a1f;font-size:12.5px;white-space:nowrap}
+  #topbar h1{font-size:13.5px;font-weight:700}
+  #topbar h1 small{color:var(--ink2);font-weight:500;margin-left:6px}
+  .seg{display:flex;border:1px solid #444b55;border-radius:6px;overflow:hidden}
+  .seg button{background:var(--chrome2);color:var(--ink2);border:none;padding:5px 14px;
+    font-size:12.5px;cursor:pointer;font-family:inherit;font-weight:600}
+  .seg button.on{background:#4a5260;color:#fff}
+  .seg.big button{padding:6px 20px;font-size:13px}
+  label.chk{display:inline-flex;align-items:center;gap:4px;color:var(--ink2);cursor:pointer;user-select:none}
+  label.chk input{accent-color:var(--accent)}
+  #seedbox{width:86px;background:var(--chrome2);border:1px solid #444b55;color:var(--ink);
+    border-radius:5px;padding:4px 6px;font-size:12px;font-family:inherit}
+  #regen{background:#3d4450;color:var(--ink);border:1px solid #565f6d;border-radius:5px;
+    padding:4px 10px;font-size:12px;cursor:pointer;font-family:inherit}
+  .hint{color:#6b7280;font-size:11.5px}
+  #stage{flex:1;position:relative;min-height:0}
+  #stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  #cv3d{cursor:grab}
+  #cv2d{cursor:grab}
+  #cvmark{pointer-events:none}
+  #glfail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    color:var(--ink2);font-size:14px;text-align:center;padding:40px}
+</style>
+</head>
+<body>
+<header id="topbar">
+  <h1>civ-nova<small>2D/3D切替モック v0 — 同じ世界・同じ視点を2つのレンダラで</small></h1>
+  <div class="seg big" id="modeseg">
+    <button data-m="2d" class="on">2D 戦略</button>
+    <button data-m="3d">3D 地図</button>
+  </div>
+  <label class="chk"><input type="checkbox" id="ly-borders" checked>国境</label>
+  <label class="chk"><input type="checkbox" id="ly-political">政治図</label>
+  <label class="chk"><input type="checkbox" id="ly-labels" checked>ラベル</label>
+  <span style="flex:1"></span>
+  <input id="seedbox" type="number" value="0">
+  <button id="regen">再生成</button>
+  <span class="hint" id="hint">ドラッグ:移動 / ホイール:ズーム</span>
+</header>
+<div id="stage">
+  <canvas id="cv2d"></canvas>
+  <canvas id="cv3d"></canvas>
+  <canvas id="cvmark"></canvas>
+  <div id="glfail">このブラウザでは WebGL2 が使えないため 3D モードを表示できません。<br>2D モードは利用できます。</div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   civ-nova 2D/3D toggle mock v0
+   - 同一の生成世界・同一のカメラ位置を、2D(アトラス調Canvas)と
+     3D(WebGL2レリーフ地図)で切り替えて見る検証
+   - シム(世界データ)とレンダラを分離すれば2D/3Dは「表示の差し替え」に
+     なる、という構造の実証
+   ===================================================================== */
+
+// ---------- constants (worldgen: map-city-mock.html と同一) ----------
+const COLS = 168, ROWS = 96;
+const R = 6;
+const HW = Math.sqrt(3) * R;
+const VH = 1.5 * R;
+const WORLD_W = HW * (COLS + 1);
+const WORLD_H = VH * (ROWS - 1) + 2 * R;
+const OS = 2;
+const DEFAULT_SEED = 20260702;
+
+const DEPTH_COLORS = ['#a7c8dc','#98bcd5','#8ab0cb','#7fa7c3'];
+const ICE_COLOR = '#e9eff3', LAKE_COLOR = '#a9cade';
+const BIOME = {GRASS:0, PLAINS:1, DESERT:2, FLOOD:3, TUNDRA:4, SNOW:5, FOREST:6, JUNGLE:7};
+const BIOME_COLOR = ['#b7d49a','#d8d1a0','#ecdfb4','#c9d894','#d4d7c6','#f2f4f0','#9ec687','#8cb677'];
+
+const NATION_DEFS = [
+  {name:'アルヴェナ王国', color:'#3d6db5', terrR:7,
+   cityNames:['アルヴェナ','ロズレー','ヴェルミア','サンモール','リヴレット','オーブラン','フェルデン','ミラベル']},
+  {name:'カザール汗国', color:'#c0503c', terrR:12,
+   cityNames:['カザール','タルガン','ウルベク','サライ','バトゥーム','アクチョル']},
+  {name:'メリディア連邦', color:'#2f9180', terrR:9,
+   cityNames:['メリディア','ポルトネラ','カラヴェル','テッサ','ノヴァリス','ファルコナ']},
+  {name:'ソルナ公国', color:'#8055a8', terrR:6,
+   cityNames:['ソルナ','ヴェスタリ','ティレン']},
+];
+
+// ---------- rng / noise ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hash2(ix,iy,seed){let h=(seed|0)+Math.imul(ix,374761393)+Math.imul(iy,668265263);h=(h^(h>>>13))>>>0;h=Math.imul(h,1274126177)>>>0;return((h^(h>>>16))>>>0)/4294967296}
+const sm=t=>t*t*(3-2*t);
+function vnoise(x,y,seed){
+  const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy;
+  const a=hash2(ix,iy,seed),b=hash2(ix+1,iy,seed),c=hash2(ix,iy+1,seed),d=hash2(ix+1,iy+1,seed);
+  const u=sm(fx),v=sm(fy);
+  return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v;
+}
+function fbm(x,y,seed,oct){oct=oct||5;let v=0,amp=1,f=1,n=0;for(let o=0;o<oct;o++){v+=amp*vnoise(x*f,y*f,seed+o*101);n+=amp;amp*=.5;f*=2}return v/n}
+
+// ---------- hex helpers ----------
+const idx=(c,r)=>r*COLS+c;
+const inb=(c,r)=>c>=0&&c<COLS&&r>=0&&r<ROWS;
+const NB_EVEN=[[1,0],[-1,0],[0,-1],[-1,-1],[0,1],[-1,1]];
+const NB_ODD =[[1,0],[-1,0],[1,-1],[0,-1],[1,1],[0,1]];
+function neighbors(c,r){
+  const t=(r&1)?NB_ODD:NB_EVEN,out=[];
+  for(const [dc,dr] of t){const nc=c+dc,nr=r+dr;if(inb(nc,nr))out.push([nc,nr]);}
+  return out;
+}
+function cube(c,r){const q=c-((r-(r&1))>>1);return [q,r,-q-r];}
+function hexDist(c1,r1,c2,r2){
+  const a=cube(c1,r1),b=cube(c2,r2);
+  return Math.max(Math.abs(a[0]-b[0]),Math.abs(a[1]-b[1]),Math.abs(a[2]-b[2]));
+}
+const hexX=(c,r)=>HW*(c+0.5*(r&1))+HW*0.5;
+const hexY=(c,r)=>VH*r+R;
+function hexCorners(cx,cy,rad){
+  const pts=[];
+  for(let k=0;k<6;k++){const a=Math.PI/180*(60*k-30);pts.push([cx+rad*Math.cos(a),cy+rad*Math.sin(a)]);}
+  return pts;
+}
+function diskAround(c,r,rad){
+  const out=[];
+  for(let rr=Math.max(0,r-rad);rr<=Math.min(ROWS-1,r+rad);rr++)
+    for(let cc=Math.max(0,c-rad-1);cc<=Math.min(COLS-1,c+rad+1);cc++)
+      if(hexDist(c,r,cc,rr)<=rad)out.push([cc,rr]);
+  return out;
+}
+function nearestHex(wx,wy){
+  const r0=Math.round((wy-R)/VH);
+  let best=null,bd=Infinity;
+  for(let r=r0-1;r<=r0+1;r++){
+    if(r<0||r>=ROWS)continue;
+    const c0=Math.round(wx/HW-0.5*(r&1)-0.5);
+    for(let c=c0-1;c<=c0+1;c++){
+      if(c<0||c>=COLS)continue;
+      const dx=wx-hexX(c,r),dy=wy-hexY(c,r),d=dx*dx+dy*dy;
+      if(d<bd){bd=d;best=[c,r];}
+    }
+  }
+  return best;
+}
+
+// ---------- worldgen (map-city-mock.html から資源描画を除いて流用) ----------
+let G=null;
+
+function generate(seed){
+  const rng=mulberry32(seed^0x9e3779b9);
+  const N=COLS*ROWS;
+  const elev=new Float32Array(N), water=new Int8Array(N).fill(-1),
+        biome=new Uint8Array(N), form=new Uint8Array(N),
+        river=new Uint8Array(N), owner=new Int8Array(N).fill(-1),
+        shade=new Float32Array(N), temp=new Float32Array(N);
+
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const nx=c/COLS,ny=r/ROWS,i=idx(c,r);
+    const e=fbm(nx*4.2,ny*2.4,seed,5);
+    const m=fbm(nx*1.7+9.2,ny*1.1+7.7,seed+9991,4);
+    const d=Math.min(nx,1-nx,ny*1.6,(1-ny)*1.6);
+    const edge=Math.min(1,Math.max(0,d/0.14));
+    elev[i]=(e*0.52+m*0.48)*(0.28+0.72*sm(edge));
+    shade[i]=(fbm(nx*22,ny*13,seed+777,3)-0.5)*0.13;
+  }
+  const sorted=Float32Array.from(elev).sort();
+  const seaLevel=sorted[Math.floor(N*0.62)];
+  const landElev=[];
+  for(let i=0;i<N;i++) if(elev[i]>seaLevel) landElev.push(elev[i]);
+  landElev.sort((a,b)=>a-b);
+  const pctLand=p=>landElev[Math.min(landElev.length-1,Math.floor(landElev.length*p))];
+
+  const ridged=new Float32Array(N), rvals=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const i=idx(c,r);
+    if(elev[i]<=seaLevel)continue;
+    const nx=c/COLS,ny=r/ROWS;
+    let v=1-Math.abs(2*fbm(nx*5.2+31,ny*3.1+17,seed+555,4)-1);
+    v=v*v*(0.4+0.6*(elev[i]-seaLevel)/(1-seaLevel));
+    ridged[i]=v; rvals.push(v);
+  }
+  rvals.sort((a,b)=>a-b);
+  const mThr=rvals[Math.floor(rvals.length*0.955)], hThr=rvals[Math.floor(rvals.length*0.86)];
+  const peakElev=pctLand(0.985);
+
+  const moist=new Float32Array(N);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const i=idx(c,r), nx=c/COLS, ny=r/ROWS;
+    const lat=1-Math.abs(ny-0.5)*2;
+    temp[i]=lat*0.88+0.18*fbm(nx*3.1+71,ny*3.1+13,seed+222,3)-Math.max(0,elev[i]-seaLevel)*0.55;
+    moist[i]=fbm(nx*3.4+55,ny*3.4+21,seed+333,4);
+    if(elev[i]<=seaLevel){water[i]=3;continue;}
+    if(ridged[i]>mThr){form[i]=elev[i]>peakElev?3:2;}
+    else if(ridged[i]>hThr){form[i]=1;}
+    const t=temp[i],m=moist[i];
+    if(t<0.15)biome[i]=BIOME.SNOW;
+    else if(t<0.30)biome[i]=BIOME.TUNDRA;
+    else if(t>0.60&&m<0.36)biome[i]=BIOME.DESERT;
+    else if(t>0.66&&m>0.60)biome[i]=BIOME.JUNGLE;
+    else if(m>0.55)biome[i]=BIOME.FOREST;
+    else if(m<0.44)biome[i]=BIOME.PLAINS;
+    else biome[i]=BIOME.GRASS;
+    if(form[i]>=2)biome[i]=(t<0.2)?BIOME.SNOW:biome[i];
+  }
+
+  { // bathymetry + sea ice
+    const q=[]; const dist=new Int16Array(N).fill(-1);
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]<0)continue;
+      for(const [nc,nr] of neighbors(c,r)) if(water[idx(nc,nr)]<0){dist[i]=0;q.push([c,r]);break;}
+    }
+    let head=0;
+    while(head<q.length){
+      const [c,r]=q[head++],di=dist[idx(c,r)];
+      if(di>=3)continue;
+      for(const [nc,nr] of neighbors(c,r)){
+        const j=idx(nc,nr);
+        if(water[j]>=0&&dist[j]<0){dist[j]=di+1;q.push([nc,nr]);}
+      }
+    }
+    for(let i=0;i<N;i++) if(water[i]>=0) water[i]=dist[i]<0?3:dist[i];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]>=0&&water[i]!==9&&temp[i]<0.06)water[i]=8;
+    }
+  }
+
+  const rivers=[];
+  {
+    const cand=[];
+    for(let r=2;r<ROWS-2;r++)for(let c=2;c<COLS-2;c++){
+      const i=idx(c,r);
+      if(water[i]<0&&elev[i]>pctLand(0.80))cand.push([c,r]);
+    }
+    for(let k=0;k<42&&cand.length;k++){
+      let [c,r]=cand[Math.floor(rng()*cand.length)];
+      const path=[[c,r]], seen=new Set([idx(c,r)]);
+      for(let step=0;step<220;step++){
+        let best=null,be=Infinity;
+        for(const [nc,nr] of neighbors(c,r)){
+          const j=idx(nc,nr);
+          if(seen.has(j))continue;
+          const e=water[j]>=0?-1:elev[j];
+          if(e<be){be=e;best=[nc,nr];}
+        }
+        if(!best)break;
+        [c,r]=best; path.push(best); seen.add(idx(c,r));
+        if(water[idx(c,r)]>=0)break;
+        if(be>=elev[idx(path[path.length-2][0],path[path.length-2][1])]+0.02)break;
+      }
+      if(path.length>=7){
+        rivers.push(path);
+        for(const [pc,pr] of path){const j=idx(pc,pr);if(water[j]<0)river[j]=1;}
+      }
+    }
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]<0&&biome[i]===BIOME.DESERT&&form[i]<2){
+        if(river[i]){biome[i]=BIOME.FLOOD;continue;}
+        for(const [nc,nr] of neighbors(c,r))if(river[idx(nc,nr)]){biome[i]=BIOME.FLOOD;break;}
+      }
+    }
+  }
+
+  const world={seed,elev,water,biome,form,river,owner,shade,temp,rivers,seaLevel};
+
+  // settle score（資源項は除外した簡易版）
+  const score=new Float32Array(N);
+  {
+    const foodW=[2,1,0,3,0.4,0,1,0.7];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]>=0||form[i]>=2){score[i]=-1;continue;}
+      let s=0, coast=false;
+      for(const [cc,rr] of diskAround(c,r,2)){
+        const j=idx(cc,rr);
+        if(water[j]===0){s+=0.5;coast=true;continue;}
+        if(water[j]>=0)continue;
+        s+=foodW[biome[j]]*(form[j]===1?0.6:1);
+        if(river[j])s+=0.8;
+      }
+      if(coast)s+=1.5;
+      if(river[i])s+=2;
+      score[i]=s;
+    }
+  }
+  world.score=score;
+
+  const cont=new Int32Array(N).fill(-1), contSize=[];
+  {
+    let cid=0;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]>=0||cont[i]>=0)continue;
+      const q=[[c,r]]; cont[i]=cid; let sz=0, head=0;
+      while(head<q.length){
+        const [qc,qr]=q[head++]; sz++;
+        for(const [nc,nr] of neighbors(qc,qr)){
+          const j=idx(nc,nr);
+          if(water[j]<0&&cont[j]<0){cont[j]=cid;q.push([nc,nr]);}
+        }
+      }
+      contSize.push(sz); cid++;
+    }
+  }
+  world.cont=cont; world.contSize=contSize;
+
+  placeNations(world,rng);
+  computeTerritory(world);
+  return world;
+}
+
+function placeNations(world,rng){
+  const {score,water,cont,contSize}=world;
+  const cities=[];
+  const nations=NATION_DEFS.map((d,i)=>({...d,id:i,cities:[]}));
+  const isLand=(c,r)=>water[idx(c,r)]<0;
+  const distToCities=(c,r,list)=>list.length?Math.min(...list.map(ct=>hexDist(c,r,ct.c,ct.r))):Infinity;
+
+  function pick(constraintSets){
+    for(const con of constraintSets){
+      let best=null,bv=-Infinity;
+      for(let r=3;r<ROWS-3;r++)for(let c=3;c<COLS-3;c++){
+        if(!isLand(c,r)||score[idx(c,r)]<=0)continue;
+        const v=con(c,r);
+        if(v!==null&&v>bv){bv=v;best=[c,r];}
+      }
+      if(best)return best;
+    }
+    return null;
+  }
+  function addCity(nation,c,r){
+    const ct={c,r,nation:nation.id,name:nation.cityNames[nation.cities.length]||('都市'+(nation.cities.length+1)),
+              capital:nation.cities.length===0};
+    cities.push(ct); nation.cities.push(ct);
+    return ct;
+  }
+  const all=()=>cities;
+
+  { // A: dense
+    const nA=nations[0];
+    const cap=pick([(c,r)=>score[idx(c,r)]]);
+    addCity(nA,cap[0],cap[1]);
+    for(let k=0;k<7;k++){
+      const got=pick([
+        (c,r)=>{const dn=distToCities(c,r,nA.cities);if(dn<5||dn>9)return null;return score[idx(c,r)];},
+        (c,r)=>{const dn=distToCities(c,r,nA.cities);if(dn<4||dn>11)return null;return score[idx(c,r)];},
+      ]);
+      if(got)addCity(nA,got[0],got[1]);
+    }
+  }
+  { // B: sparse on one big continent
+    const nB=nations[1];
+    const bigEnough=(c,r)=>contSize[cont[idx(c,r)]]>=450;
+    const cap=pick([
+      (c,r)=>{if(!bigEnough(c,r))return null;const d=distToCities(c,r,all());if(d<34)return null;return score[idx(c,r)]*0.5+d*0.05;},
+      (c,r)=>{if(!bigEnough(c,r))return null;const d=distToCities(c,r,all());if(d<24)return null;return score[idx(c,r)]*0.5+d*0.05;},
+      (c,r)=>{const d=distToCities(c,r,all());if(d<24)return null;return score[idx(c,r)]*0.5+d*0.05;},
+    ]);
+    addCity(nB,cap[0],cap[1]);
+    const capCont=cont[idx(cap[0],cap[1])];
+    for(let k=0;k<5;k++){
+      const got=pick([
+        (c,r)=>{if(cont[idx(c,r)]!==capCont)return null;
+          const dn=distToCities(c,r,nB.cities);const do_=distToCities(c,r,all().filter(x=>x.nation!==1));
+          if(dn<13||dn>22||do_<16)return null;return score[idx(c,r)]*0.6+dn*0.25;},
+        (c,r)=>{if(cont[idx(c,r)]!==capCont)return null;
+          const dn=distToCities(c,r,nB.cities);const do_=distToCities(c,r,all().filter(x=>x.nation!==1));
+          if(dn<10||dn>26||do_<12)return null;return score[idx(c,r)]*0.6+dn*0.25;},
+      ]);
+      if(got)addCity(nB,got[0],got[1]);
+    }
+  }
+  { // C: hybrid
+    const nC=nations[2];
+    const cap=pick([
+      (c,r)=>{const d=distToCities(c,r,all());if(d<26)return null;return score[idx(c,r)]+d*0.02;},
+      (c,r)=>{const d=distToCities(c,r,all());if(d<18)return null;return score[idx(c,r)];},
+    ]);
+    addCity(nC,cap[0],cap[1]);
+    for(let k=0;k<3;k++){
+      const got=pick([
+        (c,r)=>{const dn=distToCities(c,r,nC.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==2));
+          if(dn<5||dn>9||dp<14)return null;return score[idx(c,r)];},
+        (c,r)=>{const dn=distToCities(c,r,nC.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==2));
+          if(dn<4||dn>11||dp<10)return null;return score[idx(c,r)];},
+      ]);
+      if(got)addCity(nC,got[0],got[1]);
+    }
+    for(let k=0;k<2;k++){
+      const got=pick([
+        (c,r)=>{const dn=distToCities(c,r,nC.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==2));
+          if(dn<15||dn>28||dp<15)return null;return score[idx(c,r)]*0.7+dn*0.2;},
+        (c,r)=>{const dn=distToCities(c,r,nC.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==2));
+          if(dn<12||dn>32||dp<11)return null;return score[idx(c,r)]*0.7+dn*0.2;},
+      ]);
+      if(got)addCity(nC,got[0],got[1]);
+    }
+  }
+  { // D: micro on an unused island
+    const nD=nations[3];
+    const usedCont=new Set(all().map(ct=>cont[idx(ct.c,ct.r)]));
+    const cap=pick([
+      (c,r)=>{const ci=cont[idx(c,r)];const d=distToCities(c,r,all());
+        if(usedCont.has(ci)||contSize[ci]<25||contSize[ci]>500||d<18)return null;
+        return score[idx(c,r)]+d*0.02;},
+      (c,r)=>{const ci=cont[idx(c,r)];const d=distToCities(c,r,all());
+        if(usedCont.has(ci)||contSize[ci]<20||d<14)return null;
+        return score[idx(c,r)]+d*0.02;},
+      (c,r)=>{const d=distToCities(c,r,all());if(d<24)return null;return score[idx(c,r)];},
+      (c,r)=>{const d=distToCities(c,r,all());if(d<16)return null;return score[idx(c,r)];},
+    ]);
+    addCity(nD,cap[0],cap[1]);
+    const capCont=cont[idx(cap[0],cap[1])];
+    const got=pick([
+      (c,r)=>{if(cont[idx(c,r)]!==capCont)return null;
+        const dn=distToCities(c,r,nD.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==3));
+        if(dn<5||dn>10||dp<12)return null;return score[idx(c,r)];},
+      (c,r)=>{const dn=distToCities(c,r,nD.cities);const dp=distToCities(c,r,all().filter(x=>x.nation!==3));
+        if(dn<4||dn>13||dp<8)return null;return score[idx(c,r)];},
+    ]);
+    if(got)addCity(nD,got[0],got[1]);
+  }
+  world.cities=cities; world.nations=nations;
+}
+
+function computeTerritory(world){
+  const {owner,water,cities,nations}=world;
+  owner.fill(-1);
+  const bestD=new Int16Array(owner.length).fill(999);
+  for(const ct of cities){
+    const rad=nations[ct.nation].terrR;
+    for(const [c,r] of diskAround(ct.c,ct.r,rad)){
+      const i=idx(c,r);
+      if(water[i]>=0)continue;
+      const d=hexDist(c,r,ct.c,ct.r);
+      if(d<bestD[i]){bestD[i]=d;owner[i]=ct.nation;}
+    }
+  }
+  for(const n of nations){
+    const capCont=world.cont[idx(n.cities[0].c,n.cities[0].r)];
+    let sx=0,sy=0,cn=0,tx=0,ty=0,tn=0;
+    n.terrCount=0;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(world.owner[i]!==n.id)continue;
+      n.terrCount++;tx+=hexX(c,r);ty+=hexY(c,r);tn++;
+      if(world.cont[i]===capCont){sx+=hexX(c,r);sy+=hexY(c,r);cn++;}
+    }
+    if(!cn){sx=tx;sy=ty;cn=tn;}
+    n.centroid=cn?[sx/cn,sy/cn]:[hexX(n.cities[0].c,n.cities[0].r),hexY(n.cities[0].c,n.cities[0].r)];
+  }
+}
+
+// ---------- shared texture bake (2Dの見た目 = 3Dのテクスチャ) ----------
+let baseC=null;   // terrain only
+let mapC=null;    // terrain + territory/borders (current layer state)
+
+function shadeColor(hex,f){
+  const n=parseInt(hex.slice(1),16);
+  let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=Math.max(0,Math.min(255,Math.round(r*f)));g=Math.max(0,Math.min(255,Math.round(g*f)));b=Math.max(0,Math.min(255,Math.round(b*f)));
+  return `rgb(${r},${g},${b})`;
+}
+function hexFill(g,c,r,rad){
+  const cx=hexX(c,r),cy=hexY(c,r),pts=hexCorners(cx,cy,rad);
+  g.beginPath();g.moveTo(pts[0][0],pts[0][1]);
+  for(let k=1;k<6;k++)g.lineTo(pts[k][0],pts[k][1]);
+  g.closePath();
+}
+function bakeBase(){
+  baseC=document.createElement('canvas');
+  baseC.width=Math.ceil(WORLD_W*OS);baseC.height=Math.ceil(WORLD_H*OS);
+  const g=baseC.getContext('2d');
+  g.scale(OS,OS);
+  g.fillStyle=DEPTH_COLORS[3];g.fillRect(0,0,WORLD_W,WORLD_H);
+  const {water,biome,form,shade}=G;
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const i=idx(c,r);
+    let col;
+    if(water[i]===8)col=ICE_COLOR;
+    else if(water[i]===9)col=LAKE_COLOR;
+    else if(water[i]>=0)col=DEPTH_COLORS[water[i]];
+    else{
+      col=BIOME_COLOR[biome[i]];
+      let f=1+shade[i];
+      if(form[i]===1)f*=0.90;
+      if(form[i]>=2)col='#c3bcb0',f=1+shade[i]*0.5;
+      col=shadeColor(col,f);
+    }
+    g.fillStyle=col;
+    hexFill(g,c,r,R+0.35);
+    g.fill();
+  }
+  g.strokeStyle='rgba(82,132,180,0.95)';g.lineWidth=2.0;g.lineJoin='round';g.lineCap='round';
+  for(const path of G.rivers){
+    g.beginPath();
+    for(let k=0;k<path.length;k++){
+      const [c,r]=path[k],x=hexX(c,r),y=hexY(c,r);
+      if(k===0)g.moveTo(x,y);
+      else{
+        const [pc,pr]=path[k-1],px=hexX(pc,pr),py=hexY(pc,pr);
+        g.quadraticCurveTo(px,py,(px+x)/2,(py+y)/2);
+      }
+    }
+    g.stroke();
+  }
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const i=idx(c,r);
+    if(G.water[i]>=0)continue;
+    const cx=hexX(c,r),cy=hexY(c,r);
+    const jx=(hash2(c,r,G.seed+50)-0.5)*2.5, jy=(hash2(c,r,G.seed+51)-0.5)*2;
+    if(G.form[i]>=2){
+      const ms=0.8+hash2(c,r,G.seed+52)*0.45;
+      g.fillStyle=G.form[i]===3?'#7e786c':'#8d867a';
+      g.beginPath();g.moveTo(cx-3.6*ms+jx,cy+2.6*ms+jy);g.lineTo(cx+jx,cy-3.8*ms+jy);g.lineTo(cx+3.6*ms+jx,cy+2.6*ms+jy);g.closePath();g.fill();
+      if(G.form[i]===3){
+        g.fillStyle='#f5f5f2';
+        g.beginPath();g.moveTo(cx-1.3+jx,cy-1.6+jy);g.lineTo(cx+jx,cy-3.8+jy);g.lineTo(cx+1.3+jx,cy-1.6+jy);g.closePath();g.fill();
+      }
+    }else if(G.form[i]===1){
+      g.strokeStyle='rgba(70,60,40,0.22)';g.lineWidth=0.8;
+      g.beginPath();g.moveTo(cx-2.4+jx,cy+1.1+jy);g.quadraticCurveTo(cx+jx,cy-1.8+jy,cx+2.4+jx,cy+1.1+jy);g.stroke();
+    }else if(G.biome[i]===BIOME.FOREST||G.biome[i]===BIOME.JUNGLE){
+      g.fillStyle=G.biome[i]===BIOME.FOREST?'rgba(60,100,48,0.55)':'rgba(48,92,44,0.6)';
+      for(let t=0;t<2;t++){
+        const tx2=cx+(hash2(c*3+t,r,G.seed+60)-0.5)*6, ty2=cy+(hash2(c,r*3+t,G.seed+61)-0.5)*5;
+        g.beginPath();g.arc(tx2,ty2,1.15,0,7);g.fill();
+      }
+    }
+  }
+}
+function bakeMap(){
+  mapC=document.createElement('canvas');
+  mapC.width=baseC.width;mapC.height=baseC.height;
+  const g=mapC.getContext('2d');
+  g.drawImage(baseC,0,0);
+  g.scale(OS,OS);
+  const {owner,water,nations}=G;
+  if(layers.political){
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r);
+      if(water[i]<0&&owner[i]<0){
+        g.fillStyle='rgba(235,231,219,0.55)';
+        hexFill(g,c,r,R+0.35);g.fill();
+      }
+    }
+  }
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const i=idx(c,r);
+    if(owner[i]<0)continue;
+    g.fillStyle=nations[owner[i]].color+(layers.political?'6b':'24');
+    hexFill(g,c,r,R+0.35);g.fill();
+  }
+  if(layers.borders){
+    g.lineWidth=layers.political?1.8:1.4;g.lineCap='round';
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const i=idx(c,r),o=owner[i];
+      if(o<0)continue;
+      const cx=hexX(c,r),cy=hexY(c,r),pts=hexCorners(cx,cy,R+0.2);
+      const nbs=(r&1)?NB_ODD:NB_EVEN;
+      g.strokeStyle=shadeColor(nations[o].color,0.72);
+      for(let k=0;k<6;k++){
+        const [dc,dr]=nbs[k],nc=c+dc,nr=r+dr;
+        const other=inb(nc,nr)?owner[idx(nc,nr)]:-1;
+        if(other===o)continue;
+        const ang=Math.atan2(hexY(nc,nr)-cy,hexX(nc,nr)-cx)*180/Math.PI;
+        const a1=((Math.round(ang/60)%6)+6)%6,a2=(a1+1)%6;
+        g.beginPath();g.moveTo(pts[a1][0],pts[a1][1]);g.lineTo(pts[a2][0],pts[a2][1]);g.stroke();
+      }
+    }
+  }
+}
+
+// ---------- view state (両モード共有) ----------
+const view={x:WORLD_W/2,y:WORLD_H/2,z:1,min:0.4,max:9};
+const layers={borders:true,political:false,labels:true};
+let mode='2d';
+let tilt3d=55*Math.PI/180;   // 3D pitch
+const FOV=45*Math.PI/180;
+
+// ---------- 2D renderer ----------
+const cv2=document.getElementById('cv2d'), ctx2=cv2.getContext('2d');
+function draw2d(){
+  const w=cv2.width,h=cv2.height;
+  ctx2.setTransform(1,0,0,1,0,0);
+  ctx2.fillStyle=DEPTH_COLORS[3];ctx2.fillRect(0,0,w,h);
+  ctx2.imageSmoothingEnabled=true;ctx2.imageSmoothingQuality='high';
+  ctx2.setTransform(view.z,0,0,view.z,w/2-view.x*view.z,h/2-view.y*view.z);
+  ctx2.drawImage(mapC,0,0,mapC.width,mapC.height,0,0,WORLD_W,WORLD_H);
+  ctx2.setTransform(1,0,0,1,0,0);
+  drawMarkers(ctx2,(wx,wy)=>[(wx-view.x)*view.z+w/2,(wy-view.y)*view.z+h/2,1]);
+}
+
+// ---------- markers (両モード共通・スクリーン空間) ----------
+function drawMarkers(g,project){
+  const w=g.canvas.width,h=g.canvas.height;
+  const showAll=view.z>=0.9;
+  for(const ct of G.cities){
+    const [sx,sy,vis]=project(hexX(ct.c,ct.r),hexY(ct.c,ct.r));
+    if(!vis||sx<-40||sx>w+40||sy<-40||sy>h+40)continue;
+    const n=G.nations[ct.nation];
+    const rad=ct.capital?7:5.5;
+    g.beginPath();g.arc(sx,sy,rad,0,7);
+    g.fillStyle=n.color;g.fill();
+    g.strokeStyle='#fff';g.lineWidth=2;g.stroke();
+    if(ct.capital){
+      g.fillStyle='#fff';g.font='bold 9px sans-serif';g.textAlign='center';g.textBaseline='middle';
+      g.fillText('★',sx,sy+0.5);
+    }
+    if(layers.labels&&(ct.capital||showAll)){
+      g.font=(ct.capital?'bold ':'')+'11px "Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
+      g.textAlign='center';g.textBaseline='top';
+      g.lineWidth=3;g.strokeStyle='rgba(255,255,255,0.85)';
+      g.strokeText(ct.name,sx,sy+rad+6);
+      g.fillStyle='#1f2937';g.fillText(ct.name,sx,sy+rad+6);
+    }
+  }
+  if(layers.labels){
+    for(const n of G.nations){
+      if(!n.cities.length)continue;
+      const [sx,sy,vis]=project(n.centroid[0],n.centroid[1]);
+      if(!vis)continue;
+      const size=Math.max(13,Math.min(30,Math.sqrt(n.terrCount)*2.2*Math.sqrt(view.z)));
+      g.font=`700 ${size}px "Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif`;
+      try{g.letterSpacing=Math.round(size*0.35)+'px';}catch(e){}
+      g.textAlign='center';g.textBaseline='middle';
+      g.lineWidth=4;g.strokeStyle='rgba(255,255,255,0.55)';
+      g.strokeText(n.name,sx,sy-size*1.2);
+      g.fillStyle=shadeColor(n.color,0.55);
+      g.globalAlpha=0.78;
+      g.fillText(n.name,sx,sy-size*1.2);
+      g.globalAlpha=1;
+      try{g.letterSpacing='0px';}catch(e){}
+    }
+  }
+}
+
+// ---------- 3D renderer (raw WebGL2) ----------
+const cv3=document.getElementById('cv3d');
+const cvm=document.getElementById('cvmark'), ctxm=cvm.getContext('2d');
+let gl=null, glOK=false;
+const GRID_X=672, GRID_Y=384;          // height grid resolution
+const H_BASE=6, H_HILL=13, H_MTN=32, H_PEAK=48, SEA_Y=2.0;
+let heightGrid=null;
+let terrProg=null, waterProg=null, terrVAO=null, waterVAO=null, terrTex=null, nIndices=0;
+let uT={}, uW={};
+
+function compile(gl,type,src){
+  const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(gl,vs,fs){
+  const p=gl.createProgram();
+  gl.attachShader(p,compile(gl,gl.VERTEX_SHADER,vs));
+  gl.attachShader(p,compile(gl,gl.FRAGMENT_SHADER,fs));
+  gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+// --- minimal mat4 ---
+function mat4Mul(a,b){
+  const o=new Float32Array(16);
+  for(let i=0;i<4;i++)for(let j=0;j<4;j++){
+    o[j*4+i]=a[i]*b[j*4]+a[4+i]*b[j*4+1]+a[8+i]*b[j*4+2]+a[12+i]*b[j*4+3];
+  }
+  return o;
+}
+function mat4Persp(fov,aspect,near,far){
+  const f=1/Math.tan(fov/2),nf=1/(near-far);
+  return new Float32Array([f/aspect,0,0,0, 0,f,0,0, 0,0,(far+near)*nf,-1, 0,0,2*far*near*nf,0]);
+}
+function mat4LookAt(eye,center,up){
+  let zx=eye[0]-center[0],zy=eye[1]-center[1],zz=eye[2]-center[2];
+  let zl=Math.hypot(zx,zy,zz);zx/=zl;zy/=zl;zz/=zl;
+  let xx=up[1]*zz-up[2]*zy, xy=up[2]*zx-up[0]*zz, xz=up[0]*zy-up[1]*zx;
+  let xl=Math.hypot(xx,xy,xz);xx/=xl;xy/=xl;xz/=xl;
+  const yx=zy*xz-zz*xy, yy=zz*xx-zx*xz, yz=zx*xy-zy*xx;
+  return new Float32Array([
+    xx,yx,zx,0, xy,yy,zy,0, xz,yz,zz,0,
+    -(xx*eye[0]+xy*eye[1]+xz*eye[2]),
+    -(yx*eye[0]+yy*eye[1]+yz*eye[2]),
+    -(zx*eye[0]+zy*eye[1]+zz*eye[2]),1]);
+}
+
+const TERR_VS=`#version 300 es
+precision highp float;
+in vec3 aPos; in vec3 aNrm; in vec2 aUV;
+uniform mat4 uVP;
+out vec3 vNrm; out vec2 vUV; out vec3 vPos;
+void main(){ vNrm=aNrm; vUV=aUV; vPos=aPos; gl_Position=uVP*vec4(aPos,1.0); }`;
+const TERR_FS=`#version 300 es
+precision highp float;
+in vec3 vNrm; in vec2 vUV; in vec3 vPos;
+uniform sampler2D uTex; uniform vec3 uSun; uniform vec3 uCam; uniform vec3 uFogColor; uniform float uFogDist;
+out vec4 o;
+void main(){
+  vec3 base=texture(uTex,vUV).rgb;
+  vec3 n=normalize(vNrm);
+  float diff=max(dot(n,uSun),0.0);
+  vec3 col=base*(0.62+0.50*diff);
+  float d=distance(uCam,vPos);
+  float fog=1.0-exp(-pow(d/uFogDist,1.6));
+  o=vec4(mix(col,uFogColor,fog*0.6),1.0);
+}`;
+const WATER_VS=`#version 300 es
+precision highp float;
+in vec2 aXZ;
+uniform mat4 uVP; uniform float uSeaY;
+out vec3 vPos;
+void main(){ vPos=vec3(aXZ.x,uSeaY,aXZ.y); gl_Position=uVP*vec4(vPos,1.0); }`;
+const WATER_FS=`#version 300 es
+precision highp float;
+in vec3 vPos;
+uniform vec3 uSun; uniform vec3 uCam; uniform float uTime; uniform vec3 uFogColor; uniform float uFogDist;
+out vec4 o;
+void main(){
+  // 波法線（フラグメントのみ・サイン合成）
+  float w1=sin(vPos.x*0.055+uTime*1.1)+sin(vPos.z*0.047-uTime*0.9);
+  float w2=sin((vPos.x+vPos.z)*0.031+uTime*0.6);
+  vec3 n=normalize(vec3(w1*0.045,1.0,w2*0.045));
+  vec3 viewDir=normalize(uCam-vPos);
+  float fres=pow(1.0-max(dot(viewDir,n),0.0),2.4);
+  vec3 h=normalize(uSun+viewDir);
+  float spec=pow(max(dot(n,h),0.0),90.0);
+  vec3 col=vec3(0.20,0.40,0.58)*0.45+vec3(1.0)*spec*0.5;
+  float a=0.14+fres*0.26+spec*0.4;
+  float d=distance(uCam,vPos);
+  float fog=1.0-exp(-pow(d/uFogDist,1.6));
+  o=vec4(mix(col,uFogColor,fog*0.55),a*(1.0-fog*0.5));
+}`;
+
+function buildHeightGrid(){
+  heightGrid=new Float32Array(GRID_X*GRID_Y);
+  const landMask=new Uint8Array(GRID_X*GRID_Y);
+  const {water,form,river}=G;
+  for(let gy=0;gy<GRID_Y;gy++)for(let gx=0;gx<GRID_X;gx++){
+    const wx=(gx/(GRID_X-1))*WORLD_W, wy=(gy/(GRID_Y-1))*WORLD_H;
+    const hx=nearestHex(wx,wy);
+    let h, isLand=false;
+    if(!hx)h=-13;
+    else{
+      const i=idx(hx[0],hx[1]);
+      if(water[i]===9){h=SEA_Y-1.6;}
+      else if(water[i]===8){h=SEA_Y+1.0;}
+      else if(water[i]>=0){h=-5-water[i]*4;}          // 海はマスごとの深さ段差
+      else{
+        isLand=true;
+        // Civ風タイル表現: 平地は平坦、丘/山はタイル中心に向かって盛り上がる
+        h=H_BASE+(hash2(hx[0],hx[1],991)-0.5)*1.0;
+        if(form[i]>0){
+          const d=Math.hypot(wx-hexX(hx[0],hx[1]),wy-hexY(hx[0],hx[1]));
+          const f=Math.max(0,1-d/(R*0.98));
+          const fs=f*f*(3-2*f);
+          h+=(form[i]===1?H_HILL:(form[i]===2?H_MTN:H_PEAK))*fs;
+        }
+        if(river[i]&&form[i]===0)h-=1.0;
+      }
+    }
+    heightGrid[gy*GRID_X+gx]=h;
+    landMask[gy*GRID_X+gx]=isLand?1:0;
+  }
+  // 1回だけ軽く平滑化（段差の縁を面取りする程度）
+  {
+    const src=Float32Array.from(heightGrid);
+    for(let gy=1;gy<GRID_Y-1;gy++)for(let gx=1;gx<GRID_X-1;gx++){
+      let s=0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++)s+=src[(gy+dy)*GRID_X+gx+dx];
+      heightGrid[gy*GRID_X+gx]=s/9;
+    }
+  }
+  // 海岸線を水面から出す/沈める
+  for(let i=0;i<heightGrid.length;i++){
+    heightGrid[i]=landMask[i]?Math.max(heightGrid[i],SEA_Y+0.9):Math.min(heightGrid[i],SEA_Y-1.4);
+  }
+}
+
+function initGL(){
+  gl=cv3.getContext('webgl2',{antialias:true});
+  if(!gl){document.getElementById('glfail').style.display='flex';glOK=false;return;}
+  glOK=true;
+  terrProg=program(gl,TERR_VS,TERR_FS);
+  waterProg=program(gl,WATER_VS,WATER_FS);
+  for(const nm of ['uVP','uTex','uSun','uCam','uFogColor','uFogDist'])uT[nm]=gl.getUniformLocation(terrProg,nm);
+  for(const nm of ['uVP','uSeaY','uSun','uCam','uTime','uFogColor','uFogDist'])uW[nm]=gl.getUniformLocation(waterProg,nm);
+  terrTex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,terrTex);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  // water plane (2 tris, world rect を少し拡張)
+  const m=400;
+  const wxz=new Float32Array([-m,-m, WORLD_W+m,-m, WORLD_W+m,WORLD_H+m, -m,-m, WORLD_W+m,WORLD_H+m, -m,WORLD_H+m]);
+  waterVAO=gl.createVertexArray();
+  gl.bindVertexArray(waterVAO);
+  const wb=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,wb);
+  gl.bufferData(gl.ARRAY_BUFFER,wxz,gl.STATIC_DRAW);
+  const aXZ=gl.getAttribLocation(waterProg,'aXZ');
+  gl.enableVertexAttribArray(aXZ);
+  gl.vertexAttribPointer(aXZ,2,gl.FLOAT,false,0,0);
+  gl.bindVertexArray(null);
+}
+
+function buildTerrainMesh(){
+  buildHeightGrid();
+  const nv=GRID_X*GRID_Y;
+  const pos=new Float32Array(nv*3), nrm=new Float32Array(nv*3), uv=new Float32Array(nv*2);
+  const H=(gx,gy)=>heightGrid[Math.max(0,Math.min(GRID_Y-1,gy))*GRID_X+Math.max(0,Math.min(GRID_X-1,gx))];
+  const dx=WORLD_W/(GRID_X-1), dz=WORLD_H/(GRID_Y-1);
+  for(let gy=0;gy<GRID_Y;gy++)for(let gx=0;gx<GRID_X;gx++){
+    const i=gy*GRID_X+gx;
+    const wx=gx*dx, wz=gy*dz, h=heightGrid[i];
+    pos[i*3]=wx;pos[i*3+1]=h;pos[i*3+2]=wz;
+    uv[i*2]=wx/WORLD_W;uv[i*2+1]=wz/WORLD_H;
+    const sx=(H(gx+1,gy)-H(gx-1,gy))/(2*dx), sz=(H(gx,gy+1)-H(gx,gy-1))/(2*dz);
+    const nx=-sx,ny=1,nz=-sz, nl=Math.hypot(nx,ny,nz);
+    nrm[i*3]=nx/nl;nrm[i*3+1]=ny/nl;nrm[i*3+2]=nz/nl;
+  }
+  const nq=(GRID_X-1)*(GRID_Y-1);
+  const ind=new Uint32Array(nq*6);
+  let p=0;
+  for(let gy=0;gy<GRID_Y-1;gy++)for(let gx=0;gx<GRID_X-1;gx++){
+    const a=gy*GRID_X+gx,b=a+1,c=a+GRID_X,d=c+1;
+    ind[p++]=a;ind[p++]=c;ind[p++]=b; ind[p++]=b;ind[p++]=c;ind[p++]=d;
+  }
+  nIndices=ind.length;
+  if(terrVAO)gl.deleteVertexArray(terrVAO);
+  terrVAO=gl.createVertexArray();
+  gl.bindVertexArray(terrVAO);
+  const put=(data,loc,size)=>{
+    const b=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,b);
+    gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc,size,gl.FLOAT,false,0,0);
+  };
+  put(pos,gl.getAttribLocation(terrProg,'aPos'),3);
+  put(nrm,gl.getAttribLocation(terrProg,'aNrm'),3);
+  put(uv,gl.getAttribLocation(terrProg,'aUV'),2);
+  const ib=gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,ind,gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+}
+function uploadTexture(){
+  gl.bindTexture(gl.TEXTURE_2D,terrTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,mapC);
+  gl.generateMipmap(gl.TEXTURE_2D);
+}
+
+const FOG_COLOR=[0.72,0.80,0.88];
+function camParams(){
+  const h=cv3.height;
+  const d=h/(2*view.z*Math.tan(FOV/2));           // 2Dズームと視野の一致
+  const eye=[view.x, d*Math.sin(tilt3d), view.y+d*Math.cos(tilt3d)];
+  const center=[view.x,0,view.y];
+  return {d,eye,center};
+}
+let vpMat=null,camEye=null;
+function draw3d(time){
+  if(!glOK)return;
+  const {d,eye,center}=camParams();
+  camEye=eye;
+  const aspect=cv3.width/cv3.height;
+  const proj=mat4Persp(FOV,aspect,Math.max(2,d*0.03),d*10+4000);
+  const viewM=mat4LookAt(eye,center,[0,1,0]);
+  vpMat=mat4Mul(proj,viewM);
+  gl.viewport(0,0,cv3.width,cv3.height);
+  gl.clearColor(FOG_COLOR[0],FOG_COLOR[1],FOG_COLOR[2],1);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  const sun=[-0.42,0.72,-0.55],sl=Math.hypot(...sun);
+  const sunN=[sun[0]/sl,sun[1]/sl,sun[2]/sl];
+  const fogDist=d*6+2500;
+  gl.useProgram(terrProg);
+  gl.uniformMatrix4fv(uT.uVP,false,vpMat);
+  gl.uniform3fv(uT.uSun,sunN);
+  gl.uniform3fv(uT.uCam,eye);
+  gl.uniform3fv(uT.uFogColor,FOG_COLOR);
+  gl.uniform1f(uT.uFogDist,fogDist);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D,terrTex);
+  gl.uniform1i(uT.uTex,0);
+  gl.bindVertexArray(terrVAO);
+  gl.drawElements(gl.TRIANGLES,nIndices,gl.UNSIGNED_INT,0);
+  // water
+  gl.useProgram(waterProg);
+  gl.uniformMatrix4fv(uW.uVP,false,vpMat);
+  gl.uniform1f(uW.uSeaY,SEA_Y);
+  gl.uniform3fv(uW.uSun,sunN);
+  gl.uniform3fv(uW.uCam,eye);
+  gl.uniform1f(uW.uTime,time*0.001);
+  gl.uniform3fv(uW.uFogColor,FOG_COLOR);
+  gl.uniform1f(uW.uFogDist,fogDist);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+  gl.depthMask(false);
+  gl.bindVertexArray(waterVAO);
+  gl.drawArrays(gl.TRIANGLES,0,6);
+  gl.depthMask(true);
+  gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+  drawMarkers3d();
+}
+function project3d(wx,wy){
+  // 地形の高さに乗せて投影
+  const gx=Math.round(wx/WORLD_W*(GRID_X-1)), gy=Math.round(wy/WORLD_H*(GRID_Y-1));
+  const h=heightGrid[Math.max(0,Math.min(GRID_Y-1,gy))*GRID_X+Math.max(0,Math.min(GRID_X-1,gx))];
+  const m=vpMat;
+  const x=wx,y=h,z=wy;
+  const cx=m[0]*x+m[4]*y+m[8]*z+m[12];
+  const cy=m[1]*x+m[5]*y+m[9]*z+m[13];
+  const cw=m[3]*x+m[7]*y+m[11]*z+m[15];
+  if(cw<=0)return [0,0,0];
+  return [(cx/cw*0.5+0.5)*cvm.width,(1-(cy/cw*0.5+0.5))*cvm.height,1];
+}
+function drawMarkers3d(){
+  ctxm.setTransform(1,0,0,1,0,0);
+  ctxm.clearRect(0,0,cvm.width,cvm.height);
+  drawMarkers(ctxm,project3d);
+}
+
+// ---------- interactions ----------
+function resize(){
+  const stage=document.getElementById('stage');
+  for(const cv of [cv2,cv3,cvm]){
+    cv.width=stage.clientWidth*devicePixelRatio|0;
+    cv.height=stage.clientHeight*devicePixelRatio|0;
+  }
+  render();
+}
+addEventListener('resize',resize);
+
+let dragging=false,lx=0,ly=0,dragBtn=0;
+function activeCv(){return mode==='2d'?cv2:cv3;}
+for(const cv of [cv2,cv3]){
+  cv.addEventListener('mousedown',e=>{dragging=true;dragBtn=e.button;lx=e.clientX;ly=e.clientY;cv.classList.add('grabbing');e.preventDefault();});
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+}
+addEventListener('mouseup',()=>{dragging=false;});
+addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-lx,dy=e.clientY-ly;
+  lx=e.clientX;ly=e.clientY;
+  if(mode==='3d'&&(dragBtn===2||e.shiftKey)){
+    tilt3d=Math.max(20*Math.PI/180,Math.min(80*Math.PI/180,tilt3d+dy*0.005));
+  }else if(mode==='3d'){
+    const upp=2*camParams().d*Math.tan(FOV/2)/cv3.height*devicePixelRatio;
+    view.x-=dx*upp;
+    view.y-=dy*upp/Math.sin(tilt3d);
+  }else{
+    view.x-=dx*devicePixelRatio/view.z;
+    view.y-=dy*devicePixelRatio/view.z;
+  }
+  clampView();render();
+});
+for(const cv of [cv2,cv3]){
+  cv.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const f=Math.exp(-e.deltaY*0.0013);
+    view.z=Math.max(view.min,Math.min(view.max,view.z*f));
+    clampView();render();
+  },{passive:false});
+}
+function clampView(){
+  const mW=WORLD_W*0.55,mH=WORLD_H*0.55;
+  view.x=Math.max(WORLD_W/2-mW,Math.min(WORLD_W/2+mW,view.x));
+  view.y=Math.max(WORLD_H/2-mH,Math.min(WORLD_H/2+mH,view.y));
+}
+
+document.querySelectorAll('#modeseg button').forEach(b=>{
+  b.onclick=()=>setMode(b.dataset.m);
+});
+function setMode(m){
+  if(m==='3d'&&!glOK)return;
+  mode=m;
+  document.querySelectorAll('#modeseg button').forEach(x=>x.classList.toggle('on',x.dataset.m===m));
+  cv2.style.display=m==='2d'?'block':'none';
+  cv3.style.display=m==='3d'?'block':'none';
+  cvm.style.display=m==='3d'?'block':'none';
+  document.getElementById('hint').textContent=
+    m==='3d'?'ドラッグ:移動 / ホイール:ズーム / 右ドラッグorShift:チルト':'ドラッグ:移動 / ホイール:ズーム';
+  render();
+}
+for(const key of ['borders','political','labels']){
+  const el=document.getElementById('ly-'+key);
+  el.checked=layers[key];
+  el.onchange=()=>{
+    layers[key]=el.checked;
+    if(key!=='labels'){bakeMap();if(glOK)uploadTexture();}
+    render();
+  };
+}
+document.getElementById('regen').onclick=()=>{
+  const s=parseInt(document.getElementById('seedbox').value,10)||0;
+  boot(s===0?((Math.random()*1e9)|0):s);
+};
+
+// ---------- render loop ----------
+let rafId=null;
+function render(){
+  if(mode==='2d'){
+    if(rafId){cancelAnimationFrame(rafId);rafId=null;}
+    draw2d();
+  }else{
+    if(!rafId)loop3d(performance.now());
+  }
+}
+function loop3d(t){
+  rafId=null;
+  if(mode!=='3d')return;
+  draw3d(t);
+  rafId=requestAnimationFrame(loop3d);
+}
+
+// ---------- boot ----------
+function fitView(){
+  view.z=Math.min(cv2.width/WORLD_W,cv2.height/WORLD_H)*0.97;
+  view.min=view.z*0.7;
+  view.x=WORLD_W/2;view.y=WORLD_H/2;
+}
+function boot(seed){
+  G=generate(seed);
+  document.getElementById('seedbox').value=seed;
+  bakeBase();bakeMap();
+  if(gl===null)initGL();
+  if(glOK){buildTerrainMesh();uploadTexture();}
+  resize();fitView();render();
+  window.__mock.ready=true;
+}
+window.__mock={
+  ready:false,
+  setMode,
+  setView(x,y,z){view.x=x;view.y=y;view.z=z;render();},
+  setTilt(deg){tilt3d=deg*Math.PI/180;render();},
+  toggle(k,on){layers[k]=on;const el=document.getElementById('ly-'+k);if(el)el.checked=on;
+    if(k!=='labels'){bakeMap();if(glOK)uploadTexture();}render();},
+  regen(s){boot(s);},
+  glOK:()=>glOK,
+  view:()=>({...view,tilt:tilt3d*180/Math.PI,mode}),
+};
+boot(DEFAULT_SEED);
+</script>
+</body>
+</html>
