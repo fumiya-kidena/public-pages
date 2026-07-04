@@ -11,20 +11,21 @@
     <body>
         <nav class="sidebar">
             <h2>cfd-seminar</h2>
-            <ul>
-                <li><a href="index.html" class="current">概要</a></li>
-                <li><a href="setup.html">0. 環境構築</a></li>
-                <li><a href="intro.html">1. 導入</a></li>
-                <li><a href="advection.html">2. 移流項</a></li>
-                <li><a href="diffusion.html">3. 粘性項</a></li>
-                <li><a href="poisson.html">4. 圧力Poisson</a></li>
-                <li><a href="advection2.html">5. 移流項の改良</a></li>
-                <li><a href="references.html">参考文献</a></li>
-            </ul>
+                <ul>
+      <li><a href="index.html" class="current">概要</a></li>
+      <li><a href="setup.html">0. 環境構築</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
         </nav>
         <main>
             <h1>cfd-seminar まとめ</h1>
-            <p class="updated">最終更新: 2026-07-03</p>
+            <p class="updated">最終更新: 2026-07-04</p>
 
             <p>
                 Fortranベースの、ごくシンプルな2次元非圧縮<abbr
@@ -67,7 +68,7 @@
             <h2>進め方</h2>
             <ol>
                 <li>
-                    <a href="intro.html">導入</a> —
+                    <a href="intro.html">初期条件</a> —
                     格子・物性設定・ビルド方法・可視化（Fortranの基礎練習を兼ねる）
                 </li>
                 <li>
@@ -79,8 +80,12 @@
                     拡散項（粘性）を追加する
                 </li>
                 <li>
+                    <a href="bc.html">境界条件</a> —
+                    lid-driven cavity に切り替え、壁の境界条件（ゴーストセル）を自分で書く
+                </li>
+                <li>
                     <a href="poisson.html">圧力Poisson</a> —
-                    lid-driven cavity に切り替え、境界条件（ゴーストセル・圧力）を自分で書き、圧力を求めて速度を非圧縮に補正する（ここで初めて物理的に正しい流れになる）
+                    圧力を求めて速度を非圧縮に補正する（ここで初めて cavity らしい渦ができる）
                 </li>
                 <li>
                     <a href="advection2.html">移流項の改良</a> —
@@ -104,7 +109,7 @@ cfd-seminar/
                 <code>src/</code
                 >は動作確認・検証済みの完成形、<code>wrk/</code>は同じファイル構成で重要な計算部分が
                 空欄になっているひな形（ビルド方法は<a href="intro.html"
-                    >導入</a
+                    >初期条件</a
                 >を参照）。
             </p>
         </main>

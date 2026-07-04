@@ -11,14 +11,15 @@
 <body>
   <nav class="sidebar">
     <h2>cfd-seminar</h2>
-    <ul>
+        <ul>
       <li><a href="index.html">概要</a></li>
       <li><a href="setup.html">0. 環境構築</a></li>
-      <li><a href="intro.html">1. 導入</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
       <li><a href="advection.html" class="current">2. 移流項</a></li>
       <li><a href="diffusion.html">3. 粘性項</a></li>
-      <li><a href="poisson.html">4. 圧力Poisson</a></li>
-      <li><a href="advection2.html">5. 移流項の改良</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
       <li><a href="references.html">参考文献</a></li>
     </ul>
   </nav>
@@ -28,7 +29,7 @@
 <h1>2. 移流項</h1>
 <p>
 このステップで書くのは<code>wrk/advection.f90</code>の移流項（<code>adv</code>）だけ。
-境界条件<code>bc.f90</code>は<b>完成した形で用意してある</b>ので触らない（自分で書くのは<a href="poisson.html">4. 圧力Poisson</a>で
+境界条件<code>bc.f90</code>は<b>完成した形で用意してある</b>ので触らない（自分で書くのは<a href="bc.html">4. 境界条件</a>で
 cavityに書き換えるとき）。粘性（<code>diffusion.f90</code>）と圧力Poisson（<code>poisson.f90</code>）も次のステップ以降なので空欄のままでよい。
 </p>
 
@@ -76,7 +77,7 @@ channel flow の計算領域と境界。左＝一様流入、上下＝静止壁�
 <p>
 これらを配列に落とし込んだ<code>bc.f90</code>（<code>boundary_condition</code>）はすでに完成させてある。
 壁の値を格子点にどう与えるか（スタガード格子ならではの<abbr class="term" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr>の使い方）は、
-<a href="poisson.html">4. 圧力Poisson</a>で<code>bc.f90</code>を cavity 用に自分で書き換えるときにまとめて扱う。
+<a href="bc.html">4. 境界条件</a>で<code>bc.f90</code>を cavity 用に自分で書き換えるときにまとめて扱う。
 なお channel では流入は固定値、流出は外挿で決めるため、そのままでは出入りの量が釣り合わない。
 <code>bc.f90</code>では出口速度を毎ステップ再スケーリングして質量を保存させている（後で圧力Poissonを解くときに必要になる）。
 </p>
@@ -173,7 +174,7 @@ channel flow の計算領域と境界。左＝一様流入、上下＝静止壁�
 
 <h2>数式とコードの対応</h2>
 <p>
-半整数の添字はコードの配列にそのまま対応する（<code>u(i,j)</code> が <span class="katex-eq" id="eq-map-uidx"></span> を表すという<a href="intro.html">導入</a>の規則）。
+半整数の添字はコードの配列にそのまま対応する（<code>u(i,j)</code> が <span class="katex-eq" id="eq-map-uidx"></span> を表すという<a href="intro.html">初期条件</a>の規則）。
 上の最終形をFortranにするときの対応は:
 </p>
 <table>

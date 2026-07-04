@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cfd-seminar — 5. 移流項の改良</title>
+<title>cfd-seminar — 6. 移流項の改良</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
 <script src="assets/katex.min.js"></script>
@@ -11,21 +11,22 @@
 <body>
   <nav class="sidebar">
     <h2>cfd-seminar</h2>
-    <ul>
+        <ul>
       <li><a href="index.html">概要</a></li>
       <li><a href="setup.html">0. 環境構築</a></li>
-      <li><a href="intro.html">1. 導入</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
       <li><a href="advection.html">2. 移流項</a></li>
       <li><a href="diffusion.html">3. 粘性項</a></li>
-      <li><a href="poisson.html">4. 圧力Poisson</a></li>
-      <li><a href="advection2.html" class="current">5. 移流項の改良</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html" class="current">6. 移流項の改良</a></li>
       <li><a href="references.html">参考文献</a></li>
     </ul>
   </nav>
   <main>
 <noscript><div class="warn">数式の表示にJavaScriptを使っています。数式が見えない場合は、ブラウザでJavaScriptが有効か確認してください。</div></noscript>
 
-<h1>5. 移流項の改良</h1>
+<h1>6. 移流項の改良</h1>
 <p>
 ここまでで作った素朴な中心差分のコードが、どこまで通用してどこで破綻するかを実際に確認する。
 </p>
@@ -41,7 +42,7 @@
 中心差分による移流項は、
 <abbr class="term" title="対流項の卓越度を表す無次元数。ここでは格子1つ分の速さ×格子幅÷動粘性係数（U・dx/ν）で評価する。中心差分は理論上この値が2を超えると数値的な振動（wiggle）を起こしやすい。">セルPeclet数</abbr>
 <code>Pe_cell = U・dx/ν</code>がおよそ2を超えると、解に物理的でない振動（wiggle）や基準解からのずれが
-現れやすい。<a href="poisson.html">4. 圧力Poisson</a>の cavity Re=1000（U0=0.01、48×48格子）は
+現れやすい。<a href="poisson.html">5. 圧力Poisson</a>の cavity Re=1000（U0=0.01、48×48格子）は
 <code>Pe_cell ≈ 21</code>で、それでもGhia基準解とよく一致した。ここから格子を固定したままReを上げると
 <code>Pe_cell</code>がさらに上がり、中心差分では解像しきれなくなる。
 </p>
@@ -53,7 +54,7 @@
 の交絡がないので、Ghia基準解とのずれを<b>純粋に数値スキームの限界</b>として見られる。
 </p>
 <ol>
-<li>コードは<a href="poisson.html">4. 圧力Poisson</a>を終えた cavity の完成形のまま（<code>wrk/main.f90</code>もすべて有効のまま）。</li>
+<li>コードは<a href="poisson.html">5. 圧力Poisson</a>を終えた cavity の完成形のまま（<code>wrk/main.f90</code>もすべて有効のまま）。</li>
 <li><code>wrk/config.csv</code> を次のようにする（他はデフォルトのまま）:
 <table>
 <tr><th>key</th><th>値</th><th>理由</th></tr>

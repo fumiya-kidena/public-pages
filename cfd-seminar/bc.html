@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfd-seminar — 4. 境界条件</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/katex.min.css">
+<script src="assets/katex.min.js"></script>
+</head>
+<body>
+  <nav class="sidebar">
+    <h2>cfd-seminar</h2>
+        <ul>
+      <li><a href="index.html">概要</a></li>
+      <li><a href="setup.html">0. 環境構築</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="bc.html" class="current">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
+  </nav>  <main>
+<noscript><div class="warn">数式の表示にJavaScriptを使っています。数式が見えない場合は、ブラウザでJavaScriptが有効か確認してください。</div></noscript>
+
+<h1>4. 境界条件</h1>
+<p>
+ここまでは channel flow で進めてきたが、このステップでは題材を
+<abbr class="term" title="正方形の閉じた領域で、上蓋だけが一定速度で動き、それ以外の壁は静止しているという設定の代表的なCFDベンチマーク問題。">lid-driven cavity flow</abbr>
+に書き換えて、<b>境界条件</b>（<code>bc.f90</code>）を自分で書く。方程式そのものは変わらず、計算領域の縁（壁）で速度に与える条件だけを変える。
+流入・流出のない閉じた箱にすると、次の<a href="poisson.html">圧力Poisson</a>で圧力の必要性が見えやすくなる。
+</p>
+
+<h2>支配方程式</h2>
+<p>
+解く方程式は変わらない（非圧縮<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>と連続の式）。境界条件は式に項を足すものではなく、計算領域の<b>縁で解に与える条件</b>:
+</p>
+<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
+<p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
+<p>
+壁では流体が壁と同じ速度になり（<abbr class="term" title="壁の上で流体の速度が壁と同じになる（静止壁なら0になる）という条件。粘性流体の基本的な境界条件。">no-slip</abbr>）、壁を横切る流れは無い（<abbr class="term" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。これをスタガード格子の配列（ゴーストセル）に落とすのがこのステップ。圧力の境界条件は次の<a href="poisson.html">圧力Poisson</a>で扱う。
+</p>
+
+<h2>lid-driven cavity への書き換え</h2>
+<p>
+ここまで channel 用に作ってきた<code>bc.f90</code>と<code>initial.f90</code>を cavity 用に書き換える。全体像は:
+上蓋だけが速度<code>U0</code>で右へ動き、残る3辺は静止した壁。流入・流出はない。
+</p>
+<div style="text-align:center">
+<svg viewBox="0 0 320 290" width="280" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
+  <line x1="90" y1="45" x2="240" y2="45" stroke="#c0392b" stroke-width="2.5" marker-end="url(#lid)"/>
+  <text x="165" y="33" text-anchor="middle" font-size="13" fill="#c0392b">蓋: 速度 U0 で右へ</text>
+  <rect x="90" y="55" width="150" height="150" fill="#eef3f9" stroke="#2b6cb0" stroke-width="2"/>
+  <text x="165" y="137" text-anchor="middle" font-size="12" fill="#2b6cb0">流体</text>
+  <text x="165" y="225" text-anchor="middle" font-size="12" fill="#555">下壁（静止）</text>
+  <text x="78" y="130" text-anchor="middle" font-size="12" fill="#555" transform="rotate(-90 78 130)">左壁（静止）</text>
+  <text x="252" y="130" text-anchor="middle" font-size="12" fill="#555" transform="rotate(90 252 130)">右壁（静止）</text>
+  <defs>
+    <marker id="lid" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#c0392b"/></marker>
+  </defs>
+</svg>
+</div>
+<p class="figcap" style="text-align:center">lid-driven cavity: 上蓋だけが速度 U0 で動き、残る3辺は静止した壁。蓋のせん断が内部に渦を作る。</p>
+<p>
+<code>initial.f90</code>は簡単になる。蓋の動きは<code>bc.f90</code>だけで表現されるので、初期条件は channel のような
+凝った式は不要——流体が静止した状態（<code>u=v=p=0</code>）にするだけ。書き換えの本番は<code>bc.f90</code>で、
+これがこのステップの<b>境界条件のお勉強</b>になる（channel と違い流入・流出がないので、質量保存の再スケーリングは要らない）。
+</p>
+<details class="answer">
+<summary>cavity の <code>initial.f90</code> の答えを見る</summary>
+<p>
+<a href="intro.html">初期条件</a>で書いたダブレットの2つのループごと消して、<code>u=v=p=0</code> にするだけ。
+使わなくなった変数（<code>x, y, xc, yc, r0, r2</code>）の宣言も消す（<code>Re</code>の表示はそのまま残してよい）:
+</p>
+<pre>
+subroutine initial_condition()
+  use config
+  use initial
+  implicit none
+  real(8) :: Re
+
+  Re = U0*min(Lx,Ly)/nu
+  write(*,'(a,i0,a,i0,a,es9.2,a,es9.2,a,f10.1)') &amp;
+    'grid=', Nx, 'x', Ny, '  nu=', nu, ' m^2/s  U0=', U0, ' m/s  Re=', Re
+
+  u = 0.0d0
+  v = 0.0d0
+  p = 0.0d0
+end subroutine initial_condition
+</pre>
+</details>
+
+<h2>境界条件をゴーストセルで与える</h2>
+<p>
+スタガード格子では、速度が必ずしも壁の上に載らない。たとえば下壁（<code>y=0</code>）に対して、<code>u</code>は壁から
+半セルずれた位置にある（<code>u(i,1)</code>は壁の半セル内側、<code>u(i,0)</code>は半セル外側）。壁の上に値が無いので、
+壁の外側に<abbr class="term" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr><code>u(i,0)</code>を1枚置き、
+<b>壁を挟んだ内側とゴーストの平均が壁での値になる</b>ように逆算する:
+</p>
+<p class="eq-block"><span id="eq-ghost-avg" class="katex-eq"></span></p>
+<p>
+静止壁では壁での値が<code>0</code>なので、ゴーストは内側の<b>符号を反転</b>したものになる（<span class="katex-eq" id="eq-ghost-wall"></span>）。
+コードでは<code>u(i,0) = -u(i,1)</code>（配列スライスで<code>u(1:Nx-1,0) = -u(1:Nx-1,1)</code>）。
+</p>
+<div style="text-align:center">
+<svg viewBox="0 0 430 220" width="380" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
+  <rect x="120" y="35" width="190" height="70" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.2"/>
+  <text x="215" y="27" text-anchor="middle" font-size="12" fill="#2b6cb0">内側（計算領域）</text>
+  <rect x="120" y="105" width="190" height="70" fill="#fbeeee" stroke="#c0392b" stroke-width="1.2" stroke-dasharray="5"/>
+  <text x="215" y="192" text-anchor="middle" font-size="12" fill="#c0392b">ゴーストセル（領域の外）</text>
+  <line x1="80" y1="105" x2="320" y2="105" stroke="#555" stroke-width="4"/>
+  <text x="366" y="109" font-size="13" fill="#555">壁 u=0</text>
+  <line x1="215" y1="70" x2="285" y2="70" stroke="#2b6cb0" stroke-width="2.5" marker-end="url(#pa)"/>
+  <text x="250" y="61" text-anchor="middle" font-size="13" fill="#2b6cb0">u(i,1)</text>
+  <line x1="215" y1="140" x2="145" y2="140" stroke="#c0392b" stroke-width="2.5" marker-end="url(#pb)"/>
+  <text x="250" y="157" text-anchor="middle" font-size="13" fill="#c0392b">u(i,0) = −u(i,1)</text>
+  <line x1="215" y1="35" x2="215" y2="175" stroke="#999" stroke-width="1" stroke-dasharray="3"/>
+  <circle cx="215" cy="105" r="4" fill="#555"/>
+  <defs>
+    <marker id="pa" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2b6cb0"/></marker>
+    <marker id="pb" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#c0392b"/></marker>
+  </defs>
+</svg>
+</div>
+<p class="figcap" style="text-align:center">
+静止壁のゴーストセル: 内側<code>u(i,1)</code>とゴースト<code>u(i,0)</code>を大きさ同じ・向き逆にすると、壁での平均がちょうど0になる。
+</p>
+<p>
+動く蓋（上壁）だけは壁での値が<code>U0</code>なので、平均が<code>U0</code>になるようゴーストを取る
+（<span class="katex-eq" id="eq-ghost-lid"></span>）——コードでは<code>u(1:Nx-1,Ny+1) = 2*U0 - u(1:Nx-1,Ny)</code>。
+一方、壁の上にちょうど載る速度（下壁での<code>v</code>など）は、ゴーストではなく直接<code>0</code>を入れる
+（<abbr class="term" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。
+</p>
+
+<h3>演習: <code>bc.f90</code>（cavity）</h3>
+<p>
+上の考え方で四方の壁を埋める。<code>u</code>と<code>v</code>で「壁の上に載るか／半セルずれるか」が入れ替わる点に注意:
+</p>
+<ul>
+<li>左右の壁: <code>u</code>は壁の上に載る → 直接<code>0</code>（<code>u(0,1:Ny)=u(Nx,1:Ny)=0</code>）</li>
+<li>下壁（静止）・上壁（蓋）: <code>u</code>は半セルずれる → ゴースト（符号反転／<code>2*U0−内側</code>）</li>
+<li>上下の壁: <code>v</code>は壁の上に載る → 直接<code>0</code>（no-penetration）</li>
+<li>左右の壁: <code>v</code>は半セルずれる → ゴーストで符号反転（<code>v(0,0:Ny)=-v(1,0:Ny)</code> など）</li>
+</ul>
+<details class="answer">
+<summary><code>bc.f90</code>（cavity）の答えを見る</summary>
+<pre>
+! 左右の壁: u は壁の上に載るので直接0
+u(0,  1:Ny) = 0.0d0
+u(Nx, 1:Ny) = 0.0d0
+
+! 下壁（静止）と上壁（蓋 U0）: u は半セルずれるのでゴースト
+u(1:Nx-1, 0)    = -u(1:Nx-1, 1)
+u(1:Nx-1, Ny+1) = 2.0d0*U0 - u(1:Nx-1, Ny)
+
+! 上下の壁: v は壁の上に載るので直接0（no-penetration）
+v(1:Nx, 0)  = 0.0d0
+v(1:Nx, Ny) = 0.0d0
+! 左右の壁: v は半セルずれるのでゴーストで符号反転
+v(0,    0:Ny) = -v(1,  0:Ny)
+v(Nx+1, 0:Ny) = -v(Nx, 0:Ny)
+</pre>
+</details>
+
+<h2>実行して確認: 圧力なしで走らせる</h2>
+<p>
+書き換えた<code>bc.f90</code>・<code>initial.f90</code>で、<code>poisson.f90</code>がまだ空欄（＝圧力補正なし）のまま
+cavity を回すとどうなるかを先に見ておく。
+</p>
+<ol>
+<li><code>wrk/main.f90</code> は前ステップのまま触らない
+    （<code>boundary_condition</code>・<code>advection</code>・<code>diffusion</code>は有効、<code>poisson</code>はコメントのまま）。</li>
+<li><code>wrk/config.csv</code> を cavity 用に切り替える（他はデフォルトのまま）:
+<table>
+<tr><th>key</th><th>値</th><th>理由</th></tr>
+<tr><td><code>case</code></td><td><code>cavity</code></td><td>後処理でGhia基準解を重ねる</td></tr>
+<tr><td><code>U0</code></td><td><code>0.01</code></td><td>ν=1.0×10⁻⁶・L=0.1 で <code>Re = U0·L/ν = 1000</code></td></tr>
+<tr><td><code>nstep</code></td><td><code>30000</code></td><td>定常になるまで回す</td></tr>
+<tr><td><code>nout</code></td><td><code>3000</code></td><td>途中経過も書き出す</td></tr>
+</table></li>
+<li>ビルドして実行する（コマンドは1行ずつ）:
+<pre>
+cd wrk
+make
+./cfd.exe
+</pre></li>
+<li>結果を絵にする（リポジトリ直下に戻ってから）:
+<pre>
+cd ..
+python post/plot.py wrk/config.csv
+</pre></li>
+</ol>
+<div class="ng">
+<b>予想どおり、まったく駄目な結果になる。</b>
+蓋の速度が下方向にじわじわ拡散するだけで、cavity の特徴である循環（渦）が一切形成されない。
+</div>
+<img src="assets/img/cavity_nopoisson.png" alt="lid-driven cavity without pressure projection">
+<p class="figcap">
+圧力補正なしの lid-driven cavity flow（Re=1000）。流線は蓋の下にできた薄いせん断層の中で
+真横に流れるだけで、下向き・横向きの流れがまったく生まれていない。右パネルのGhia基準解（赤四角）が
+示す特徴的なS字（上半分でプラス、下半分でマイナスの逆流）とはまるで違う形になっている。
+</p>
+<p>
+これは移流・拡散だけでは<abbr class="term" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0 として表される。">非圧縮条件</abbr>
+（div u = 0）が保証されないため。蓋の下で押しのけられた流体が横や下に逃げる代わりに、
+その場に溜まって不自然に圧縮・膨張してしまい、循環を生み出す圧力差が生まれない。
+</p>
+
+<p>
+この<abbr class="term" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0。">非圧縮条件</abbr>を満たすために圧力を解くのが、次の<a href="poisson.html">圧力Poisson</a>のステップ。
+</p>
+
+<div class="ok">
+<b>変更を保存する</b>: cavity 用に書き換えた <code>bc.f90</code> と <code>initial.f90</code> を<a href="setup.html#push">コミット・プッシュ</a>しておく（<code>poisson.f90</code> は次のステップ）。
+</div>
+
+<script>
+katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
+katex.render("\\nabla\\cdot\\mathbf{u} = 0", document.getElementById('eq-cont'));
+katex.render("\\tfrac{1}{2}\\left(u_{i,1}+u_{i,0}\\right) = u_{\\mathrm{wall}}", document.getElementById('eq-ghost-avg'));
+katex.render("u_{i,0} = -u_{i,1}", document.getElementById('eq-ghost-wall'));
+katex.render("u_{i,\\mathrm{Ny}+1} = 2U_0 - u_{i,\\mathrm{Ny}}", document.getElementById('eq-ghost-lid'));
+</script>
+  </main>
+</body>
+</html>

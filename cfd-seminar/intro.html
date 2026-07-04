@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cfd-seminar — 1. 導入</title>
+<title>cfd-seminar — 1. 初期条件</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
 <script src="assets/katex.min.js"></script>
@@ -11,21 +11,22 @@
 <body>
   <nav class="sidebar">
     <h2>cfd-seminar</h2>
-    <ul>
+        <ul>
       <li><a href="index.html">概要</a></li>
       <li><a href="setup.html">0. 環境構築</a></li>
-      <li><a href="intro.html" class="current">1. 導入</a></li>
+      <li><a href="intro.html" class="current">1. 初期条件</a></li>
       <li><a href="advection.html">2. 移流項</a></li>
       <li><a href="diffusion.html">3. 粘性項</a></li>
-      <li><a href="poisson.html">4. 圧力Poisson</a></li>
-      <li><a href="advection2.html">5. 移流項の改良</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
       <li><a href="references.html">参考文献</a></li>
     </ul>
   </nav>
   <main>
 <noscript><div class="warn">数式の表示にJavaScriptを使っています。数式が見えない場合は、ブラウザでJavaScriptが有効か確認してください。</div></noscript>
 
-<h1>1. 導入</h1>
+<h1>1. 初期条件</h1>
 <p>
 このステップでは<code>wrk/initial.f90</code>の初期条件だけを埋める。
 数値スキーム自体（移流・拡散・圧力）はまだ出てこないので、Fortranの書き方に慣れることが主な目的。
@@ -40,7 +41,7 @@
 <p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
 <p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
 <p>
-このあとのステップで、各項（移流・粘性・圧力）を成分ごとに離散化して1つずつ実装していく。この導入ステップでは、まず初期条件だけを作る。
+このあとのステップで、各項（移流・粘性・圧力）を成分ごとに離散化して1つずつ実装していく。このステップでは、まず初期条件だけを作る。
 </p>
 
 <h2>格子: MAC（スタガード）格子</h2>
@@ -194,7 +195,7 @@ end do
 <tr><td>dt</td><td>時間刻み幅 [s]</td></tr>
 <tr><td>nstep</td><td>総タイムステップ数</td></tr>
 <tr><td>nout</td><td>何ステップごとに結果を出力するか</td></tr>
-<tr><td>omega</td><td><abbr class="term" title="Successive Over-Relaxationの緩和係数。1&lt;omega&lt;2で、Gauss-Seidel法より収束を加速する。">SOR</abbr>の緩和係数（1〜2の間、<a href="poisson.html">4. 圧力Poisson</a>で使う）</td></tr>
+<tr><td>omega</td><td><abbr class="term" title="Successive Over-Relaxationの緩和係数。1&lt;omega&lt;2で、Gauss-Seidel法より収束を加速する。">SOR</abbr>の緩和係数（1〜2の間、<a href="poisson.html">5. 圧力Poisson</a>で使う）</td></tr>
 <tr><td>tol</td><td>圧力反復の収束判定（相対値）</td></tr>
 <tr><td>max_iter</td><td>圧力反復の最大回数</td></tr>
 <tr><td>case</td><td>後処理（<code>post/plot.py</code>）専用の欄。<code>test</code>/<code>channel</code>/<code>cavity</code>のいずれか。
@@ -237,7 +238,7 @@ python post/plot.py wrk/config.csv
 <code>plot.py</code>はその<code>case</code>欄を見て、重ねる基準解を切り替える:
 </p>
 <ul>
-<li><code>test</code> — 円柱まわりのポテンシャル流の解析解（この導入ステップはこれ）</li>
+<li><code>test</code> — 円柱まわりのポテンシャル流の解析解（このステップはこれ）</li>
 <li><code>channel</code> — plane Poiseuille flow の解析解（放物線）</li>
 <li><code>cavity</code> — Ghia らの基準解</li>
 </ul>

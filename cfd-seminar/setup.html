@@ -11,14 +11,15 @@
 <body>
   <nav class="sidebar">
     <h2>cfd-seminar</h2>
-    <ul>
+        <ul>
       <li><a href="index.html">概要</a></li>
       <li><a href="setup.html" class="current">0. 環境構築</a></li>
-      <li><a href="intro.html">1. 導入</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
       <li><a href="advection.html">2. 移流項</a></li>
       <li><a href="diffusion.html">3. 粘性項</a></li>
-      <li><a href="poisson.html">4. 圧力Poisson</a></li>
-      <li><a href="advection2.html">5. 移流項の改良</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
       <li><a href="references.html">参考文献</a></li>
     </ul>
   </nav>
@@ -272,7 +273,7 @@ python post/plot.py src/config.csv
 </ol>
 <div class="ok">
 これで「コードを直す → <code>make</code> でコンパイル → 実行 → Pythonで可視化 → GitHubへ push」という
-一往復がすべてできる状態になった。<a href="intro.html">1. 導入</a> へ進む。
+一往復がすべてできる状態になった。<a href="intro.html">1. 初期条件</a> へ進む。
 </div>
 
 <h2 id="trouble">つまずいたとき早見表</h2>
