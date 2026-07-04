@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>civ-nova</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌍</text></svg>">
+<title>civ-nova — 島ショーケース</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏝️</text></svg>">
 <style>
   :root{--chrome:#23272e;--chrome2:#2c313a;--ink:#e8eaed;--ink2:#9aa3af;--accent:#d9b23a}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -15,17 +15,10 @@
     background:var(--chrome);border-bottom:1px solid #171a1f;font-size:12.5px;white-space:nowrap}
   #topbar h1{font-size:13.5px;font-weight:700}
   #topbar h1 small{color:var(--ink2);font-weight:500;margin-left:6px}
-  .seg{display:flex;border:1px solid #444b55;border-radius:6px;overflow:hidden}
-  .seg button{background:var(--chrome2);color:var(--ink2);border:none;padding:6px 20px;
-    font-size:13px;cursor:pointer;font-family:inherit;font-weight:600}
-  .seg button.on{background:#4a5260;color:#fff}
-  label.chk{display:inline-flex;align-items:center;gap:4px;color:var(--ink2);cursor:pointer;user-select:none}
-  label.chk input{accent-color:var(--accent)}
   .hint{color:#6b7280;font-size:11.5px}
   #stage{flex:1;position:relative;min-height:0}
   #stage canvas{position:absolute;inset:0;width:100%;height:100%}
-  #cv3d,#cv2d{cursor:grab}
-  #cvmark{pointer-events:none}
+  #cvshow{cursor:grab}
   #glfail{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     color:var(--ink2);font-size:14px;text-align:center;padding:40px}
   #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -35,31 +28,22 @@
     border-radius:6px;padding:5px 9px;font-size:11.5px;line-height:1.5;max-width:240px}
   #tip .t2{color:#9aa3af}
 </style>
-  <script type="module" crossorigin src="./assets/main-B0Km7H58.js"></script>
+  <script type="module" crossorigin src="./assets/island-CEGFrRd2.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/showcase3d-Dk5Xiqxg.js">
 </head>
 <body>
 <header id="topbar">
-  <h1>civ-nova<small id="subtitle">地球マップ — Natural Earth 50m（地域強調射影）</small></h1>
-  <div class="seg" id="modeseg">
-    <button data-m="2d" class="on">2D 戦略</button>
-    <button data-m="3d">3D 地図</button>
-    <button data-m="showcase">✨ 島 β</button>
-  </div>
-  <label class="chk"><input type="checkbox" id="ly-borders" checked>勢力圏</label>
-  <label class="chk"><input type="checkbox" id="ly-res" checked>資源</label>
-  <label class="chk"><input type="checkbox" id="ly-labels" checked>ラベル</label>
+  <h1>civ-nova<small>島ショーケース β（軽量・地球マップなし）</small></h1>
   <span style="flex:1"></span>
-  <span class="hint" id="hint">ドラッグ:移動 / ホイール:ズーム</span>
+  <span class="hint">ホバー:地形 / ドラッグ:移動 / ホイール:ズーム / 右ドラッグorShift:チルト</span>
 </header>
 <div id="stage">
-  <canvas id="cv2d"></canvas>
-  <canvas id="cv3d"></canvas>
   <canvas id="cvshow"></canvas>
-  <canvas id="cvmark"></canvas>
-  <div id="glfail">このブラウザでは WebGL2 が使えないため 3D モードを表示できません。<br>2D モードは利用できます。</div>
+  <canvas id="cv3hidden" style="display:none"></canvas>
+  <canvas id="cvmhidden" style="display:none"></canvas>
+  <div id="glfail">このブラウザでは WebGL2 が使えないため島を表示できません。</div>
   <div id="tip"></div>
-  <div id="boot">地球を生成中…</div>
+  <div id="boot">島を生成中…</div>
 </div>
 </body>
 </html>
