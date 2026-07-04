@@ -1,0 +1,77 @@
+/* shared stylesheet for all pages of the cfd-seminar write-up */
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  margin: 0; line-height: 1.7; color: #222;
+  display: flex;
+}
+
+/* --- persistent left sidebar navigation --- */
+nav.sidebar {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  flex: 0 0 200px; background: #f4f7fa; border-right: 1px solid #dde3ea;
+  padding: 1.5em 1em; font-size: 0.95em;
+}
+nav.sidebar h2 { margin: 0 0 0.8em; font-size: 1em; color: #2b6cb0; border: none; padding: 0; }
+nav.sidebar ul { list-style: none; margin: 0; padding: 0; }
+nav.sidebar li { margin: 0.3em 0; }
+nav.sidebar a { display: block; padding: 0.4em 0.6em; border-radius: 4px; color: #333; text-decoration: none; }
+nav.sidebar a:hover { background: #e3ecf7; }
+nav.sidebar a.current { background: #2b6cb0; color: #fff; }
+
+main {
+  flex: 1 1 auto; max-width: 900px; margin: 2em auto; padding: 0 1.5em;
+  min-width: 0;
+}
+
+h1 { border-bottom: 3px solid #2b6cb0; padding-bottom: 0.3em; }
+h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.2em; margin-top: 2.5em; color: #2b6cb0; }
+h3 { color: #444; }
+code, pre { background: #f4f4f4; border-radius: 4px; }
+code { padding: 0.1em 0.4em; }
+pre { padding: 1em; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #ccc; padding: 0.5em 0.8em; text-align: left; }
+th { background: #eef3f9; }
+img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px; margin: 0.5em 0; }
+svg { max-width: 100%; height: auto; }
+.figcap { font-size: 0.9em; color: #666; margin-top: -0.3em; margin-bottom: 1.5em; }
+
+/* display equations: scroll horizontally instead of overflowing on narrow screens */
+.eq-block { overflow-x: auto; }
+
+/* jargon-term tooltip (title attribute) */
+.term { border-bottom: 1px dotted #2b6cb0; cursor: help; text-decoration: none; color: inherit; }
+/* citation tooltip -- same look, slightly different color so it reads as "a reference", not a term */
+.cite { border-bottom: 1px dotted #b0602b; cursor: help; text-decoration: none; color: #b0602b; font-size: 0.9em; }
+
+/* click-to-reveal model-answer results (wrk/ filled in) */
+details.answer { border: 1px solid #cfe0d8; border-radius: 6px; margin: 1em 0; padding: 0 1em; background: #f6fbf8; }
+details.answer summary { cursor: pointer; padding: 0.7em 0; font-weight: bold; color: #227a4e; }
+details.answer[open] summary { border-bottom: 1px solid #cfe0d8; margin-bottom: 0.8em; }
+
+.ref-list { list-style: none; padding-left: 0; }
+.ref-list li { margin: 0.6em 0; }
+
+.warn { background: #fff8e1; border-left: 4px solid #f0ad4e; padding: 0.8em 1em; margin: 1em 0; }
+.ok { background: #eafaf1; border-left: 4px solid #2ecc71; padding: 0.8em 1em; margin: 1em 0; }
+.ng { background: #fdecea; border-left: 4px solid #e74c3c; padding: 0.8em 1em; margin: 1em 0; }
+.updated { color: #888; font-size: 0.9em; }
+
+/* narrow screens (smartphones / small tablets): sidebar becomes a compact
+   wrap-around nav at the top; wide tables scroll instead of overflowing */
+@media (max-width: 760px) {
+  body { display: block; }
+  nav.sidebar {
+    position: static; height: auto; flex: none;
+    padding: 0.7em 1em; border-right: none; border-bottom: 1px solid #dde3ea;
+  }
+  nav.sidebar h2 { display: none; }
+  nav.sidebar ul { display: flex; flex-wrap: wrap; gap: 0.15em 0.3em; }
+  nav.sidebar li { margin: 0; }
+  nav.sidebar a { padding: 0.25em 0.5em; font-size: 0.92em; white-space: nowrap; }
+  main { margin: 1em auto; padding: 0 1em; }
+  table { display: block; overflow-x: auto; }
+  /* long unbreakable tokens (paths/URLs like C:\wrk\cfd-seminar-...) wrap instead of overflowing */
+  code { overflow-wrap: anywhere; }
+}

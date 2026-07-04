@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfd-seminar — 0. 環境構築</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/katex.min.css">
+<script src="assets/katex.min.js"></script>
+</head>
+<body>
+  <nav class="sidebar">
+    <h2>cfd-seminar</h2>
+    <ul>
+      <li><a href="index.html">概要</a></li>
+      <li><a href="setup.html" class="current">0. 環境構築</a></li>
+      <li><a href="intro.html">1. 導入</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="poisson.html">4. 圧力Poisson</a></li>
+      <li><a href="advection2.html">5. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
+  </nav>
+  <main>
+
+<h1>0. 環境構築</h1>
+<p>
+コードを書き始める前に、一度だけ済ませておく準備。次の順番で上から進める。
+</p>
+<ol>
+  <li><a href="#zed">エディタ Zed を入れる</a> — この先ずっと使う作業場所</li>
+  <li><a href="#fork">GitHubアカウントと自分用リポジトリ（Fork）を用意する</a> — ブラウザ</li>
+  <li><a href="#git">Git for Windows を入れて、名前とメールを登録する</a></li>
+  <li><a href="#clone">Fork を <code>C:\wrk\</code> にクローンする</a> — Zed</li>
+  <li><a href="#gfortran">gfortran と make を入れて、PATH を通す</a> — MSYS2</li>
+  <li><a href="#python">Python と描画ライブラリを入れる</a></li>
+  <li><a href="#check">Zed を再起動して、全部まとめて動作確認する</a></li>
+</ol>
+<div class="warn">
+<b>大原則: 何かをインストールしたり PATH を変えたりしたら、Zed をいったん完全に終了して開き直す。</b>
+Zed は起動した時点の<abbr class="term" title="コマンド名から実行ファイルを探すフォルダの一覧。ここに載っていないコマンドは「認識されません」になる。">PATH</abbr>を覚え込むため、
+開いたままだと新しく入れたコマンドが「認識されません」になる。この先の手順で何かが見つからないときは、
+まず Zed の再起動を疑う（それでも駄目なら Windows からサインアウト→サインイン）。
+ページ末尾に<a href="#trouble">つまずいたとき早見表</a>もある。
+</div>
+
+<h2 id="zed">1. エディタ: Zed</h2>
+<p>
+エディタを決めていない人は <a href="https://zed.dev/">Zed</a> を使う。動作が軽く、
+<abbr class="term" title="文字でコマンドを打ってコンピュータを操作する画面。ここからコンパイラを起動する。">ターミナル</abbr>やGit操作までエディタ内に揃っているので、必要なものがほぼ1つで済む。
+<b>この先のクローン・コード編集・ビルド・実行・可視化・Git操作は、すべてこのZedの中で行う</b>（ブラウザを使うのはForkのときだけ）。Windows 10以降で動く。
+</p>
+<ol>
+  <li><a href="https://zed.dev/download">zed.dev/download</a> から入れる。</li>
+  <li>拡張機能パネルを開き（<code>Ctrl+Shift+X</code>）、「<b>Fortran</b>」で検索して <b>Install</b>。
+      これで <code>.f90</code> が色分け表示される。</li>
+</ol>
+<p>
+（任意）補完やエラー表示まで欲しい場合は、手順6でPythonを入れたあとに、Fortran用の
+<abbr class="term" title="エディタに補完・定義ジャンプ・エラー表示などの機能を提供する裏方のプログラム。">言語サーバ</abbr>
+<code>fortls</code> を <code>python -m pip install fortls</code> で入れる（拡張が「Fortls not installed」と出すのはこれのこと）。
+</p>
+
+<h3 id="zed-settings">表示の設定（折り返し・パネル配置）</h3>
+<p>
+設定は<abbr class="term" title="Zedの設定を「キー: 値」のJSON形式で書くファイル。">settings.json</abbr>に書く。
+<code>Ctrl+,</code> で開き、次の3行を <code>{ }</code> の中に加える。
+</p>
+<pre>
+{
+  "soft_wrap": "editor_width",
+  "project_panel": { "dock": "right" },
+  "terminal": { "dock": "bottom" }
+}
+</pre>
+<p>上から順に、長い行を画面幅で折り返す・フォルダ一覧を右・ターミナルを下（ここから <code>make</code> を打つ）に置く設定。</p>
+<div style="text-align:center">
+<svg viewBox="0 0 460 310" width="420" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
+  <rect x="10" y="10" width="440" height="290" fill="#fff" stroke="#bbb"/>
+  <rect x="10" y="10" width="440" height="22" fill="#2b6cb0"/>
+  <text x="20" y="26" font-size="12" fill="#fff">Zed</text>
+  <rect x="12" y="34" width="326" height="206" fill="#ffffff" stroke="#e0e0e0"/>
+  <text x="175" y="132" text-anchor="middle" font-size="15" fill="#444">エディタ</text>
+  <text x="175" y="152" text-anchor="middle" font-size="12" fill="#888">コードを書く（.f90）</text>
+  <rect x="340" y="34" width="108" height="206" fill="#eef3f9" stroke="#c9d8ea"/>
+  <text x="394" y="128" text-anchor="middle" font-size="12" fill="#2b6cb0">フォルダ</text>
+  <text x="394" y="146" text-anchor="middle" font-size="11" fill="#5a7fa5">（右）</text>
+  <rect x="12" y="242" width="436" height="56" fill="#1e1e1e" stroke="#111"/>
+  <text x="22" y="266" font-size="12" fill="#9fe0a0" font-family="monospace">$ make</text>
+  <text x="22" y="286" font-size="11" fill="#888">ターミナル（下）— コンパイル・実行</text>
+</svg>
+</div>
+<p class="figcap" style="text-align:center">設定後のおおまかな画面配置。フォルダが右、ターミナルが下に来る。</p>
+
+<h2 id="fork">2. 自分用のリポジトリを作る（Fork）</h2>
+<p>
+この演習は、配布元<abbr class="term" title="プロジェクトのファイルと変更履歴をまとめて管理する入れ物。GitHub上に置かれ、手元にクローンしてコピーを作る。">リポジトリ</abbr> <code>KIDENA-Fumiya/cfd-seminar</code> を各自が
+<abbr class="term" title="GitHub上で他人のリポジトリを自分のアカウントに丸ごと複製する操作。複製後は自分専用として自由に書き換えてよい。">Fork（フォーク）</abbr>して、
+<b>自分のアカウントのコピー</b>の上で進める。Forkだけはgithub.com（ブラウザ）上の操作。
+</p>
+<ol>
+  <li><a href="https://github.com/">github.com</a> で無料アカウントを作る。</li>
+  <li>配布元リポジトリのページを開き、右上の <b>Fork</b> ボタンを押す。</li>
+  <li>Fork画面の <b>Repository name</b> を <code>cfd-seminar-<span style="color:#c0392b">kidena</span></code> のように<b>末尾に自分の名前</b>を付けて作成する（誰のForkか分かるように。<span style="color:#c0392b">kidena</span> は例なので <b><span style="color:#c0392b">各自の名前に置き換える</span></b>）。</li>
+</ol>
+<div class="ok">
+<b>確認</b>: 自分のアカウントの下に <code>あなたのユーザー名/cfd-seminar-<span style="color:#c0392b">kidena</span></code> のページが開ける。
+以降はこの<b>自分のFork</b>だけを使う（配布元は触らない）。
+</div>
+
+<h2 id="git">3. Git for Windows と初回設定</h2>
+<p>
+クローンや履歴管理には<b>Git本体</b>が必要。
+</p>
+<ol>
+  <li><a href="https://git-scm.com/download/win">git-scm.com</a> から Git for Windows を入れる
+      （インストーラはすべて既定のまま「Next」で進めてよい）。</li>
+  <li>名前とメールを登録する（コミットに記録される情報。未設定だと最初のコミットで失敗する）。
+      Zedを開き直してから、下部ターミナルで一度だけ実行する:
+<pre>
+git config --global user.name "あなたの名前"
+git config --global user.email "you@example.com"
+</pre>
+      メールはGitHubアカウントに登録したものにしておくとよい。</li>
+</ol>
+<div class="ok">
+<b>確認</b>: ターミナルで <code>git --version</code> と打ってバージョンが表示される
+（「認識されません」ならZedを完全終了して開き直す）。
+</div>
+
+<h2 id="clone">4. 自分のForkを C:\wrk\ にクローンする</h2>
+<p>
+Fork（GitHub上のコピー）を、自分のパソコンに<abbr class="term" title="GitHub上のリポジトリを自分のパソコンにコピーして、手元で編集できるようにすること。">クローン</abbr>して編集できるようにする。Zedだけで完結する。
+</p>
+<ol>
+  <li>コマンドパレット（<code>Ctrl+Shift+P</code>）で「clone」と打って <b>git: clone</b> を選ぶ
+      （Zedのウェルカム画面の <b>Clone a repository</b> からでもよい）。</li>
+  <li>次のURLを貼る。<code>&lt;自分のユーザー名&gt;</code> は自分のGitHubアカウント名に置き換える:
+<pre>
+https://github.com/&lt;自分のユーザー名&gt;/cfd-seminar-<span style="color:#c0392b">kidena</span>.git
+</pre></li>
+  <li>保存先を聞かれるので <code>C:\wrk</code> を選ぶ。<code>C:\wrk\cfd-seminar-<span style="color:#c0392b">kidena</span>\</code> に一式がコピーされ
+      （<code>C:\wrk</code> フォルダは自動で作られる）、そのままZedで開く。</li>
+</ol>
+<p>
+ターミナル派なら、Zedの下部ターミナルで <code>git clone &lt;上のURL&gt; C:\wrk\cfd-seminar-<span style="color:#c0392b">kidena</span></code> を実行し、
+できたフォルダを <b>Open Folder</b>（メニュー）で開いても同じ。
+</p>
+<div class="warn">
+URLは<b>自分のFork</b>のものを使う（配布元 <code>KIDENA-Fumiya/cfd-seminar</code> をクローンすると、あとで自分の変更をPushできない）。
+迷ったら、ブラウザで自分のForkのページを開き、緑の <b>Code</b> ボタンからURLをコピーする。
+</div>
+<div class="ok">
+<b>確認</b>: Zedの右パネルに <code>src/</code>・<code>wrk/</code>・<code>docs/</code>・<code>post/</code> などのフォルダが見える。
+</div>
+
+<h3 id="push">変更をGitHubへ送る（Zed内で完結）</h3>
+<p>
+コードを直したら、ステータスバーのGitアイコンで<b>Gitパネル</b>を開き、次を繰り返す。
+</p>
+<ol>
+  <li>変更したファイルにチェック（ステージ）→ メッセージを書いて <b>Commit</b>
+      （<abbr class="term" title="変更内容に区切りをつけて履歴として記録すること。">コミット</abbr>: 変更を履歴に記録）。</li>
+  <li><b>Push</b>（<abbr class="term" title="手元のコミットをGitHub上のリポジトリに送って反映すること。">プッシュ</abbr>: GitHubへ送る）。初回はGitHubログインを求められるので画面の指示に従う。</li>
+</ol>
+<p>
+Forkだけはブラウザで行う操作で、それ以外（クローン・コミット・プッシュ・ブランチ）はすべてZedの中で完結する。
+この先の各ステップでも、コードが動いて区切りがついたらそのつどコミット・プッシュしておくと、あとで前の状態に戻せる。
+</p>
+
+<h2 id="gfortran">5. コンパイラ: gfortran と make（MSYS2）</h2>
+<p>
+Fortranのソースを実行できる形に翻訳する<abbr class="term" title="人が書いたソースコードを、コンピュータが実行できる形（実行ファイル）に翻訳するプログラム。">コンパイラ</abbr>
+<abbr class="term" title="GNUが提供する無料のFortranコンパイラ。gcc一式に含まれる。">gfortran</abbr>と、コンパイル手順をまとめて実行する <code>make</code> を、
+<abbr class="term" title="Windows上にUnix風の開発環境とパッケージ管理(pacman)を用意するツール。gfortranもこれで入れる。">MSYS2</abbr>で入れる。
+</p>
+<ol>
+  <li><a href="https://www.msys2.org/">msys2.org</a> のインストーラを入れる（既定のまま。インストール先は <code>C:\msys64</code>）。</li>
+  <li>スタートメニューから <b>MSYS2 UCRT64</b>（緑アイコンの専用ターミナル）を開く。
+      以降の <code>pacman</code> は<b>この窓の中でだけ</b>使えるコマンド（Zedのターミナルや PowerShell では動かない）。</li>
+  <li>初回のみ、パッケージ情報を最新にする:
+<pre>
+pacman -Syu
+</pre>
+      途中で「ターミナルを閉じてください」と言われたら窓を閉じ、開き直して同じコマンドをもう一度実行する。</li>
+  <li>gfortran と make を入れる（確認はそのまま Enter でよい）:
+<pre>
+pacman -S mingw-w64-ucrt-x86_64-gcc-fortran make
+</pre></li>
+</ol>
+<div class="ok">
+<b>確認</b>: 同じMSYS2の窓で <code>gfortran --version</code> と <code>make --version</code> がバージョンを表示する。
+（Zedのターミナルから使えるようにするのが次のPATH設定。）
+</div>
+
+<h3 id="path">PATH を通す</h3>
+<p>
+Zedの下部ターミナルから <code>gfortran</code>・<code>make</code> を呼べるよう、MSYS2の2つの <code>bin</code> フォルダを
+<b>Windowsのユーザー<abbr class="term" title="OSがプログラムに渡す設定値のこと。PATHはその一つで、コマンドを探しに行くフォルダの一覧。">環境変数</abbr> <code>Path</code></b> に追加する。
+<b>Zedの下部ターミナル</b>（Windowsでは既定で<abbr class="term" title="Windows標準のコマンド実行環境（シェル）。Zedの下部ターミナルも既定でこれが開く。">PowerShell</abbr>が開く）で次を<b>一度だけ</b>実行する（管理者権限は不要。1行で全部コピーする）:
+</p>
+<pre>
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";C:\msys64\ucrt64\bin;C:\msys64\usr\bin", "User")
+</pre>
+<ul>
+<li>Zedのターミナルが PowerShell でない（プロンプトが <code>PS&gt;</code> で始まらない）ときは、スタートメニューで「PowerShell」を検索して開き、同じコマンドを実行する。</li>
+<li>GUIで入れるなら: 設定 →「環境変数を編集」→ 上段「ユーザー環境変数」の <code>Path</code> →「新規」で
+    <code>C:\msys64\ucrt64\bin</code> と <code>C:\msys64\usr\bin</code> を1行ずつ追加しても同じ。</li>
+<li>PowerShellでは <code>$env:名前</code> でWindowsの環境変数を参照できる（例: <code>$env:LOCALAPPDATA\Microsoft\WindowsApps</code>。
+    ユーザー名を直書きせずパスを書ける）。</li>
+<li><code>setx PATH "%PATH%;…"</code> は既存PATH全体を複製・切り詰めて壊すことがあるので使わない。
+    Zedの <code>settings.json</code> でのPATH上書きも、Windowsでは既存PATHを引き継がないので使わない。</li>
+</ul>
+<p>
+反映されたかの確認は、<b>Zedを完全に終了して開き直したあと</b>にできる（手順7でまとめて行う）。
+</p>
+
+<h2 id="python">6. Python（可視化用）</h2>
+<p>
+計算結果をグラフにする後処理（<code>post/plot.py</code>）にPythonを使う。
+</p>
+<ol>
+  <li><b>Microsoft Store</b> で「<b>Python 3.13</b>」を検索して入れる。これが一番簡単で確実
+      （PATHも自動で通り、インストール制限のあるPCでも入りやすい）。</li>
+  <li>描画ライブラリを入れる。ターミナル（Zed下部でよい）で:
+<pre>
+python -m pip install numpy matplotlib
+</pre>
+      <code>pip</code> 単体ではなく <code>python -m pip</code> で呼ぶのが確実（Store版は <code>pip</code> がPATHに無いことがある）。</li>
+</ol>
+<p>
+Storeを使わない場合は、<a href="https://www.python.org/downloads/windows/">python.org のダウンロードページ</a>の
+<b>「Windows installer (64-bit)」</b>（<code>python-3.x.x-amd64.exe</code>）でもよい。その場合は最初の画面で
+<b>「Add python.exe to PATH」に必ずチェック</b>を入れる（これを忘れると <code>python</code> コマンドが見つからない）。
+</p>
+<div class="warn">
+python.orgトップの大きなダウンロードボタンが配る「<b>Python Install Manager</b>」（Store形式のMSIXアプリ）は、
+PCのポリシーで<b>「サイドローディングはブロックされています」</b>と弾かれることがある。その場合は上の Microsoft Store 版を使うのが確実。
+</div>
+<div class="ok">
+<b>確認</b>: ターミナルで <code>python --version</code> と <code>python -m pip --version</code> がバージョンを表示する。
+</div>
+
+<h2 id="check">7. 動作確認（全部まとめて）</h2>
+<p>
+最後に、入れたものが全部Zedから使えることを確かめる。
+</p>
+<ol>
+  <li><b>Zedを完全に終了して開き直す</b>（PATHの変更を反映させるため。ウィンドウを閉じるだけでなく終了する）。</li>
+  <li><code>C:\wrk\cfd-seminar-<span style="color:#c0392b">kidena</span></code> を開き、下部ターミナルで4つともバージョンが出ることを確認:
+<pre>
+git --version
+gfortran --version
+make --version
+python --version
+</pre></li>
+  <li>お手本の <code>src/</code> をビルド・実行する（コマンドは1行ずつ実行する）:
+<pre>
+cd src
+make
+./cfd.exe
+</pre>
+      画面に <code>step= ...</code> が流れ、1分ほどで <code>Done.</code> と出る。
+      リポジトリ直下の <code>data/</code> に <code>field_XXXXXX.dat</code> が書き出されていれば成功。</li>
+  <li>結果を絵にする（リポジトリ直下に戻ってから）:
+<pre>
+cd ..
+python post/plot.py src/config.csv
+</pre>
+      最新の計算結果を読んでグラフのウィンドウが開き、同じ場所に <code>.png</code> も保存される。</li>
+</ol>
+<div class="ok">
+これで「コードを直す → <code>make</code> でコンパイル → 実行 → Pythonで可視化 → GitHubへ push」という
+一往復がすべてできる状態になった。<a href="intro.html">1. 導入</a> へ進む。
+</div>
+
+<h2 id="trouble">つまずいたとき早見表</h2>
+<table>
+<tr><th>症状</th><th>原因</th><th>対処</th></tr>
+<tr><td><code>gfortran</code>・<code>make</code>・<code>python</code>・<code>git</code> が「認識されません」</td>
+    <td>PATHが未設定、または変更前のPATHのままZedが起動している</td>
+    <td>Zedを完全終了→再起動。直らなければPATH設定（手順5）を確認し、サインアウト→サインイン</td></tr>
+<tr><td><code>pacman</code> が「認識されません」</td>
+    <td><code>pacman</code> はMSYS2の窓専用のコマンド</td>
+    <td>スタートメニューから <b>MSYS2 UCRT64</b> を開いて実行する</td></tr>
+<tr><td><code>pacman -S</code> が署名・鍵のエラーで失敗する</td>
+    <td>パッケージ情報が古い</td>
+    <td><code>pacman -Syu</code> を実行してから入れ直す（窓を閉じるよう言われたら閉じて、開き直してもう一度）</td></tr>
+<tr><td>python.orgのインストーラが「サイドローディングはブロックされています」</td>
+    <td>Store形式アプリ（Python Install Manager）がPCのポリシーで制限されている</td>
+    <td>Microsoft Store版Python（手順6）を入れる</td></tr>
+<tr><td><code>pip</code> が「認識されません」</td>
+    <td>Store版Pythonは <code>pip</code> 単体がPATHに無いことがある</td>
+    <td><code>python -m pip …</code> の形で呼ぶ</td></tr>
+<tr><td><code>python</code> と打つとMicrosoft Storeが開いてしまう</td>
+    <td>Python未導入時のWindowsの誘導機能</td>
+    <td>手順6でPythonを入れる（入れれば同じコマンドで本物が動く）</td></tr>
+<tr><td>コミットが「Please tell me who you are」で失敗する</td>
+    <td>名前・メールが未登録</td>
+    <td><code>git config --global</code> の2行（手順3）を実行する</td></tr>
+<tr><td>Pushでログインを求められる</td>
+    <td>初回は正常な動作</td>
+    <td>画面の指示に従ってブラウザでGitHubにログインする</td></tr>
+<tr><td>クローンが「repository not found」で失敗する</td>
+    <td>URLが自分のForkになっていない、または打ち間違い</td>
+    <td>ブラウザで自分のForkを開き、<b>Code</b> ボタンからURLをコピーし直す</td></tr>
+<tr><td><code>make</code> が「No targets specified and no makefile found」</td>
+    <td><code>src/</code> や <code>wrk/</code> の外で実行している</td>
+    <td><code>cd src</code>（または <code>cd wrk</code>）してから <code>make</code></td></tr>
+<tr><td><code>&amp;&amp;</code> を含むコマンドがエラーになる</td>
+    <td>Windows PowerShell は <code>&amp;&amp;</code> でコマンドをつなげない</td>
+    <td>コマンドを1行ずつ実行する</td></tr>
+<tr><td>Fortran拡張が「Fortls not installed」と出す</td>
+    <td>言語サーバ（任意機能）が未導入</td>
+    <td>Python導入後に <code>python -m pip install fortls</code></td></tr>
+</table>
+
+  </main>
+</body>
+</html>

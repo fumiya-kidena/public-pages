@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfd-seminar — 1. 導入</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/katex.min.css">
+<script src="assets/katex.min.js"></script>
+</head>
+<body>
+  <nav class="sidebar">
+    <h2>cfd-seminar</h2>
+    <ul>
+      <li><a href="index.html">概要</a></li>
+      <li><a href="setup.html">0. 環境構築</a></li>
+      <li><a href="intro.html" class="current">1. 導入</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="poisson.html">4. 圧力Poisson</a></li>
+      <li><a href="advection2.html">5. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
+  </nav>
+  <main>
+<noscript><div class="warn">数式の表示にJavaScriptを使っています。数式が見えない場合は、ブラウザでJavaScriptが有効か確認してください。</div></noscript>
+
+<h1>1. 導入</h1>
+<p>
+このステップでは<code>wrk/initial.f90</code>の初期条件だけを埋める。
+数値スキーム自体（移流・拡散・圧力）はまだ出てこないので、Fortranの書き方に慣れることが主な目的。
+数値スキームのファイル（<code>advection.f90</code>・<code>diffusion.f90</code>・<code>poisson.f90</code>）は
+次のステップ以降で埋めていく（境界条件<code>bc.f90</code>は完成形が入っている）。
+</p>
+
+<h2>支配方程式</h2>
+<p>
+このコードの目標は、非圧縮の<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式（速度の時間変化＝移流＋圧力勾配＋粘性）と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>を数値的に解くこと。速度を <span class="katex-eq" id="eq-uvec"></span> として、ベクトルで書くと運動量の式と連続の式は:
+</p>
+<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
+<p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
+<p>
+このあとのステップで、各項（移流・粘性・圧力）を成分ごとに離散化して1つずつ実装していく。この導入ステップでは、まず初期条件だけを作る。
+</p>
+
+<h2>格子: MAC（スタガード）格子</h2>
+<p>
+圧力<code>p</code>はセル中心（整数添字 i, j）、速度<code>u,v</code>はセルの面（半整数添字 i+1/2 など）
+に配置する<abbr class="cite" title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189.">[4]</abbr>。等間隔格子なので、座標配列は持たず<code>dx,dy</code>だけで十分。
+</p>
+<div style="text-align:center">
+<svg viewBox="0 0 420 420" width="380" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
+  <rect x="10"  y="110" width="100" height="200" fill="none" stroke="#ccc" stroke-dasharray="4"/>
+  <rect x="310" y="110" width="100" height="200" fill="none" stroke="#ccc" stroke-dasharray="4"/>
+  <rect x="110" y="10"  width="200" height="100" fill="none" stroke="#ccc" stroke-dasharray="4"/>
+  <rect x="110" y="310" width="200" height="100" fill="none" stroke="#ccc" stroke-dasharray="4"/>
+
+  <rect x="110" y="110" width="200" height="200" fill="#eef3f9" stroke="#2b6cb0" stroke-width="2"/>
+
+  <circle cx="210" cy="210" r="5" fill="#2b6cb0"/>
+  <text x="210" y="195" text-anchor="middle" font-size="18">p<tspan baseline-shift="sub" font-size="12">i,j</tspan> (scalar)</text>
+
+  <circle cx="110" cy="210" r="4" fill="#c0392b"/>
+  <text x="110" y="238" text-anchor="middle" font-size="15">u<tspan baseline-shift="sub" font-size="11">i-1/2,j</tspan></text>
+  <circle cx="310" cy="210" r="4" fill="#c0392b"/>
+  <text x="310" y="238" text-anchor="middle" font-size="15">u<tspan baseline-shift="sub" font-size="11">i+1/2,j</tspan></text>
+
+  <circle cx="210" cy="110" r="4" fill="#1e8449"/>
+  <text x="255" y="102" text-anchor="middle" font-size="15">v<tspan baseline-shift="sub" font-size="11">i,j+1/2</tspan></text>
+  <circle cx="210" cy="310" r="4" fill="#1e8449"/>
+  <text x="255" y="333" text-anchor="middle" font-size="15">v<tspan baseline-shift="sub" font-size="11">i,j-1/2</tspan></text>
+
+  <line x1="20" y1="395" x2="80" y2="395" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="50" y="412" text-anchor="middle" font-size="13">x</text>
+  <line x1="20" y1="395" x2="20" y2="335" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="8" y="345" text-anchor="middle" font-size="13">y</text>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#333"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+<p class="figcap" style="text-align:center">
+スカラー点（圧力 p）は整数添字 i,j。ベクトル点（速度 u,v）は半整数添字 i±1/2 で、隣接するスカラー点の
+ちょうど中間（セルの面）に位置する。
+</p>
+<p>
+コード上の配列添字はこの「+1/2側」をそのまま使う: <code>u(i,j)</code>が数式の
+<span class="katex-eq" id="eq-uidx"></span>
+そのものを表す（<code>v(i,j)</code>も同様に<span class="katex-eq" id="eq-vidx"></span>）。
+</p>
+
+<h2>Fortranの最低限の書き方</h2>
+<p>
+以降で使うものだけ、ここでまとめて説明する。
+</p>
+<pre>
+module initial       ! ファイル1つ＝モジュール1つ、が基本
+  use config          ! 他モジュールの中身（変数・サブルーチン）を使う宣言
+  implicit none        ! 変数の暗黙の型宣言を禁止（必ず明示的に宣言する）
+
+  real(8) :: u(0:Nx, 0:Ny+1)   ! 倍精度実数の2次元配列。宣言時にサイズ確定（allocatableは使わない）
+end module initial              ! containsは書かない: moduleはグローバル変数の置き場だけ
+
+
+subroutine initial_condition()
+  use config
+  use initial
+  implicit none
+  integer :: i, j              ! ループ変数などの整数
+
+  do j = 0, Ny+1                ! 0からNy+1までのループ（他言語のfor文に相当）
+    do i = 0, Nx
+      u(i,j) = 0.0d0            ! 0.0d0 の d0 は倍精度実数リテラルという意味
+    end do
+  end do
+end subroutine initial_condition
+</pre>
+
+<h2>演習: 初期条件（<code>wrk/initial.f90</code>）</h2>
+<p>
+最初の演習。<code>initial_condition</code>で<code>u,v</code>の初期値を入れる。題材は円柱まわりの
+<abbr class="term" title="粘性・渦を無視した理想流体の流れ。速度場が速度ポテンシャルの勾配で書ける（回転を持たない）という仮定のもとで、閉じた式で解ける。">ポテンシャル流</abbr>
+（一様流＋<abbr class="term" title="吸い込みと吹き出しを限りなく近づけた特異点。一様流に重ねると円柱まわりの流れになることが知られている。">二重湧き出し（ダブレット）</abbr>）の解析解:
+</p>
+<p class="eq-block"><span id="eq-pot-u" class="katex-eq"></span></p>
+<p class="eq-block"><span id="eq-pot-v" class="katex-eq"></span></p>
+<p>
+ここで <span class="katex-eq" id="eq-pot-r"></span>、<code>(xc,yc)</code>は領域中心、<code>r0</code>は円柱の半径。
+</p>
+<p>
+<b>足場はひな形に用意してある</b>: 幾何（<code>xc, yc</code>と半径 <code>r0 = 0.2·min(Lx,Ly)</code>）と、
+各格子点の座標<code>x, y</code>・<code>r2</code>の計算まで書いてある。<b>座標配列を持たない</b>ので、
+<code>x = i*dx</code>のように<code>i,j</code>から毎回計算する（<code>u</code>と<code>v</code>は格子上の
+位置が違うので、2つのループで<code>x,y</code>の作り方が違う点に注意）。
+</p>
+<p>
+埋めるのは<b><code>u,v</code>の式そのもの</b>だけ。円柱の内側（<span class="katex-eq" id="eq-rin"></span>）では
+式が中心で発散するので、単純に一様流（<code>u=U0, v=0</code>）にしておく（<code>if</code>文で分岐）。
+<code>u</code>のループは<b>お手本としてひな形に書いてある</b>ので、これを見ながら<code>v</code>のループを自分で書く:
+</p>
+<pre>
+! u: ひな形に用意済み（お手本）
+do j = 0, Ny+1
+  do i = 0, Nx
+    x  = i*dx
+    y  = (j-0.5d0)*dy
+    r2 = (x-xc)**2 + (y-yc)**2
+    if (r2 &lt; r0**2) then
+      u(i,j) = U0
+    else
+      u(i,j) = U0*(1.0d0 - r0**2*((x-xc)**2-(y-yc)**2)/r2**2)
+    end if
+  end do
+end do
+</pre>
+<p>
+<code>v</code>のループも形は同じ。<code>else</code>枝に<code>v</code>の解析解（上のKaTeXの式）を入れる。
+<code>u</code>と違い<code>v</code>は<span class="katex-eq" id="eq-vidx2"></span>の位置なので、座標の作り方が
+<code>x = (i-0.5d0)*dx</code>, <code>y = j*dy</code>になる（これもひな形に用意済み）。
+</p>
+<details class="answer">
+<summary>v の答えを見る</summary>
+<pre>
+do j = 0, Ny
+  do i = 0, Nx+1
+    x  = (i-0.5d0)*dx
+    y  = j*dy
+    r2 = (x-xc)**2 + (y-yc)**2
+    if (r2 &lt; r0**2) then
+      v(i,j) = 0.0d0
+    else
+      v(i,j) = -2.0d0*U0*r0**2*(x-xc)*(y-yc)/r2**2
+    end if
+  end do
+end do
+</pre>
+</details>
+
+<h2>物性・実行パラメータ（<code>config.csv</code>）</h2>
+<p>
+<code>wrk/config.csv</code>で流体物性・時間刻みなどを設定する（<code>src/</code>にも同じ内容の
+独立したファイルがある）。水を想定した切りのよい値（ρ=1000 kg/m³, ν=1.0×10⁻⁶ m²/s）をデフォルトにしている。
+格子解像度<code>Nx,Ny</code>だけは配列サイズを決めるため<code>config.f90</code>内の
+コンパイル時定数（変更したら再コンパイルが必要）。
+</p>
+<table>
+<tr><th>key</th><th>意味</th></tr>
+<tr><td>Lx, Ly</td><td>領域サイズ [m]</td></tr>
+<tr><td>rho</td><td>密度 [kg/m³]（水を想定: 1000）</td></tr>
+<tr><td>nu</td><td><abbr class="term" title="動粘性係数。粘性の強さを密度で割ったもの。単位はm²/s。値が大きいほど粘性が強く（拡散しやすく）、小さいほど移流が卓越する。">動粘性係数</abbr> ν [m²/s]（水を想定: 1.0×10⁻⁶）</td></tr>
+<tr><td>U0</td><td>流入速度 [m/s]</td></tr>
+<tr><td>dt</td><td>時間刻み幅 [s]</td></tr>
+<tr><td>nstep</td><td>総タイムステップ数</td></tr>
+<tr><td>nout</td><td>何ステップごとに結果を出力するか</td></tr>
+<tr><td>omega</td><td><abbr class="term" title="Successive Over-Relaxationの緩和係数。1&lt;omega&lt;2で、Gauss-Seidel法より収束を加速する。">SOR</abbr>の緩和係数（1〜2の間、<a href="poisson.html">4. 圧力Poisson</a>で使う）</td></tr>
+<tr><td>tol</td><td>圧力反復の収束判定（相対値）</td></tr>
+<tr><td>max_iter</td><td>圧力反復の最大回数</td></tr>
+<tr><td>case</td><td>後処理（<code>post/plot.py</code>）専用の欄。<code>test</code>/<code>channel</code>/<code>cavity</code>のいずれか。
+Fortran本体はこの欄を読まない（どの基準解を重ねて表示するかを後処理側が決めるだけ）</td></tr>
+</table>
+<p class="figcap">
+Re（レイノルズ数）は入力ではなく <code>Re = U0 × min(Lx,Ly) / nu</code> として実行時に計算・表示される。
+</p>
+
+<h2>ビルド・実行のしくみ</h2>
+<p>
+コンパイルと実行はこの2つ（＋移動）だけ。<b>コマンドは1行ずつ実行する</b>:
+</p>
+<pre>
+cd wrk
+make
+./cfd.exe
+</pre>
+<p>
+<code>make</code>が（変更のあったファイルだけ）コンパイルして実行ファイル<code>cfd.exe</code>を作り、
+<code>./cfd.exe</code>がそれを実行する。お手本の完成形を動かしたいときは<code>cd src</code>で同じ2つ。
+<code>src/</code>と<code>wrk/</code>はそれぞれ独立した<code>makefile</code>と<code>config.csv</code>を持つので、
+切り替えの操作は不要（そのディレクトリの中で<code>make</code>するだけ）。出力データだけは
+どちらから実行しても共通のリポジトリ直下<code>data/</code>にまとまる。
+なお<code>./cfd.exe</code>は実行のたびに、<code>data/</code>内の前回の出力（<code>field_*.dat</code>）を自動で消してから書き直すので、古い結果が混ざらない。
+</p>
+
+<h2>後処理・可視化（Python）</h2>
+<p>
+計算結果（<code>data/field_XXXXXX.dat</code>）を絵にするのが後処理スクリプト <code>post/plot.py</code>。
+<b>リポジトリ直下</b>から実行する（<code>data/</code>は<code>src/</code>・<code>wrk/</code>共通なので、どちらの結果もここで見られる）:
+</p>
+<pre>
+python post/plot.py wrk/config.csv
+</pre>
+<p>
+引数は拡張子で見分ける（<code>.csv</code>＝設定ファイル、それ以外＝データファイル）ので順番は問わない。
+<b>どちらも省略でき</b>、データは<code>data/</code>内の最新、設定は直近に編集した<code>config.csv</code>（<code>wrk/</code>か<code>src/</code>）が
+自動で選ばれる——計算した直後なら<code>python post/plot.py</code>だけでもよい。上ではどの設定を使うか分かるよう<code>wrk/config.csv</code>を明示している。
+<code>plot.py</code>はその<code>case</code>欄を見て、重ねる基準解を切り替える:
+</p>
+<ul>
+<li><code>test</code> — 円柱まわりのポテンシャル流の解析解（この導入ステップはこれ）</li>
+<li><code>channel</code> — plane Poiseuille flow の解析解（放物線）</li>
+<li><code>cavity</code> — Ghia らの基準解</li>
+</ul>
+<p>
+出力は<b>流線・圧力・断面の速度分布</b>の3枚のパネルで、読み込んだデータと同じ場所に<code>.png</code>として保存される。
+時間発展を動画で見たいときは <code>python post/animate.py</code>（<code>data/animation.gif</code>ができる）。可視化には<a href="setup.html#python">Python</a>（numpy・matplotlib）が要る。
+</p>
+
+<h2>実行して確認</h2>
+<ol>
+<li><code>wrk/main.f90</code> は<b>今回は触らない</b>。時間発展の呼び出し
+    （<code>boundary_condition</code>・<code>advection</code>・<code>diffusion</code>・<code>poisson</code>）は
+    すべてコメントアウトされたままにしておく — <code>initial_condition</code>が作った初期状態がそのまま書き出される。</li>
+<li><code>wrk/config.csv</code> を次のようにする（他はデフォルトのまま）:
+<table>
+<tr><th>key</th><th>値</th><th>理由</th></tr>
+<tr><td><code>case</code></td><td><code>test</code></td><td>後処理で円柱まわりポテンシャル流の解析解を重ねる</td></tr>
+<tr><td><code>nstep</code></td><td><code>1</code></td><td>時間発展をまだ呼ばないので1ステップで十分</td></tr>
+<tr><td><code>nout</code></td><td><code>1</code></td><td>その1ステップを出力する</td></tr>
+</table></li>
+<li>ビルドして実行する:
+<pre>
+cd wrk
+make
+./cfd.exe
+</pre>
+<b>初回の<code>make</code></b>では、まだ空欄の<code>diffusion.f90</code>について
+<code>Unused dummy argument 'un'</code>のような<abbr class="term" title="コンパイルは通っているが気をつけるとよい箇所を知らせるメッセージ。エラーと違い実行ファイルはちゃんとできる。">警告（warning）</abbr>が数行出るが、
+<b>まだ実装していない項があるためで問題ない</b>（粘性項・圧力を埋めれば消える）。<code>Error</code>が出ずに<code>cfd.exe</code>ができていれば成功。</li>
+<li>結果を絵にする（リポジトリ直下に戻ってから）:
+<pre>
+cd ..
+python post/plot.py wrk/config.csv
+</pre></li>
+<li>結果を確認する。右パネルで数値解（青線）が解析解（赤破線）に重なっていれば、<code>u,v</code>は正しく書けている。
+    移流・粘性・圧力を実装するまでは、この初期条件が時間発展せずそのまま出てくる — <b>それが正しい</b>。</li>
+</ol>
+
+<details class="answer">
+<summary>この段階での実行結果を見る</summary>
+<img src="assets/img/answer_intro.png" alt="intro stage checkpoint">
+<p class="figcap">
+円柱まわりのポテンシャル流（一様流＋ダブレット）。移流・粘性・圧力を実装するまではこのまま変化しない。
+</p>
+</details>
+
+<div class="ok">
+<b>変更を保存する</b>: ここまで動いたら、区切りとして<a href="setup.html#push">コミット・プッシュ</a>しておく
+（Zedの Git パネルで <code>initial.f90</code> をステージ → メッセージを書いて Commit → Push）。
+ステップごとに残しておくと、あとで前の状態に戻せる。
+</div>
+
+<script>
+
+katex.render("\\mathbf{u}=(u,v)", document.getElementById('eq-uvec'));
+katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
+katex.render("\\nabla\\cdot\\mathbf{u} = 0", document.getElementById('eq-cont'));
+katex.render("u_{i+1/2,j}", document.getElementById('eq-uidx'));
+katex.render("v_{i,j+1/2}", document.getElementById('eq-vidx'));
+katex.render("v_{i,j+1/2}", document.getElementById('eq-vidx2'));
+katex.render("u(i,j) = U_0\\left(1 - r_0^2\\,\\frac{(x-x_c)^2-(y-y_c)^2}{r^4}\\right) \\quad (r \\ge r_0)", document.getElementById('eq-pot-u'));
+katex.render("v(i,j) = -2\\,U_0\\,r_0^2\\,\\frac{(x-x_c)(y-y_c)}{r^4} \\quad (r \\ge r_0)", document.getElementById('eq-pot-v'));
+katex.render("r^2 = (x-x_c)^2 + (y-y_c)^2", document.getElementById('eq-pot-r'));
+katex.render("r < r_0", document.getElementById('eq-rin'));
+
+</script>
+  </main>
+</body>
+</html>
