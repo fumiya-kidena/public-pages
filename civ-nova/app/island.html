@@ -15,6 +15,9 @@
     background:var(--chrome);border-bottom:1px solid #171a1f;font-size:12.5px;white-space:nowrap}
   #topbar h1{font-size:13.5px;font-weight:700}
   #topbar h1 small{color:var(--ink2);font-weight:500;margin-left:6px}
+  .navlink{color:var(--ink2);text-decoration:none;border:1px solid #444b55;border-radius:6px;
+    padding:6px 12px;font-size:12.5px;font-weight:600}
+  .navlink:hover{border-color:var(--accent);color:var(--ink)}
   .hint{color:#6b7280;font-size:11.5px}
   #stage{flex:1;position:relative;min-height:0}
   #stage canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -28,14 +31,15 @@
     border-radius:6px;padding:5px 9px;font-size:11.5px;line-height:1.5;max-width:240px}
   #tip .t2{color:#9aa3af}
 </style>
-  <script type="module" crossorigin src="./assets/island-CEGFrRd2.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/showcase3d-Dk5Xiqxg.js">
+  <script type="module" crossorigin src="./assets/island-D4dDGPgy.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/renderer3d-DdbHy21x.js">
 </head>
 <body>
 <header id="topbar">
   <h1>civ-nova<small>島ショーケース β（軽量・地球マップなし）</small></h1>
   <span style="flex:1"></span>
-  <span class="hint">ホバー:地形 / ドラッグ:移動 / ホイール:ズーム / 右ドラッグorShift:チルト</span>
+  <span class="hint">ホバー:地形 / クリック:選択 / ドラッグ:移動 / ホイール:ズーム / 右ドラッグorShift:チルト</span>
+  <a class="navlink" href="./">🌍 世界地図</a>
 </header>
 <div id="stage">
   <canvas id="cvshow"></canvas>
