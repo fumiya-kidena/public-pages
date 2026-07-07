@@ -35,7 +35,10 @@
   h2{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.02em;margin:44px 0 14px;
     border-bottom:1px solid var(--line);padding-bottom:10px;}
   p{color:#cfd0d6;font-size:15px;}
-  .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;}
+  /* 横スクロールは残す（極端に長い式の保険）が、バーの見た目だけ消す */
+  .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;
+    scrollbar-width:none;-ms-overflow-style:none;}
+  .eq::-webkit-scrollbar{display:none;}
   .note{color:var(--mut);font-size:13.5px;}
   /* 用語ホバー：ドット下線＋ネイティブtitleツールチップ（FGB-CSF比較表と同じ流儀） */
   .tip{border-bottom:1px dotted var(--accent); cursor:help;}
@@ -58,7 +61,6 @@
   <rect x="0" y="0" width="680" height="300" fill="#ffffff"/>
   <line x1="60" y1="90" x2="600" y2="90" stroke="#222" stroke-width="3"/>
   <line x1="60" y1="190" x2="600" y2="190" stroke="#222" stroke-width="3"/>
-  <line x1="60" y1="90" x2="60" y2="190" stroke="#222" stroke-width="3"/>
   <rect x="61" y="91" width="239" height="98" fill="#8ecae6" fill-opacity="0.55"/>
   <rect x="300" y="91" width="299" height="98" fill="#f4a261" fill-opacity="0.5"/>
   <path d="M 300 91 Q 270 140 300 189" fill="none" stroke="#023047" stroke-width="2.5"/>
