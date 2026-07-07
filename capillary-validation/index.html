@@ -9,7 +9,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>単管毛管流：2流体系の Washburn 方程式</title>
 <script>
-  window.MathJax = { tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] } };
+  // 各数式ブロックを、はみ出す場合だけフォントサイズを縮めて枠幅に収める。
+  // → スクロールバー不要（式は常に全部見える）。JS無効時は .eq の overflow-x:auto で
+  //   横スクロール（バー表示）にフォールバックするので、その場合も式は切れない。
+  function fitEquations(){
+    document.querySelectorAll('.eq').forEach(function(eq){
+      var m = eq.querySelector('mjx-container');
+      if(!m) return;
+      m.style.fontSize = '';  // いったん既定サイズに戻す（リサイズで広がった時のため）
+      for(var i=0; i<8 && eq.scrollWidth > eq.clientWidth + 1; i++){
+        var cur = parseFloat(getComputedStyle(m).fontSize);
+        var ratio = eq.clientWidth / eq.scrollWidth;
+        m.style.fontSize = Math.max(9, cur * ratio * 0.98) + 'px';
+      }
+    });
+  }
+  var _fitT;
+  window.addEventListener('resize', function(){
+    clearTimeout(_fitT); _fitT = setTimeout(fitEquations, 120);
+  });
+  window.MathJax = {
+    tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
+    startup: {
+      pageReady: function(){
+        return MathJax.startup.defaultPageReady().then(fitEquations);
+      }
+    }
+  };
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"
   integrity="sha384-Wuix6BuhrWbjDBs24bXrjf4ZQ5aFeFWBuKkFekO2t8xFU0iNaLQfp2K6/1Nxveei"
@@ -35,10 +61,9 @@
   h2{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.02em;margin:44px 0 14px;
     border-bottom:1px solid var(--line);padding-bottom:10px;}
   p{color:#cfd0d6;font-size:15px;}
-  /* 横スクロールは残す（極端に長い式の保険）が、バーの見た目だけ消す */
-  .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;
-    scrollbar-width:none;-ms-overflow-style:none;}
-  .eq::-webkit-scrollbar{display:none;}
+  /* 通常は fitEquations() が式を枠内に縮めるのでスクロールバーは出ない。
+     overflow-x:auto は JS無効時のフォールバック（その時だけバーが出る）。 */
+  .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;}
   .note{color:var(--mut);font-size:13.5px;}
   /* 用語ホバー：ドット下線＋ネイティブtitleツールチップ（FGB-CSF比較表と同じ流儀） */
   .tip{border-bottom:1px dotted var(--accent); cursor:help;}
