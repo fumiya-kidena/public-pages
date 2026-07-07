@@ -160,6 +160,31 @@
 <li>参照ソルバ側の発見：粘性 μ blend は prop 層の算術ではなく<b>粘性段内の調和 blend</b>（ハードコード）が実体／整合経路の D2 診断は移流前内挿を使う（意図要確認）。</li>
 </ul></div>
 
+<h2>M4 — 粗 B-CSF（表面張力）（2026-07-08）</h2>
+<p>表面張力が入った段階。<span class="term" title="表面張力の面力を圧力勾配と同一の離散ステンシルで組むことで、静止液滴で力と圧力が厳密に釣り合い、偽の流れ（スプリアス・カレント）が出ない構成。">balanced-force</span> が本当に「恒等」になっているかを、曲率を厳密値に固定した対照実験（exact-κ）で切り分けるのが主眼。初の非周期境界（壁）もここで導入。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>sdrop_ex / sdrop_hf</th><td>静止液滴：2D 64²（Δ=1/64）、1×1 領域中心に R=0.25 液滴、σ=1、ρ<sub>l</sub>/ρ<sub>g</sub>=1/1e-3、μ<sub>l</sub>/μ<sub>g</sub>=0.1/1e-3、無重力、遠方場 BC（openfar）、c 初期化は厳密（解析円とセルの重なり）。曲率＝exact（定数 κ=1/R=4、検証専用）と <span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。3×3 列×高さ方向 7 セル。">HF（3×3×7）</span>の 2 構成。<b>2 モード測定</b>：impulsive＝dt 固定 1e-11×2 step（初期離散インバランス）／settled＝物理 dt 制御で t≈τ=ρ<sub>l</sub>R²/μ<sub>l</sub>=0.625（自己維持スプリアス流）。指標：|U*|=|U|max/(σ/μ<sub>l</sub>)、Δp*=(p̄<sub>in</sub>−p̄<sub>out</sub>)/(σ/R)（in: c&gt;0.99、out: c&lt;0.01＝CSF 力帯除外）</td></tr>
+  <tr><th>capwave / capwave_inv</th><td>毛管波：領域 1×2、64×128、x 周期・y 壁（自由すべり u<sub>n</sub>=0、射影は Dirichlet-p 壁＝D13）、界面 y=a0·cos(kx)（a0=0.01、k=2π）静止開始。matched 物性 ρ 両相=1、μ 両相=0.018257（La=σρλ/μ²=3000）、σ=1。毛管律速 dt。振幅診断＝列液高の固定第 1 列符号付き振幅（旧ソルバと同定義）。無粘性変種は μ=0</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>exact-κ（balanced-force 恒等）</th><td>impulsive |U*|=<b>5.9e-21</b>／settled <b>1.46e-14</b>（machine-zero 級）、<b>Δp*=1.00000000</b>（両時点）</td></tr>
+  <tr><th>HF κ vs 旧ソルバ S3 アンカー</th><td>impulsive 2.83e-13（アンカー 1.45e-13 の 2 倍・3 倍帯内）／settled <b>1.43e-11</b>（アンカー 4.4e-11 より良）。<b>Δp*=1.00189/1.00179＝アンカーと 5 桁一致</b></td></tr>
+  <tr><th>capwave 粘性 RMS vs Prosperetti(1981)</th><td><b>0.001466</b>（窓 τ≤25。ゲート ≤0.016＝旧記録 0.0081 の 2 倍帯）。エネルギー注入なし（max â=1.000000）</td></tr>
+  <tr><th>capwave 無粘性</th><td>振幅非成長（max â=1.000000）＝注入なしの定性確認</td></tr>
+  <tr><th>回帰・箱分割</th><td>vortex／TG／PROJTEST1–5／dropadvect 全て基準値と一致（ビット一致含む）、multibox OK</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>balanced-force が離散恒等として成立</b>：κ を厳密値にすると面力 σκ(∇c)<sub>f</sub> が厳密な離散勾配になり射影が完全吸収 → スプリアス流 machine-zero。成立条件（①面力の ∇c＝圧力勾配と同一の 2 点面ステンシル、②力を割る ρ<sub>f</sub>＝射影 β の同一実体、③同一面）が正しく組めたことの直接証明。</li>
+<li><b>HF 曲率は旧ソルバと同じ離散に到達</b>：Δp* が 5 桁一致＝曲率・力・射影の離散が実質同一。スプリアスがやや良いのはソルバ許容誤差（1e-11 vs 旧 1e-8）の寄与とみられる。</li>
+<li><b>毛管波 RMS が旧ソルバ記録の約 1/5</b>（0.0015 vs 0.0081）：明確に良い方向だが要因は未分離（ソルバ許容誤差・曲率交差微分の式の差・dt 制御が候補）。</li>
+<li>初の非周期 BC（壁）が設計どおり機能（境界面 valid への法線直接代入）。射影の壁 BC は参照忠実の Dirichlet-p を採用。</li>
+<li>旧ソルバ側の発見：HF 交差微分の分母に誤記（均一格子では無影響・FKeX は正しい式＝ストレッチ格子では両者が一致しなくなる点に将来注意）／未初期化フラグの潜在 UB。</li>
+</ul></div>
+<div class="warn">⚠ 暫定事項：HF 系のゲート帯は kappa_source（fine|coarse）未決着前提の「アンカー×3」帯。capwave RMS の評価窓は今回 τ≤25 で固定（旧側台帳の窓は非明記＝厳密比較には旧側の再走が要る）。</div>
+
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
 </main>

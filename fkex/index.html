@@ -145,10 +145,10 @@
   <text x="336" y="103" font-size="11.5" fill="#222" text-anchor="middle">応力発散形・陽解法</text>
   <text x="336" y="136" font-size="11" fill="#888" text-anchor="middle">M2</text>
   <line x1="396" y1="90" x2="412" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
-  <!-- box 3: tension (future) -->
-  <rect x="414" y="64" width="150" height="52" rx="6" fill="#fff8e1" stroke="#f0ad4e" stroke-width="1.5" stroke-dasharray="6 3"/>
-  <text x="489" y="84" font-size="13" font-weight="bold" fill="#8a5a00" text-anchor="middle">③ 表面張力</text>
-  <text x="489" y="103" font-size="11.5" fill="#555" text-anchor="middle">これから実装</text>
+  <!-- box 3: tension (coarse done at M4; subgrid version at M6) -->
+  <rect x="414" y="64" width="150" height="52" rx="6" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.5"/>
+  <text x="489" y="84" font-size="13" font-weight="bold" fill="#2b6cb0" text-anchor="middle">③ 表面張力</text>
+  <text x="489" y="103" font-size="11.5" fill="#222" text-anchor="middle">balanced CSF（粗）</text>
   <text x="489" y="136" font-size="11" fill="#888" text-anchor="middle">M4・M6</text>
   <line x1="564" y1="90" x2="580" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
   <!-- box 4: projection -->
@@ -162,7 +162,7 @@
   <text x="774" y="88" font-size="13" fill="#1b6e3a" text-anchor="middle">uⁿ⁺¹</text>
   <text x="774" y="105" font-size="10.5" fill="#1b6e3a" text-anchor="middle">div-free</text>
 </svg>
-<p class="figcap">図2：fractional step の 1 ステップと、担当マイルストーン。青の実線枠＝実装・検証済み、橙の破線枠＝これから。サブグリッド版（M5・M6）は①③をサブグリッド上で置き換える。</p>
+<p class="figcap">図2：fractional step の 1 ステップと、担当マイルストーン。粗格子版のパイプライン①〜④は M4 までで全段実装・検証済み。残るはサブグリッド版（M5・M6）＝①③をサブグリッド上で置き換える。</p>
 </figure>
 
 <div class="tblwrap">
@@ -172,7 +172,7 @@
   <tr><td>M1</td><td>純移流 VOF（<span class="term" title="Piecewise Linear Interface Calculation。セル内界面を平面（2D では線分）で再構成する VOF の標準手法。">PLIC</span> 再構成、Zalesak / vortex 検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-07。質量保存 ~1e-15・vortex L1 は旧ソルバ同水準）</td></tr>
   <tr><td>M2</td><td>単相 fractional step ＋ MAC 射影（Taylor–Green 検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-07。射影 2 次収束・TG 減衰誤差 0.2〜0.7%・div(u)&lt;1e-11）</td></tr>
   <tr><td>M3</td><td>二相・変密度（密度比 1000:1、<span class="term" title="質量フラックスと運動量フラックスを同一の再構成から組み、密度比が大きくても界面で運動量が破綻しない移流。">mass-momentum consistent</span> 移流）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。並進固定点＝u 誤差厳密 0・frozen-RHS クロスコード一致）</td></tr>
-  <tr><td>M4</td><td>従来型 balanced CSF（静止液滴・毛管波検証）</td><td class="status-todo">—</td></tr>
+  <tr><td>M4</td><td>従来型 balanced CSF（静止液滴・毛管波検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。balanced-force 恒等＝machine zero・毛管波 RMS 0.0015）</td></tr>
   <tr><td>M5</td><td>サブグリッド移流（FGVT）</td><td class="status-todo">—</td></tr>
   <tr><td>M6</td><td>サブグリッド表面張力（FGB-CSF、champion 構成）</td><td class="status-todo">—</td></tr>
   <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td class="status-todo">—</td></tr>
@@ -215,6 +215,13 @@
   <li><b>設計決定</b>：整合経路の VOF 更新は参照実装に忠実（スイープ毎 EI＋クリップ・最終補正なし）とし、plain 経路（M1）との差は質量ドリフト・クリップ量の常時診断で監視する方式に確定。</li>
 </ul>
 <div class="ok"><b>検証</b>：密度比 1000 液滴の一様並進（<span class="term" title="一様速度場は整合スキームの厳密な不動点。質量フラックスと運動量フラックスに僅かでも不整合があると、界面で偽の加速度として現れる古典テスト。">固定点テスト</span>）＝<b>速度誤差が厳密 0（ビット一致の固定点）</b>・div=0・保存 ~1e-16。変係数 β の manufactured solution＝2 次収束（1.996/1.999）。<b>クロスコード frozen-RHS</b>＝参照ソルバから静止液滴（Laplace 構成・β 跳び 10³）の圧力方程式 RHS・β・解をダンプし、FKeX の離散作用素・MLMG 解と突合 → 作用素恒等 5.8e-9（＝参照側ソルバ残差水準）・再 solve 一致 rel 3.2e-10。旧マイルストーン回帰は全てビット一致。</div>
+
+<h3>M4 完了メモ（2026-07-08）</h3>
+<p>表面張力（粗格子の balanced CSF）が入り、粗格子版パイプラインが全段そろった段階。初の非周期境界（壁）もここで導入。</p>
+<ul>
+  <li><b>中身</b>：<span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。">height-function 曲率</span>（3×3×7）＋κ 拡張＋<span class="term" title="表面張力の面力を圧力勾配と同一の離散ステンシルで組むことで、静止液滴で力と圧力が厳密に釣り合い、偽の流れ（スプリアス・カレント）が出ない構成。">balanced-force CSF</span> 面力。検証専用の exact-κ モード、壁 BC（自由すべり）、毛管 dt 条件。</li>
+</ul>
+<div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：exact-κ の静止液滴で <b>balanced-force 恒等が machine-zero</b>（settled 1.5e-14）・Laplace 圧 Δp*=1.00000000。HF 曲率では旧ソルバのアンカーと <b>Δp* が 5 桁一致</b>、スプリアス・カレントは同水準以下。毛管波の減衰は Prosperetti 厳密解に対し <b>RMS 0.0015</b>（旧ソルバ記録 0.0081 の約 1/5）。全回帰ビット一致。</div>
 
 <h2>開発環境メモ</h2>
 <ul>
