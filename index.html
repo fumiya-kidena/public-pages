@@ -1,0 +1,97 @@
+<!-- public-pages のルート index。gh-pages 直下のサブフォルダを GitHub API で動的に取得して一覧化する。
+     → ページが増えても（ObsidianVault 由来でも civ-nova 由来でも）このファイルを触らず自動反映される。
+     ソースは vault の .github/public-pages/index.html（publish-pages.yml が root へデプロイ, keep_files:true）。 -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>public-pages</title>
+<style>
+  :root{ --bg:#0c0d10; --line:#25272e; --ink:#e9e9ec; --mut:#8b8f9a; --dim:#5b5f6a; --accent:#6fd6c8; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Helvetica Neue",-apple-system,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.7;}
+  .wrap{max-width:720px;margin:0 auto;padding:72px 26px 100px;}
+  header{margin-bottom:40px;}
+  .kicker{font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{margin:14px 0 0;font-size:34px;font-weight:200;letter-spacing:.02em;}
+  header .sub{color:var(--mut);font-size:14px;margin-top:12px;}
+  #list{display:flex;flex-direction:column;gap:14px;margin-top:8px;}
+  .card{display:flex;flex-direction:column;gap:3px;text-decoration:none;
+    border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+    background:#101216;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;}
+  .card:hover{transform:translateY(-3px);border-color:#33403d;box-shadow:0 16px 40px rgba(0,0,0,.5);}
+  .ct{font-size:16px;font-weight:500;color:var(--ink);}
+  .cp{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--dim);}
+  .card:hover .cp{color:var(--accent);}
+  .empty,.loading{color:var(--dim);font-size:14px;border:1px dashed #2b2e36;border-radius:12px;padding:40px 24px;text-align:center;}
+  .empty a,.loading a{color:var(--mut);}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;}
+  footer a{color:var(--mut);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">KIDENA Fumiya</div>
+  <h1>public-pages</h1>
+  <p class="sub">公開ページの一覧。gh-pages 直下のフォルダを自動で拾うので、ページを追加すればここにも自動で載る。</p>
+</header>
+
+<div id="list"><div class="loading">読み込み中…</div></div>
+
+<footer>
+  Auto-generated from the <code>gh-pages</code> branch of
+  <a href="https://github.com/KIDENA-Fumiya/public-pages" target="_blank" rel="noopener">KIDENA-Fumiya/public-pages</a>.
+</footer>
+
+</div>
+
+<script>
+  var REPO = 'KIDENA-Fumiya/public-pages', BRANCH = 'gh-pages';
+  var KNOWN = ['cfd-gallery','capillary-validation','fkex','civ-nova']; // API制限時のフォールバック
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function render(entries){
+    var el = document.getElementById('list');
+    if(!entries.length){ el.innerHTML = '<div class="empty">まだ公開ページがありません。</div>'; return; }
+    el.innerHTML = entries.map(function(e){
+      return '<a class="card" href="./'+encodeURIComponent(e.name)+'/">'+
+             '<span class="ct">'+esc(e.title||e.name)+'</span>'+
+             '<span class="cp">/'+esc(e.name)+'/</span></a>';
+    }).join('');
+  }
+  // 各フォルダの <title> を同一オリジンで取りに行く（API制限に無関係・失敗時はフォルダ名）。
+  function withTitles(names){
+    return Promise.all(names.map(function(name){
+      return fetch('./'+encodeURIComponent(name)+'/', {cache:'no-store'})
+        .then(function(r){ return r.ok ? r.text() : ''; })
+        .then(function(html){
+          var m = html.match(/<title>([^<]*)<\/title>/i);
+          return { name:name, title: m ? m[1].trim() : name };
+        })
+        .catch(function(){ return { name:name, title:name }; });
+    }));
+  }
+  fetch('https://api.github.com/repos/'+REPO+'/contents?ref='+BRANCH, {
+    headers:{ 'Accept':'application/vnd.github+json' }
+  })
+  .then(function(r){ if(!r.ok) throw new Error('api '+r.status); return r.json(); })
+  .then(function(items){
+    var dirs = items.filter(function(i){ return i.type==='dir' && i.name.charAt(0)!=='.'; })
+                    .map(function(i){ return i.name; })
+                    .sort(function(a,b){ return a.localeCompare(b); });
+    if(!dirs.length){ render([]); return; }
+    return withTitles(dirs).then(render);
+  })
+  .catch(function(){
+    // API取得に失敗（レート制限等）→ 既知の一覧でフォールバック（タイトルは同一オリジンで補完）。
+    withTitles(KNOWN).then(render).catch(function(){
+      render(KNOWN.map(function(n){ return { name:n, title:n }; }));
+    });
+  });
+</script>
+</body>
+</html>
