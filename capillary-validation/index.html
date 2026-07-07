@@ -61,9 +61,10 @@
   h2{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.02em;margin:44px 0 14px;
     border-bottom:1px solid var(--line);padding-bottom:10px;}
   p{color:#cfd0d6;font-size:15px;}
-  /* 通常は fitEquations() が式を枠内に縮めるのでスクロールバーは出ない。
-     overflow-x:auto は JS無効時のフォールバック（その時だけバーが出る）。 */
-  .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;}
+  /* fitEquations() が式を枠内に縮めるのでスクロール不要。overflow:hidden で両方向とも
+     バーを出さない（overflow-x:auto だと仕様上 overflow-y が auto に昇格し、式が数px高い
+     だけで縦バーが出てしまうため hidden で固定）。 */
+  .eq{overflow:hidden;padding:18px 4px;margin:8px 0 18px;}
   .note{color:var(--mut);font-size:13.5px;}
   /* 用語ホバー：ドット下線＋ネイティブtitleツールチップ（FGB-CSF比較表と同じ流儀） */
   .tip{border-bottom:1px dotted var(--accent); cursor:help;}
