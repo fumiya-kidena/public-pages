@@ -54,7 +54,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-08（M3 追記）</p>
+<p class="updated">最終更新：2026-07-08（M5 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -184,6 +184,33 @@
 <li>旧ソルバ側の発見：HF 交差微分の分母に誤記（均一格子では無影響・FKeX は正しい式＝ストレッチ格子では両者が一致しなくなる点に将来注意）／未初期化フラグの潜在 UB。</li>
 </ul></div>
 <div class="warn">⚠ 暫定事項：HF 系のゲート帯は kappa_source（fine|coarse）未決着前提の「アンカー×3」帯。capwave RMS の評価窓は今回 τ≤25 で固定（旧側台帳の窓は非明記＝厳密比較には旧側の再走が要る）。</div>
+
+<h2>M5 — FGVT サブグリッド移流（2026-07-08）</h2>
+<p>二重格子の本領。細格子 VOF（一次状態）を動かし、質量・運動量を粗格子へ厳密に集約する段階。固定点テストと frozen 突合で「幾何が厳密か」を機械精度で確かめた。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>vortex_fgvt / zalesak_fgvt</th><td>M1 と同一ハーネスのサブ解像版（粗 64²＋細 128²、vortex は 128²＋細 256² も）。補間=psi_curl（2D 既定）、比較用に linear／multilinear。dt は細 CFL 対応。トラフ読み・質量・細 div-free ノルムを毎ステップ診断</td></tr>
+  <tr><th>dropadvect_fgvt</th><td>M3 の固定点テストの FGVT 版（ρ<sub>l</sub>/ρ<sub>g</sub>=1000 一様並進・854 step）。全 3 補間方式で実行</td></tr>
+  <tr><th>subgrid_frozen</th><td>サブ場 <span class="term" title="参照ソルバから中間場をダンプし、同じ入力から新実装のカーネルを回して機械精度で比較する検証法。">frozen-field</span>：①補間直後の粗入力＋細出力 MAC 場 ②移流ステージ完了後の細分率・集約 CV 質量/運動量（固定掃引順で両コード係合・2 方式×2 流れ）。FKeX 側は①補間突合 ②フルステージ再生突合</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>vortex_fgvt（psi_curl）</th><td>粗 c 復帰 L1=<b>1.891e-3</b>／細 2.524e-3 ＝ plain 64²（8.76e-3）の <b>4.6 倍改善・plain 128²（5.0e-3）も上回る</b>。128²+細256² で 9.33e-4/1.53e-3 とトレンド継続</td></tr>
+  <tr><th>zalesak_fgvt</th><td>細 L1=1.363e-2 ＝ plain 100²（3.52e-2）の 2.6 倍改善</td></tr>
+  <tr><th>dropadvect_fgvt（固定点）</th><td><b>全 3 補間方式で max|u−U0|=0.0（ビット厳密）</b>・保存 ~1e-16</td></tr>
+  <tr><th>質量・div-free</th><td>psi_curl/linear＝質量 rel ~1e-15・細 div-free 4.4e-16（machine zero）。multilinear＝div-free 1.9e-2・質量 3.6e-6 LOGGED（非 div-free、最終補正が load-bearing＝記録どおり）</td></tr>
+  <tr><th>frozen サブ場クロスコード</th><td>補間：linear <b>1.5e-32</b>（実質ビット一致）／psi_curl 1.4e-14。フルステージ再生：c_fine 7.3e-15・CV 質量 ~1e-16・横断運動量のみ rel ~5e-10（FP 環境床＝M3 の帯と同水準）</td></tr>
+  <tr><th>回帰・箱分割</th><td>M1〜M4 全て基準値一致（ビット一致含む）、multibox OK</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>FGVT の精度利得が FKeX でも成立</b>：同じ粗格子で plain PLIC の 4.6 倍、2 倍細かい plain をも上回る（「サブ格子は細格子相当以上」の実証。Rudman 1998 の ~4× 報告と整合）。</li>
+<li><b>補間方式の序列が記録どおり再現</b>：ψ-curl ◎／linear は階段横断で劣る／multilinear は補正が load-bearing — 「2D=ψ-curl、3D=multilinear」の champion 使い分けの根拠を確認。</li>
+<li><b>整合集約の幾何が厳密</b>：固定点が全方式でビット成立＝横断 CV の細半行タイル・pre-state の 8 細セル体積平均・代表面風上の組が正しい。</li>
+<li><b>FP 増幅の発見</b>：massfix 後の u=P/M 再除算は 1ulp を播種し QUICK が指数増幅（無粘性・密度比 1000 で発散を実測）。u 据え置き（P/M 不変の FP 恒等形）で解決。参照ソルバも字義どおりなら同じ潜在問題＝要確認。</li>
+<li>参照ソルバの FGVT アンカーは欠陥 run 由来＝修正済みハーネスでは大幅に下回るのが正常 → 判定は「同粗格子の plain を超える」トレンドゲートへ。</li>
+</ul></div>
+<div class="warn">⚠ 参照ソルバ側の FGVT vortex 再走（是正ハーネス）は M1 と共有の open item のまま。</div>
 
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
