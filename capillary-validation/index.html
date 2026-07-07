@@ -1,4 +1,7 @@
-<!-- built from: Viscous Fingering - 単管毛管バリデーション理論.md -->
+<!-- built from: Viscous Fingering - 単管毛管バリデーション理論.md — 対のMDと内容ミラー。片方を編集したら他方へ反映。 -->
+<!-- security: 外部CDN(jsdelivr)からMathJaxを読み込むため、CDN側の改ざん/差し替えリスクを
+     軽減する目的でバージョンを固定(3.2.2)し、SRI(integrity)属性でファイルのハッシュ検証を行う。
+     フローティングの @3 のようなタグ指定は将来配信内容が変わり得るため避けている。 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -8,7 +11,9 @@
 <script>
   window.MathJax = { tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] } };
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"
+  integrity="sha384-Wuix6BuhrWbjDBs24bXrjf4ZQ5aFeFWBuKkFekO2t8xFU0iNaLQfp2K6/1Nxveei"
+  crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#0c0d10; --line:#25272e; --ink:#e9e9ec; --mut:#8b8f9a; --dim:#5b5f6a;
@@ -108,6 +113,9 @@
 <p class="note">$\mu_1,\mu_2$：invading／defending 流体の粘性、$\sigma$：表面張力、$\theta$：接触角。</p>
 
 <h2>3. 積分形（$x(0)=x_0$）</h2>
+<p>変数分離すると：</p>
+<div class="eq">$$4\big[\mu_2 L+(\mu_1-\mu_2)x\big]\,dx = r\sigma\cos\theta\,dt$$</div>
+<p>両辺を $x_0 \to x$、$0\to t$ で積分：</p>
 <div class="eq">$$\mu_2 L (x-x_0) + \frac{\mu_1-\mu_2}{2}\left(x^2-x_0^2\right) = \frac{r\sigma\cos\theta}{4}\,t$$</div>
 
 <h2>4. 主結果：$x=F(t)$</h2>
