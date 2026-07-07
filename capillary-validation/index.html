@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>毛管の中を流体が進む速さ</title>
+<title>単管毛管流：2流体系の Washburn 方程式</title>
 <script>
   window.MathJax = { tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] } };
 </script>
@@ -17,12 +17,12 @@
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
     font-family:"Helvetica Neue",-apple-system,"Segoe UI",Arial,sans-serif;
-    -webkit-font-smoothing:antialiased;line-height:1.7;}
-  .wrap{max-width:760px;margin:0 auto;padding:64px 26px 100px;}
+    -webkit-font-smoothing:antialiased;line-height:1.75;}
+  .wrap{max-width:780px;margin:0 auto;padding:64px 26px 100px;}
   header{margin-bottom:44px;}
   .kicker{font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--accent);font-weight:600;}
-  h1{margin:14px 0 0;font-size:32px;font-weight:300;letter-spacing:.01em;}
-  header .sub{color:var(--mut);font-size:14.5px;margin-top:14px;max-width:58ch;}
+  h1{margin:14px 0 0;font-size:30px;font-weight:300;letter-spacing:.01em;}
+  header .sub{color:var(--mut);font-size:14.5px;margin-top:14px;max-width:62ch;}
   figure{margin:40px 0;}
   figure .frame{background:#fff;border-radius:10px;padding:8px;box-shadow:0 18px 50px rgba(0,0,0,.45);}
   figure svg{display:block;width:100%;height:auto;}
@@ -32,17 +32,19 @@
   p{color:#cfd0d6;font-size:15px;}
   .eq{overflow-x:auto;padding:18px 4px;margin:8px 0 18px;}
   .note{color:var(--mut);font-size:13.5px;}
+  /* 用語ホバー：ドット下線＋ネイティブtitleツールチップ（FGB-CSF比較表と同じ流儀） */
+  .tip{border-bottom:1px dotted var(--accent); cursor:help;}
   footer{margin-top:70px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;}
-  @media(max-width:520px){h1{font-size:26px}.wrap{padding:44px 18px 80px}}
+  @media(max-width:520px){h1{font-size:24px}.wrap{padding:44px 18px 80px}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
 <header>
-  <div class="kicker">Viscous Fingering — 事前確認</div>
-  <h1>毛管の中を流体が進む速さ</h1>
-  <p class="sub">細い管（毛管）の中で、一方の液体がもう一方を押しのけながら進んでいくとき、その境目（界面）がどんな速さで動くかを表す式。</p>
+  <div class="kicker">Viscous Fingering — 事前 <span class="tip" title="数値計算の結果が正しいかどうかを、理論解や実験結果と比較して確かめること">Validation</span></div>
+  <h1>単管毛管流：2流体系の Washburn 方程式</h1>
+  <p class="sub">水平単管内を、粘性の異なる2つの非混和流体が入れ替わりながら進む問題（<span class="tip" title="接触角・毛管圧・濡れ性など、界面が壁に接して曲がる現象全般を指す">毛管現象</span>）の解析解。VOFソルバの<span class="tip" title="コードが物理的に正しい結果を出すかどうかの妥当性確認全般">検証</span>に使う。</p>
 </header>
 
 <figure>
@@ -60,10 +62,10 @@
   <text x="268" y="118" font-size="13" fill="#333">&#952;</text>
   <line x1="300" y1="140" x2="340" y2="140" stroke="#d62828" stroke-width="2.5" marker-end="url(#arrow)"/>
   <text x="345" y="145" font-size="15" fill="#d62828">v = dx/dt</text>
-  <text x="150" y="145" font-size="17" fill="#023047" text-anchor="middle">&#956;&#8321;（押す側）</text>
-  <text x="150" y="165" font-size="12" fill="#023047" text-anchor="middle">液体1</text>
-  <text x="450" y="145" font-size="17" fill="#7f3f00" text-anchor="middle">&#956;&#8322;（押される側）</text>
-  <text x="450" y="165" font-size="12" fill="#7f3f00" text-anchor="middle">液体2</text>
+  <text x="150" y="145" font-size="17" fill="#023047" text-anchor="middle">&#956;&#8321;（invading）</text>
+  <text x="150" y="165" font-size="12" fill="#023047" text-anchor="middle">fluid 1</text>
+  <text x="450" y="145" font-size="17" fill="#7f3f00" text-anchor="middle">&#956;&#8322;（defending）</text>
+  <text x="450" y="165" font-size="12" fill="#7f3f00" text-anchor="middle">fluid 2</text>
   <line x1="285" y1="115" x2="295" y2="115" stroke="#023047" stroke-width="1.5" marker-end="url(#arrowsmall)"/>
   <line x1="285" y1="165" x2="295" y2="165" stroke="#023047" stroke-width="1.5" marker-end="url(#arrowsmall)"/>
   <text x="255" y="120" font-size="13" fill="#023047">&#963;</text>
@@ -91,25 +93,34 @@
   </defs>
 </svg>
   </div>
-  <figcaption>半径 r・長さ L の管。液体1が液体2を押しながら右へ進む。x(t) はその境目の位置。</figcaption>
+  <figcaption>半径 r・全長 L の単管。<span class="tip" title="界面を後から押して進む側の流体">invading fluid</span>（&#956;&#8321;）が <span class="tip" title="押しのけられて先を占める側の流体">defending fluid</span>（&#956;&#8322;）を押しながら x(t) だけ進む。</figcaption>
 </figure>
 
-<h2>境目が動く速さ</h2>
-<p>管の壁との摩擦（粘性）と、表面張力によって生まれる押す力とがつり合うところから、境目の速さが決まる。</p>
-<div class="eq">$$v(x) = \frac{dx}{dt} = \frac{r\sigma\cos\theta}{4\big[\mu_2 L + (\mu_1-\mu_2)x\big]}$$</div>
-<p class="note">$\mu_1,\mu_2$ は2つの液体それぞれの粘り気（粘性）、$\sigma$ は表面張力、$\theta$ は液体が壁と接する角度。境目が進む（$x$が大きくなる）ほど、速さは変わっていく。</p>
+<h2>0. セットアップ</h2>
+<p>重力・慣性を無視した<span class="tip" title="各瞬間ごとに力が釣り合っているとみなす近似。加減速の過渡的な効果（慣性項）を無視する">準定常</span>近似（低 <span class="tip" title="Reynolds number Re = 慣性力／粘性力。小さいほど粘性支配（層流）で、この準定常近似が妥当になる">Reynolds数</span>・低 <span class="tip" title="Capillary number Ca = 粘性力／表面張力。小さいほど表面張力が支配的">Capillary数</span>）。<span class="tip" title="メニスカス：2流体の境界面。管壁との接触角θで曲率が決まる">メニスカス</span>位置 $x(t)$ が $x{=}0$（毛管入口）から $x{=}L$（開放端）へ進む。</p>
 
-<h2>積分すると</h2>
-<p>この式を時間で積分すると、境目の位置 $x$ と時間 $t$ の関係が求まる（$x_0$ は最初の位置）。</p>
+<h2>1. 力の釣り合い</h2>
+<p><span class="tip" title="Hagen–Poiseuille則：円管内の定常粘性流れにおいて、圧力損失ΔPと流量Qが ΔP = 8μℓQ/(πr⁴) で結ばれるという古典的な関係式">Hagen–Poiseuille則</span>（各流体区間の粘性圧力損失）と<span class="tip" title="Young–Laplace式：曲がった界面をはさむ2流体間の圧力差 ΔP = 2σcosθ/r を、表面張力σと界面の曲率半径から与える式">Young–Laplace式</span>（毛管圧）の釣り合いから：</p>
+<div class="eq">$$\frac{2\sigma\cos\theta}{r} = \frac{8v}{r^2}\big[\mu_1 x+\mu_2(L-x)\big]$$</div>
+
+<h2>2. 速度（瞬間値）</h2>
+<div class="eq">$$v(x) = \frac{dx}{dt} = \frac{r\sigma\cos\theta}{4\big[\mu_2 L + (\mu_1-\mu_2)x\big]}$$</div>
+<p class="note">$\mu_1,\mu_2$：invading／defending 流体の粘性、$\sigma$：表面張力、$\theta$：接触角。</p>
+
+<h2>3. 積分形（$x(0)=x_0$）</h2>
 <div class="eq">$$\mu_2 L (x-x_0) + \frac{\mu_1-\mu_2}{2}\left(x^2-x_0^2\right) = \frac{r\sigma\cos\theta}{4}\,t$$</div>
 
-<h2>境目の位置 $x(t)$</h2>
-<p>これを $x$ について解くと、時刻 $t$ における境目の位置がそのまま式で求まる。</p>
+<h2>4. 主結果：$x=F(t)$</h2>
 <div class="eq">$$x(t) = \frac{-\mu_2 L + \sqrt{\big(\mu_2 L+(\mu_1-\mu_2)x_0\big)^2 + \dfrac{(\mu_1-\mu_2)\,r\sigma\cos\theta}{2}\,t}}{\mu_1-\mu_2}$$</div>
-<p class="note">液体2の粘り気を0に近づけると、よく知られている「単一の液体が細い管を毛管現象で上っていく式」（$x\propto\sqrt{t}$）にきちんと一致する。</p>
+
+<h2>5. <span class="tip" title="式が既知の特別な場合や極限で破綻していないかを簡単に確かめること">Sanity check</span></h2>
+<p>$t=0$ で $x(0)=x_0$ に一致。$\mu_2\to0$（defending側が空気などの低粘性流体）の極限では、古典的な <span class="tip" title="Lucas–Washburn equation：単一の濡れ性液体が毛管に自然に吸い込まれていく現象を記述する古典式。x(t) ∝ √t">Lucas–Washburn方程式</span>（$x\propto\sqrt{t}$）に一致する。</p>
+
+<h2>6. Validationでの使い方</h2>
+<p>VOFソルバにこのセットアップを与えて数値計算し、$x(t)$ を解析解と時系列で直接比較する。誤差が閾値内なら Viscous Fingering 本編（多孔質構造）へ進む前のV&amp;V（Verification &amp; Validation）の1ステップとして使える。</p>
 
 <footer>
-  Viscous Fingering の数値計算を始める前に、この式と比べて計算が合っているかを確かめる。
+  導出ノート（Obsidian, 詳細版）: Viscous Fingering - 単管毛管バリデーション理論.md
 </footer>
 
 </div>
