@@ -105,24 +105,28 @@
 <p>重力・慣性を無視した<span class="tip" title="各瞬間ごとに力が釣り合っているとみなす近似。加減速の過渡的な効果（慣性項）を無視する">準定常</span>近似（低 <span class="tip" title="Reynolds number Re = 慣性力／粘性力。小さいほど粘性支配（層流）で、この準定常近似が妥当になる">Reynolds数</span>・低 <span class="tip" title="Capillary number Ca = 粘性力／表面張力。小さいほど表面張力が支配的">Capillary数</span>）。<span class="tip" title="メニスカス：2流体の境界面。管壁との接触角θで曲率が決まる">メニスカス</span>位置 $x(t)$ が $x{=}0$（毛管入口）から $x{=}L$（開放端）へ進む。</p>
 
 <h2>1. 力の釣り合い</h2>
-<p><span class="tip" title="Hagen–Poiseuille則：円管内の定常粘性流れにおいて、圧力損失ΔPと流量Qが ΔP = 8μℓQ/(πr⁴) で結ばれるという古典的な関係式">Hagen–Poiseuille則</span>（各流体区間の粘性圧力損失）と<span class="tip" title="Young–Laplace式：曲がった界面をはさむ2流体間の圧力差 ΔP = 2σcosθ/r を、表面張力σと界面の曲率半径から与える式">Young–Laplace式</span>（毛管圧）の釣り合いから：</p>
-<div class="eq">$$\frac{2\sigma\cos\theta}{r} = \frac{8v}{r^2}\big[\mu_1 x+\mu_2(L-x)\big]$$</div>
+<p><span class="tip" title="Hagen–Poiseuille則：円管内の定常粘性流れにおいて、圧力損失ΔPと流量Qが ΔP = 8μℓQ/(πr⁴) で結ばれるという古典的な関係式">Hagen–Poiseuille則</span>（体積流量 $Q=\pi r^2v$）より、各流体区間の粘性圧力損失は：</p>
+<div class="eq">$$\Delta P = \frac{8\mu\ell}{r^2}v \tag{1}$$</div>
+<p>直列な2区間（長さ $x$ と $L-x$）の圧力損失の和が、<span class="tip" title="Young–Laplace式：曲がった界面をはさむ2流体間の圧力差 ΔP = 2σcosθ/r を、表面張力σと界面の曲率半径から与える式">Young–Laplace式</span>（毛管圧）と釣り合う。(1)式を両区間に適用して足し合わせると：</p>
+<div class="eq">$$\frac{2\sigma\cos\theta}{r} = \frac{8v}{r^2}\big[\mu_1 x+\mu_2(L-x)\big] \tag{2}$$</div>
 
 <h2>2. 速度（瞬間値）</h2>
-<div class="eq">$$v(x) = \frac{dx}{dt} = \frac{r\sigma\cos\theta}{4\big[\mu_2 L + (\mu_1-\mu_2)x\big]}$$</div>
+<p>(2)式を $v=dx/dt$ について解くと：</p>
+<div class="eq">$$v(x) = \frac{dx}{dt} = \frac{r\sigma\cos\theta}{4\big[\mu_2 L + (\mu_1-\mu_2)x\big]} \tag{3}$$</div>
 <p class="note">$\mu_1,\mu_2$：invading／defending 流体の粘性、$\sigma$：表面張力、$\theta$：接触角。</p>
 
 <h2>3. 積分形（$x(0)=x_0$）</h2>
-<p>変数分離すると：</p>
-<div class="eq">$$4\big[\mu_2 L+(\mu_1-\mu_2)x\big]\,dx = r\sigma\cos\theta\,dt$$</div>
-<p>両辺を $x_0 \to x$、$0\to t$ で積分：</p>
-<div class="eq">$$\mu_2 L (x-x_0) + \frac{\mu_1-\mu_2}{2}\left(x^2-x_0^2\right) = \frac{r\sigma\cos\theta}{4}\,t$$</div>
+<p>(3)式を変数分離すると：</p>
+<div class="eq">$$4\big[\mu_2 L+(\mu_1-\mu_2)x\big]\,dx = r\sigma\cos\theta\,dt \tag{4}$$</div>
+<p>(4)式の両辺を $x_0 \to x$、$0\to t$ で積分：</p>
+<div class="eq">$$\mu_2 L (x-x_0) + \frac{\mu_1-\mu_2}{2}\left(x^2-x_0^2\right) = \frac{r\sigma\cos\theta}{4}\,t \tag{5}$$</div>
 
 <h2>4. 主結果：$x=F(t)$</h2>
-<div class="eq">$$x(t) = \frac{-\mu_2 L + \sqrt{\big(\mu_2 L+(\mu_1-\mu_2)x_0\big)^2 + \dfrac{(\mu_1-\mu_2)\,r\sigma\cos\theta}{2}\,t}}{\mu_1-\mu_2}$$</div>
+<p>(5)式を $x$ の2次方程式として解くと（$\mu_1\neq\mu_2$ の場合）：</p>
+<div class="eq">$$x(t) = \frac{-\mu_2 L + \sqrt{\big(\mu_2 L+(\mu_1-\mu_2)x_0\big)^2 + \dfrac{(\mu_1-\mu_2)\,r\sigma\cos\theta}{2}\,t}}{\mu_1-\mu_2} \tag{6}$$</div>
 
 <h2>5. <span class="tip" title="式が既知の特別な場合や極限で破綻していないかを簡単に確かめること">Sanity check</span></h2>
-<p>$t=0$ で $x(0)=x_0$ に一致。$\mu_2\to0$（defending側が空気などの低粘性流体）の極限では、古典的な <span class="tip" title="Lucas–Washburn equation：単一の濡れ性液体が毛管に自然に吸い込まれていく現象を記述する古典式。x(t) ∝ √t">Lucas–Washburn方程式</span>（$x\propto\sqrt{t}$）に一致する。</p>
+<p>$t=0$ では (6)式の根号内が $\big(\mu_2L+(\mu_1-\mu_2)x_0\big)^2$ となり $x(0)=x_0$ に一致。(3)式で $\mu_2\to0$（defending側が空気などの低粘性流体）とすると、古典的な <span class="tip" title="Lucas–Washburn equation：単一の濡れ性液体が毛管に自然に吸い込まれていく現象を記述する古典式。x(t) ∝ √t">Lucas–Washburn方程式</span>（$x\propto\sqrt{t}$）に一致する。</p>
 
 <h2>6. Validationでの使い方</h2>
 <p>VOFソルバにこのセットアップを与えて数値計算し、$x(t)$ を解析解と時系列で直接比較する。誤差が閾値内なら Viscous Fingering 本編（多孔質構造）へ進む前のV&amp;V（Verification &amp; Validation）の1ステップとして使える。</p>
