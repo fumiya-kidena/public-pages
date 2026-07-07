@@ -1,0 +1,152 @@
+<!-- built from: FKeX - サブ格子表現の設計判断.md -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FKeX — サブ格子表現の設計判断</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#222;
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+  nav.topnav{background:#f4f7fa;border-bottom:1px solid #dde3ea;padding:.55em 1.2em;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.3em 1.1em;font-size:.92rem}
+  nav.topnav .brand{font-weight:700;color:#2b6cb0;letter-spacing:.05em;margin-right:.4em}
+  nav.topnav a{color:#2b6cb0;text-decoration:none;padding:.12em .55em;border-radius:4px;white-space:nowrap}
+  nav.topnav a:hover{text-decoration:underline}
+  nav.topnav a.current{background:#2b6cb0;color:#fff}
+  nav.topnav a.current:hover{text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:0 1.5em 5em}
+  h1{font-size:1.55rem;font-weight:700;border-bottom:3px solid #2b6cb0;padding-bottom:.3em;margin:1.3em 0 .4em}
+  h2{font-size:1.22rem;color:#2b6cb0;border-bottom:2px solid #2b6cb0;padding-bottom:.15em;margin:2.2em 0 .7em}
+  h3{font-size:1.02rem;margin:1.7em 0 .5em}
+  .updated{color:#888;font-size:.85em;margin:.1em 0 1.6em}
+  code{font-family:Consolas,"SF Mono",ui-monospace,monospace;background:#f4f4f4;border-radius:4px;padding:.1em .35em;font-size:.88em}
+  table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92rem}
+  th,td{border:1px solid #ccc;padding:.45em .7em;text-align:left;vertical-align:top}
+  th{background:#eef3f9;font-weight:600}
+  .tblwrap{overflow-x:auto}
+  a{color:#2b6cb0}
+  a[target="_blank"]::after{content:"↗";font-size:.75em;margin-left:.15em;color:#888}
+  .term{text-decoration:underline dotted;cursor:help}
+  .warn,.ok,.ng{padding:.8em 1em;margin:1em 0;border-left:4px solid}
+  .warn{background:#fff8e1;border-color:#f0ad4e}
+  .ok{background:#eafaf1;border-color:#2ecc71}
+  .ng{background:#fdecea;border-color:#e74c3c}
+  .warn>ul,.ok>ul,.ng>ul{margin:.3em 0 .1em;padding-left:1.3em}
+  figure{margin:1.4em 0}
+  figure svg{display:block;max-width:100%;height:auto;background:#fafafa;border:1px solid #ddd;border-radius:4px}
+  .figcap{font-size:.9em;color:#666;margin-top:.35em}
+  ol li,ul li{margin:.3em 0}
+  .foot{margin-top:3.2em;border-top:1px solid #ddd;padding-top:1em;color:#555;font-size:.88em}
+  .foot h2{border:none;color:#222;font-size:1rem;margin:0 0 .5em}
+  .hist{color:#888;font-size:.8em;margin-top:2.6em}
+  @media (max-width:700px){main{padding:0 1em 4em}}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">FKeX 開発ノート</span>
+  <a href="index.html">開発ドキュメント</a>
+  <a class="current" href="サブ格子表現の設計判断.html">サブ格子表現の設計判断</a>
+  <a href="検証台帳.html">検証台帳</a>
+</nav>
+
+<main>
+
+<h1>サブ格子表現の設計判断 — AmrCore か、素の MultiFab か</h1>
+<p class="updated">2026-07-07 確定</p>
+
+<p>FKeX のサブグリッド（界面用の全域 2 倍細分格子）を、<b>AMReX の AMR 枠組み（<span class="term" title="AMReX で適応格子細分（AMR）ソルバを組むための基底クラス。継承するとレベル管理・regrid・タグ付けなどの骨組みが付いてくる。">AmrCore</span>）に載せるか、素の <span class="term" title="AMReX の分散格子データコンテナ。計算領域を「箱（Box）」に分割し、各 MPI rank に割り当てて保持する。">MultiFab</span> で自前管理するか</b>の設計判断記録。AMReX を使う以上いちばん「らしい」道具は AMR だが、調べていくと FKeX の用途では前提そのものが噛み合わないことが分かった。その経緯を残す。全体像は<a href="index.html">開発ドキュメント</a>を参照。</p>
+
+<h2>問いと結論</h2>
+<p>サブグリッドは「粗格子と同じ領域を 2 倍解像度で覆う細格子」で、一見 <span class="term" title="Adaptive Mesh Refinement。必要な場所だけ格子を細かくする適応格子細分。AMReX の中核機能。">AMR</span> の 2 レベル構成そのもの。AmrCore を継承すれば <span class="term" title="時間補間つきの粗→細ゴースト／初期値充填ユーティリティ。">FillPatch</span>・regrid・checkpoint などが「タダで」付いてくるように見える。それでも採らなかった。</p>
+<div class="ok"><b>結論：AmrCore には載せない。</b><code>refine(BoxArray,2)</code> ＋ 粗格子と<b>同一の <span class="term" title="AMReX で「どの箱をどの MPI rank が持つか」を決める割当表。">DistributionMapping</span></b> を持つ素の MultiFab 2 組で自前管理する（ncomp パッキング案はランタイム表現としては却下、checkpoint 圧縮形式の将来オプションのみ温存）。</div>
+
+<h2>判断の芯：サブ格子 VOF は「一次状態」で、AMR の前提が反転する</h2>
+<p>AMR の根本前提は「<b>粗レベルが全域で有効な真実。細レベルは粗から作り直せる使い捨てのビュー</b>」。regrid も FillPatch（時間補間つき粗→細充填）も <span class="term" title="粗細レベル境界でフラックスの不整合を補正して保存性を回復する機構（reflux）。">FluxRegister</span>（粗細境界の保存補正）も、この前提の上の道具。</p>
+<p>FKeX のサブグリッドはこれが<b>逆</b>：細格子の VOF が一次状態で、粗 VOF は平均（<span class="term" title="細レベルの値を平均して粗レベルへ落とす AMReX ユーティリティ。">average_down</span>）で得る導出量。真実の流れは細→粗の一方向で、粗→細は混合セル（VOF が 0 と 1 の間のセル）で一対多＝再構成不能。</p>
+
+<figure>
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AMR の前提と FKeX の反転の対比図">
+  <defs>
+    <marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#2b6cb0"/>
+    </marker>
+    <marker id="arG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#1e8449"/>
+    </marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <!-- left panel: AMR -->
+  <rect x="20" y="20" width="345" height="320" rx="8" fill="#fff" stroke="#ddd"/>
+  <text x="192" y="50" font-size="15" font-weight="bold" fill="#2b6cb0" text-anchor="middle">通常の AMR の前提</text>
+  <rect x="60" y="72" width="265" height="64" rx="6" fill="#eafaf1" stroke="#2ecc71" stroke-width="1.5"/>
+  <text x="192" y="99" font-size="13.5" font-weight="bold" fill="#1b6e3a" text-anchor="middle">粗レベル＝真実</text>
+  <text x="192" y="120" font-size="12" fill="#222" text-anchor="middle">全域で有効な一次状態</text>
+  <rect x="60" y="222" width="265" height="64" rx="6" fill="#f4f4f4" stroke="#999" stroke-width="1.2"/>
+  <text x="192" y="249" font-size="13.5" font-weight="bold" fill="#555" text-anchor="middle">細レベル＝使い捨てのビュー</text>
+  <text x="192" y="270" font-size="12" fill="#555" text-anchor="middle">必要な場所だけ・いつでも再生成</text>
+  <line x1="110" y1="136" x2="110" y2="218" stroke="#2b6cb0" stroke-width="1.8" marker-end="url(#arB)"/>
+  <text x="126" y="172" font-size="12" fill="#222">粗から作り直せる</text>
+  <text x="126" y="190" font-size="11.5" fill="#555">（regrid・FillPatch）</text>
+  <text x="192" y="316" font-size="12" fill="#555" text-anchor="middle">細を消しても情報は失われない</text>
+  <!-- right panel: FKeX -->
+  <rect x="395" y="20" width="345" height="320" rx="8" fill="#fff" stroke="#ddd"/>
+  <text x="567" y="50" font-size="15" font-weight="bold" fill="#b0602b" text-anchor="middle">FKeX のサブグリッド（前提が反転）</text>
+  <rect x="435" y="72" width="265" height="64" rx="6" fill="#eafaf1" stroke="#2ecc71" stroke-width="1.5"/>
+  <text x="567" y="99" font-size="13.5" font-weight="bold" fill="#1b6e3a" text-anchor="middle">細格子 VOF＝真実（一次状態）</text>
+  <text x="567" y="120" font-size="12" fill="#222" text-anchor="middle">界面はここでだけ正確に持つ</text>
+  <rect x="435" y="222" width="265" height="64" rx="6" fill="#f4f4f4" stroke="#999" stroke-width="1.2"/>
+  <text x="567" y="249" font-size="13.5" font-weight="bold" fill="#555" text-anchor="middle">粗 VOF＝導出量</text>
+  <text x="567" y="270" font-size="12" fill="#555" text-anchor="middle">細を平均して得る</text>
+  <line x1="470" y1="136" x2="470" y2="218" stroke="#1e8449" stroke-width="1.8" marker-end="url(#arG)"/>
+  <text x="482" y="172" font-size="12" fill="#1e8449">average_down</text>
+  <text x="482" y="190" font-size="11.5" fill="#555">（細→粗へ平均）</text>
+  <line x1="662" y1="218" x2="662" y2="136" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arR)"/>
+  <line x1="652" y1="167" x2="672" y2="187" stroke="#c0392b" stroke-width="2.5"/>
+  <line x1="672" y1="167" x2="652" y2="187" stroke="#c0392b" stroke-width="2.5"/>
+  <text x="646" y="172" font-size="12" fill="#c0392b" text-anchor="end">粗→細は</text>
+  <text x="646" y="190" font-size="12" fill="#c0392b" text-anchor="end">再構成不能</text>
+  <text x="567" y="316" font-size="12" fill="#555" text-anchor="middle">混合セルで一対多＝細を消すと界面情報が失われる</text>
+</svg>
+<p class="figcap">図：AMR の前提（左）と FKeX のサブグリッド（右）の対比。「どちらのレベルが真実か」と「情報が流れる向き」が逆転している。</p>
+</figure>
+
+<div class="ng">つまり AMR の道具立ては、FKeX の静的全域細分では<b>死荷重</b>（regrid・proper nesting＝一度も使わない機構）か<b>誤答</b>（reflux＝前提が逆なので適用すると間違った補正になる）のどちらかになる。</div>
+
+<h2>効率とコード運用</h2>
+<p>前提の反転だけでなく、コスト・実装量の面でも素の MultiFab 管理が勝つ（あるいは負けない）ことを確認した。</p>
+<div class="tblwrap">
+<table>
+  <tr><th>観点</th><th>要点</th></tr>
+  <tr><td>通信</td><td>同一 DistributionMapping なら粗箱 i と細箱 i が常に同一 rank ＝ レベル間の valid 領域転送は全て rank 内局所（通信ゼロ）。細側カーネルから <code>coarsen(i,2)</code> で粗データを Array4 直接参照でき、汎用通信層（ParallelCopy/FillPatch）自体が不要。1 タイムステップに約 7 回ある密な粗⇄細往復でこれが効く。※AMReX の <code>average_down</code> が通信ゼロになるのも「BoxArray と DM が両方一致する時の高速パス」限定（不一致だと再分配コストのある汎用パスに分岐）</td></tr>
+  <tr><td>負荷分散</td><td>静的全域細分では全箱が「粗+細」の同一コストなので、同一 DM の負荷ペナルティは<b>厳密にゼロ</b>（トレードオフ不存在）</td></tr>
+  <tr><td>実装量</td><td>AmrCore 継承は派生クラスに 5 メソッドの実装義務（うち真の純粋仮想は ErrorEst と MakeNewLevelFromScratch の 2 つ）＝静的全域ではほぼ全部ダミー化する boilerplate 150–250 行。素の 2 レベル管理は struct 40–80 行。しかも AmrCore はサブグリッド結合の物理（速度補間・整合運動量集約・面力制限）を 1 行も肩代わりしない</td></tr>
+  <tr><td><b>「偽 friend」防御</b></td><td>AMR には名前が似た別物 API がある — FluxRegister（粗細<b>境界</b>限定の reflux）は「<b>全</b>粗面での整合運動量フラックス集約」とは別物、<code>average_down_faces</code>（同一平面の横方向平均）は「法線方向の重み付き制限」とは別物、FillPatch の時間補間はそもそも不要。<b>AmrCore を視界に置かないこと自体が、これらを"つい"使う事故の防御になる</b></td></tr>
+</table>
+</div>
+<p>必要な既製品（<code>average_down</code> / <code>average_down_faces</code> / <code>FillPatchTwoLevels</code> / <code>FaceDivFree</code>（対照実装用）/ <code>WriteMultiLevelPlotfile</code> / <code>OverrideSync</code> / <code>VisMF</code>）は<b>全て AmrCore インスタンス無しで使える</b>ことをソースで裏取り済み。checkpoint の既製ヘルパーは AMReX 本体に無いので、VisMF 直叩きの自前実装がどの方式でも必要＝ここでは差がつかない。</p>
+
+<h2>前例</h2>
+<p>AMReX 公式の「Dual Grid」は particle-mesh の負荷分散専用で、同一物理場の二重解像度用途は文書化されていない。レベル間同一 DM を支援する公式パターンも無い（AMReX の標準思想は用途別 DM）。AMReX 上の dual-grid VOF の公開前例は見つからず＝この構成は明示的な設計判断として記録する価値がある。</p>
+
+<h2>将来：界面バンドだけの適応細分への道</h2>
+<p>現行の「全域細分」は、将来の「界面バンドのみ細分」の<b>特殊ケース（バンド＝全域）</b>。いま全域で楽をしても、後の載せ替えが高くつく書き方は避けたい。載せ替えを安くするための規律を最初から守る：</p>
+<ol>
+  <li>結合カーネルは「粗 Array4＋細 Array4＋Box」を取る自由関数にし、MFIter ループと分離（適応版はバンド上の MFIter から同一カーネルを呼ぶだけ）。</li>
+  <li>2 レベル管理を単一 struct に集約＝差し替え点を 1 ファイルに限定。</li>
+  <li>plotfile・診断は最初から複数レベル形（Vector）で書く。</li>
+  <li>「混合セル＋ステンシルマージン ⊂ 細有効域」を不変条件として assert 可能に。バンドに新しく入るセルが<b>純セル（VOF=0/1）なら細格子値の生成は情報損失ゼロ</b>＝この性質がバンド適応化の成立条件。</li>
+  <li>バンド縁ではカーネル論理自体が変わるため、マスク（iMultiFab）と縁の所有規約を集約カーネルと対で設計する。</li>
+  <li>適応版の負荷分散は「界面箱＝粗+細コスト、非界面箱＝粗のみ」の二重重みで粗 DM 自体を組み、細へ継承（結合局所性と負荷均衡の両取り）。この段階で初めて AmrCore の ErrorEst/タグ付け/クラスタリングが本物の利得になる。</li>
+</ol>
+
+<p class="hist">2026-07-07 初版（調査4系統→統合→敵対検証2本を経て確定）。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+
+</main>
+</body>
+</html>

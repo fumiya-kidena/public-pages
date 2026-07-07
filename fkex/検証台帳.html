@@ -1,0 +1,167 @@
+<!-- built from: FKeX - 検証台帳.md -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FKeX — 検証台帳</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#222;
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+  nav.topnav{background:#f4f7fa;border-bottom:1px solid #dde3ea;padding:.55em 1.2em;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.3em 1.1em;font-size:.92rem}
+  nav.topnav .brand{font-weight:700;color:#2b6cb0;letter-spacing:.05em;margin-right:.4em}
+  nav.topnav a{color:#2b6cb0;text-decoration:none;padding:.12em .55em;border-radius:4px;white-space:nowrap}
+  nav.topnav a:hover{text-decoration:underline}
+  nav.topnav a.current{background:#2b6cb0;color:#fff}
+  nav.topnav a.current:hover{text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:0 1.5em 5em}
+  h1{font-size:1.55rem;font-weight:700;border-bottom:3px solid #2b6cb0;padding-bottom:.3em;margin:1.3em 0 .4em}
+  h2{font-size:1.22rem;color:#2b6cb0;border-bottom:2px solid #2b6cb0;padding-bottom:.15em;margin:2.2em 0 .7em}
+  h3{font-size:1.02rem;margin:1.7em 0 .5em}
+  .updated{color:#888;font-size:.85em;margin:.1em 0 1.6em}
+  code{font-family:Consolas,"SF Mono",ui-monospace,monospace;background:#f4f4f4;border-radius:4px;padding:.1em .35em;font-size:.88em}
+  table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9rem}
+  th,td{border:1px solid #ccc;padding:.42em .65em;text-align:left;vertical-align:top}
+  th{background:#eef3f9;font-weight:600;white-space:nowrap}
+  .tblwrap{overflow-x:auto}
+  a{color:#2b6cb0}
+  a[target="_blank"]::after{content:"↗";font-size:.75em;margin-left:.15em;color:#888}
+  .term{text-decoration:underline dotted;cursor:help}
+  .warn,.ok,.ng{padding:.8em 1em;margin:1em 0;border-left:4px solid}
+  .warn{background:#fff8e1;border-color:#f0ad4e}
+  .ok{background:#eafaf1;border-color:#2ecc71}
+  .ng{background:#fdecea;border-color:#e74c3c}
+  .warn>ul,.ok>ul,.ng>ul{margin:.3em 0 .1em;padding-left:1.3em}
+  figure{margin:1.4em 0}
+  figure svg{display:block;max-width:100%;height:auto;background:#fafafa;border:1px solid #ddd;border-radius:4px}
+  .figcap{font-size:.9em;color:#666;margin-top:.35em}
+  ol li,ul li{margin:.3em 0}
+  .hist{color:#888;font-size:.8em;margin-top:2.6em}
+  @media (max-width:700px){main{padding:0 1em 4em}}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">FKeX 開発ノート</span>
+  <a href="index.html">開発ドキュメント</a>
+  <a href="サブ格子表現の設計判断.html">サブ格子表現の設計判断</a>
+  <a class="current" href="検証台帳.html">検証台帳</a>
+</nav>
+
+<main>
+
+<h1>検証台帳</h1>
+<p class="updated">最終更新：2026-07-08（M3 追記）</p>
+
+<p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
+
+<h2>検証の考え方：三層オラクル</h2>
+<p>クリーンルーム実装（旧コードを見ずに数式仕様から書き下ろす方式）では、「書けたつもり」を潰す答え合わせの基準（オラクル）が生命線になる。FKeX では性格の違う 3 層を重ねて使う：<b>解析解・文献値</b>で物理として正しいかを、<b>旧ソルバ（FK3）とのトレンド突合</b>で精度水準が先代と揃っているかを、<b><span class="term" title="旧ソルバから中間場（圧力方程式の RHS・係数・解など）をダンプし、同じ入力から新実装のカーネル単体を回して機械精度で比較する検証法。時間発展の誤差蓄積と切り離してカーネル単位のバグを特定できる。">frozen-field</span> 突合</b>で「同じ計算をしているか」をカーネル単位・機械精度で確かめる。下の各マイルストーンの<span class="term" title="検証の合格判定に使うしきい値。実測値がゲートを満たして初めてそのマイルストーンを green（完了）とする。">ゲート</span>は、この 3 層のどれかに対応している。</p>
+
+<figure>
+<svg viewBox="0 0 740 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="三層オラクルのピラミッド図">
+  <!-- layer 1 (top) -->
+  <polygon points="200,40 320,40 380,110 140,110" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.5"/>
+  <text x="260" y="70" font-size="13.5" font-weight="bold" fill="#2b6cb0" text-anchor="middle">① 解析解・文献値</text>
+  <text x="260" y="92" font-size="11" fill="#555" text-anchor="middle">例：Taylor–Green 減衰、Zalesak 文献値</text>
+  <!-- layer 2 -->
+  <polygon points="140,118 380,118 440,188 80,188" fill="#fbeee4" stroke="#b0602b" stroke-width="1.5"/>
+  <text x="260" y="148" font-size="13.5" font-weight="bold" fill="#b0602b" text-anchor="middle">② 旧ソルバ（FK3）とのトレンド突合</text>
+  <text x="260" y="170" font-size="11" fill="#555" text-anchor="middle">例：vortex 反転 L1 の記録値比較</text>
+  <!-- layer 3 (base) -->
+  <polygon points="80,196 440,196 500,266 20,266" fill="#eafaf1" stroke="#1e8449" stroke-width="1.5"/>
+  <text x="260" y="226" font-size="13.5" font-weight="bold" fill="#1b6e3a" text-anchor="middle">③ frozen-field 突合（カーネル単体）</text>
+  <text x="260" y="248" font-size="11" fill="#555" text-anchor="middle">例：projfrozen＝圧力方程式の RHS・解のクロスコード突合</text>
+  <!-- right-side annotations -->
+  <text x="515" y="79" font-size="11.5" fill="#555">判定：解析誤差・収束次数</text>
+  <text x="515" y="157" font-size="11.5" fill="#555">判定：トレンド（倍半分〜同水準）</text>
+  <text x="515" y="235" font-size="11.5" fill="#555">判定：機械精度（〜ビット一致）</text>
+  <text x="260" y="300" font-size="12" fill="#555" text-anchor="middle">下の層ほどコードの内部（カーネル単位）に踏み込んで突合する</text>
+</svg>
+<p class="figcap">図：三層オラクル。①は「物理として正しいか」、②は「先代と精度が揃うか」、③は「同じ離散計算をしているか」を確かめる。役割が違うので、どれか 1 層だけでは代わりにならない。</p>
+</figure>
+
+<h2>M0 — データ骨格スモーク（2026-07-07）</h2>
+<p>物理を入れる前に、器（データ骨格）だけを検査した段階。</p>
+<div class="tblwrap"><table>
+  <tr><th>設定</th><td>静止液滴 IC（[0,1]²、円 R=0.25 中央、64²・細 128²、max_grid_size=32＝4箱）。物理演算なし</td></tr>
+  <tr><th>ゲートと実測</th><td><span class="term" title="面センターの MultiFab は箱境界の面を隣接両箱が valid として持つ。owner 値（OverrideSync）と各箱の計算値の一致を確認する。">共有面一貫性</span>（面型 MF vs OverrideSync owner 値）＝<b>全方向で厳密 0</b>／2 レベル plotfile 構造正常／VOF 積分 vs πR²＝粗 1.9e-3・細 7.5e-5（4×4 サブセルサンプリングの理論水準）</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：粗＋refine(2) 細（同一 DistributionMapping）のデータ骨格と、面型 MultiFab の共有面所有の扱いが健全。ゴースト NaN 検査モードの土台も機能。</div>
+
+<h2>M1 — 純移流 VOF（2026-07-07）</h2>
+<p>解析的に与えた速度場（規定速度場）で VOF 移流だけを動かし、標準ベンチマーク 2 種で精度を測った。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>zalesak</th><td>[0,1]²、<span class="term" title="Zalesak の切欠き円盤。剛体回転で 1 周させ、形状（特に切欠きの角）がどれだけ崩れるかを見る移流スキームの古典ベンチマーク。">切欠き円盤</span> r=0.15@(0.5,0.75)（slot 幅 0.05）、剛体回転 u=(−2π(y−½), 2π(x−½))、1 周 T=1、100²、fixed dt=5e-4（CFL 0.157）、二重周期</td></tr>
+  <tr><th>vortex</th><td><span class="term" title="Rider–Kothe の単一渦。円形界面を渦で薄く引き伸ばしてから速度を時間反転して戻し、初期形状との差（L1）で移流精度を測る古典ベンチマーク。">Rider–Kothe 単一渦</span>（時間反転 cos(πt/T)、T=4）、旧ソルバのオラクル run と同条件（円 R=0.6、64²/128²）、fixed dt=1/64（CFL 0.25）、トラフ判定＝t∈[3.9,4.1] の最小 L1（旧ソルバと同じ読み方）</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>質量保存（全ステップ）</th><td>rel <b>1.4e-15</b>（ゲート 1e-12）</td></tr>
+  <tr><th>vortex 反転 L1</th><td><b>8.76e-3</b>（64²）＝旧ソルバ記録 1.06e-2 の 0.83×／<b>3.90e-3</b>（128²）＝記録 5.01e-3 の 0.78×</td></tr>
+  <tr><th>zalesak 1 回転 L1</th><td>3.52e-2（Rudman 1997 の PLIC ≈1.1e-2 と同オーダー。原典の格子・CFL 未照合のため定性判定）</td></tr>
+  <tr><th>箱分割不変性</th><td>max_grid_size 変更で結果一致</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li>PLIC（Youngs 法線＋解析 alpha 閉形式）と<b>方向分割 EI スイープ＋最終発散整合補正</b>の組が正しく実装できており、精度は旧ソルバと同水準（やや良い）。</li>
+<li>参照ソルバの分裂法は通説の Weymouth–Yue では<b>なく</b> EI＋最終補正（Scapin et al. 2020 系譜）だった＝移植仕様の誤記を発見・訂正。</li>
+<li><b>質量保存 1e-12 級は「速度場が離散的に div-free」が前提</b>。規定速度を面中心の点評価で作ると O(h²) の離散発散が残ってゲートが割れる → 節点ストリーム関数の差分で構成（今後の全ケースに適用される教訓）。</li>
+</ul></div>
+<div class="warn">⚠ vortex の旧ソルバ記録値は「ハーネス欠陥フラグ付き run」由来＝倍半分のトレンドアンカー。タイトな帯にするには旧ソルバの再走が必要（open）。</div>
+
+<h2>M2 — 単相 fractional step＋MAC 射影（2026-07-07）</h2>
+<p>VOF を切り離し、単相 Navier–Stokes の時間積分と圧力射影を「ソルバ単体の自己検証」と「解析解つきの流れ」の両面から検証した。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>projselftest</th><td>射影ソルバ単独の <span class="term" title="解析解が既知になるように右辺を作って解かせ、数値解と厳密解を比較する検証法。">manufactured solution</span>：(1) 離散 RHS 配線恒等（N=64）(2) 解析 RHS の格子収束（N=32/64/128）(3) 射影の恒等性・冪等性。全周期 [0,1]²、multi-box</td></tr>
+  <tr><th>taylorgreen</th><td><span class="term" title="Taylor–Green 渦。粘性による運動エネルギー減衰の解析解 e^(−4k²νt) を持つ周期渦列。単相ソルバの標準検証。">Taylor–Green 渦</span>：[0,1]² 二重周期、N=32/64/128、ν=0.018257（旧ソルバのオラクル run と同値。テンプレ既定 ν=0.01 とは異なる点に注意）、U0=1、k=2π、t=1 まで。KE=面速度のセル中心平均で Σ½ρ|u|²ΔV</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>自己検証</th><td>配線 3.3e-16／収束次数 <b>1.992・1.998</b>／恒等+冪等 1.4e-14</td></tr>
+  <tr><th>TG KE 減衰 vs 解析 e<sup>−4k²νt</sup></th><td>比 0.975（32²）／<b>0.993</b>（64²）／0.998（128²）＝単調 2 次接近。動圧振幅誤差 1.3%</td></tr>
+  <tr><th>射影後 max|div(u)|</th><td>&lt; 1e-11 全ステップ</td></tr>
+  <tr><th>M1 回帰</th><td>vortex <b>ビット一致</b></td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li>MLABecLaplacian＋MLMG の MAC 射影が正しく配線され<b>理論次数（2 次）で収束</b>。</li>
+<li>参照ソルバの時間積分の実体＝Lie 分割・前進 Euler・射影はステップ末 1 回・<b>非増分 projection-1（圧力は毎ステップ置換）</b> — 仕様書の当初想定「圧力増分の累積」は誤りで訂正。</li>
+<li>参照ソルバの陽的粘性 dt 条件は係数設定（cfl2=1e5）で実質無効だった → FKeX は真の条件を既定化（意図的差分）。</li>
+<li>運動量移流（保存形 M/P＋QUICK）は一様場で厳密に定数を保つ＝M3 の固定点テストの土台。</li>
+</ul></div>
+
+<h2>M3 — 二相・変密度（2026-07-08）</h2>
+<p>二相・高密度比（1000:1）での整合移流を、固定点テスト・manufactured solution・クロスコード突合（三層オラクルの③）の三方向から検証した。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>dropadvect</th><td>[0,1]² 二重周期、64²、円滴 R=0.2 中央、<b>ρ<sub>l</sub>/ρ<sub>g</sub>=1000/1</b>、μ 両相 0（粘性段 off）、σ=0、初期一様速度 (U0,0)=(1,0)、1 横断 T=1（≈427 step、CFL 0.15）。移流＋射影を毎ステップ実行（射影も不動点主張に含む）</td></tr>
+  <tr><th>PROJTEST4/5</th><td>変係数 β=1+0.5sin(2πx)sin(2πy) の manufactured solution（配線＋収束次数）</td></tr>
+  <tr><th>projfrozen</th><td><span class="term" title="参照ソルバから圧力方程式の右辺・係数・解をダンプし、同じ入力に対して新実装の離散作用素とソルバが同じ答えを返すかを突合するクロスコード検証。">frozen-RHS</span>：参照ソルバの専用コピー（ダンプ文追加・環境変数ガード）で<b>静止液滴（Laplace 構成）σ=1・密度比 1000・64²・単一 rank・1 step</b> の圧力方程式 RHS・面密度・解をテキストダンプ → FKeX が (1) 自前離散作用素をダンプ解に適用して恒等確認（ゲージ不要）(2) 再 solve して平均引き後比較</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>並進固定点 max|u−U0|/U0</th><td><b>厳密 0（ビット一致）</b>。div=0</td></tr>
+  <tr><th>保存（この流れでは厳密が成立する特例）</th><td>Σc 4.4e-16／ΣM 6.7e-16／ΣP 4.5e-16／クリップ累計 3e-18</td></tr>
+  <tr><th>変係数自己検証</th><td>配線 1.9e-13／収束次数 <b>1.996・1.999</b></td></tr>
+  <tr><th>frozen-RHS</th><td>作用素恒等 5.8e-9（＝参照側ソルバ到達残差水準）／再 solve 一致 <b>rel 3.2e-10</b>（numpy 独立検算済）。dp 振幅 ≈σ/R（Laplace 整合）、β 跳び 10³</td></tr>
+  <tr><th>M1/M2 回帰</th><td>全て<b>ビット一致</b></td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>質量 flux と運動量 flux の整合が厳密</b>：一様速度は密度場（比 1000）に依らず離散的な固定点＝界面での偽加速ゼロがビットレベルで成立（整合が少しでも壊れているとここに現れる）。</li>
+<li><b>参照ソルバと FKeX の圧力方程式は同一の離散作用素</b>：ソルバ（ILU-BiCGSTAB vs MLMG）が違っても同じ解を返すことをコード横断で確認 → 以後、二相の挙動差が出たらソルバ層は容疑から除外できる。</li>
+<li>整合経路（運動量つき）の VOF 更新の実体＝<b>スイープ毎 EI＋クリップ・最終補正なし</b>（plain 経路とは別物。移流速度がスイープ毎に u=P/M で変わるため共通 div-free 前提の最終補正は根拠を失う、という構造的理由）。一般流では O(Δt) 級の質量ドリフトが正常挙動 → ドリフト・クリップ量を常時診断し、ケースごとに plain 経路と並記する運用に。</li>
+<li>参照ソルバ側の発見：粘性 μ blend は prop 層の算術ではなく<b>粘性段内の調和 blend</b>（ハードコード）が実体／整合経路の D2 診断は移流前内挿を使う（意図要確認）。</li>
+</ul></div>
+
+<p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+
+</main>
+</body>
+</html>

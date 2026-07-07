@@ -1,0 +1,247 @@
+<!-- built from: FKeX - 開発ドキュメント.md -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FKeX — 開発ドキュメント</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#222;
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+  nav.topnav{background:#f4f7fa;border-bottom:1px solid #dde3ea;padding:.55em 1.2em;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.3em 1.1em;font-size:.92rem}
+  nav.topnav .brand{font-weight:700;color:#2b6cb0;letter-spacing:.05em;margin-right:.4em}
+  nav.topnav a{color:#2b6cb0;text-decoration:none;padding:.12em .55em;border-radius:4px;white-space:nowrap}
+  nav.topnav a:hover{text-decoration:underline}
+  nav.topnav a.current{background:#2b6cb0;color:#fff}
+  nav.topnav a.current:hover{text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:0 1.5em 5em}
+  h1{font-size:1.55rem;font-weight:700;border-bottom:3px solid #2b6cb0;padding-bottom:.3em;margin:1.3em 0 .4em}
+  h2{font-size:1.22rem;color:#2b6cb0;border-bottom:2px solid #2b6cb0;padding-bottom:.15em;margin:2.2em 0 .7em}
+  h3{font-size:1.02rem;margin:1.7em 0 .5em}
+  .updated{color:#888;font-size:.85em;margin:.1em 0 1.6em}
+  code{font-family:Consolas,"SF Mono",ui-monospace,monospace;background:#f4f4f4;border-radius:4px;padding:.1em .35em;font-size:.88em}
+  table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92rem}
+  th,td{border:1px solid #ccc;padding:.45em .7em;text-align:left;vertical-align:top}
+  th{background:#eef3f9;font-weight:600}
+  .tblwrap{overflow-x:auto}
+  a{color:#2b6cb0}
+  a[target="_blank"]::after{content:"↗";font-size:.75em;margin-left:.15em;color:#888}
+  .term{text-decoration:underline dotted;cursor:help}
+  .warn,.ok,.ng{padding:.8em 1em;margin:1em 0;border-left:4px solid}
+  .warn{background:#fff8e1;border-color:#f0ad4e}
+  .ok{background:#eafaf1;border-color:#2ecc71}
+  .ng{background:#fdecea;border-color:#e74c3c}
+  .warn>ul,.ok>ul,.ng>ul{margin:.3em 0 .1em;padding-left:1.3em}
+  figure{margin:1.4em 0}
+  figure svg{display:block;max-width:100%;height:auto;background:#fafafa;border:1px solid #ddd;border-radius:4px}
+  .figcap{font-size:.9em;color:#666;margin-top:.35em}
+  .status-done{display:inline-block;font-size:.78rem;color:#1b6e3a;background:#e2f5e9;border-radius:12px;padding:.05em .6em;font-weight:600;white-space:nowrap}
+  .status-todo{color:#888}
+  ol li,ul li{margin:.3em 0}
+  .foot{margin-top:3.2em;border-top:1px solid #ddd;padding-top:1em;color:#555;font-size:.88em}
+  .foot h2{border:none;color:#222;font-size:1rem;margin:0 0 .5em}
+  .hist{color:#888;font-size:.8em;margin-top:2.6em}
+  @media (max-width:700px){main{padding:0 1em 4em}}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">FKeX 開発ノート</span>
+  <a class="current" href="index.html">開発ドキュメント</a>
+  <a href="サブ格子表現の設計判断.html">サブ格子表現の設計判断</a>
+  <a href="検証台帳.html">検証台帳</a>
+</nav>
+
+<main>
+
+<h1>FKeX — 開発ドキュメント</h1>
+<p class="updated">最終更新：2026-07-08（M3 完了時点）／初版：2026-07-07</p>
+
+<p><b>FKeX</b>（仮名）は <a href="https://github.com/AMReX-Codes/amrex" target="_blank" rel="noopener">AMReX</a> ベースの非圧縮二相流ソルバ。<span class="term" title="Volume of Fluid 法。各セルの液相体積分率（0〜1）で気液界面を表現する二相流の標準手法。">VOF 法</span>に<span class="term" title="界面近傍だけ通常格子より細かいサブグリッドで VOF 界面を表現し、表面張力もそのサブグリッド上で評価するクロージャ。">サブグリッド解像の界面表現</span>（fine-grid interface closure）を組み合わせた手法を、AMReX のデータ構造と線形ソルバの上に<span class="term" title="旧コードを翻訳・コピーせず、数式仕様ノートから新規に書き下ろす開発方式。旧コードは数値突合の基準（実行オラクル）としてのみ用いる。">クリーンルーム</span>で新規実装する。研究用 Fortran ソルバ（FK3）の後継<sup><a href="#fn1">†1</a></sup>。</p>
+<p>このページは開発ドキュメントの<b>入口</b>（インデックス）。実装の節目（マイルストーン）ごとに更新する。設計判断の深掘りと検証の生データは、上部ナビの<a href="サブ格子表現の設計判断.html">設計判断</a>・<a href="検証台帳.html">検証台帳</a>の各ページへ。</p>
+
+<h2>これは何か</h2>
+<p>一言でいえば「<b>旧 Fortran ソルバ（FK3）で検証済みの手法を、公開・保守・拡張に耐える基盤の上で作り直す</b>」プロジェクト。</p>
+<p><b>目的</b>：気液二相流の表面張力計算を、界面近傍だけ細かいサブグリッドで解像するクロージャ（FGVT 系 + fine-grid balanced CSF）で高精度化する。この手法自体は既存 Fortran 実装（FK3）で検証済みで、それを <b>C++17 / AMReX</b> に移す。</p>
+<p><b>設計原則</b>は次の 4 つ。単なる移植ではなく「新規に書き下ろす」点が特徴で、旧コードは答え合わせの基準（実行オラクル）としてだけ使う。</p>
+<ol>
+  <li><b>依存は AMReX 本体のみ</b>（incflo / IAMR / AMReX-Hydro からのコード借用なし）。ライセンス・出自を明快に保つ。</li>
+  <li><b>クリーンルーム実装</b> — 旧コードの翻訳ではなく、数式仕様ノートから書き下ろす。旧コードは実行オラクル（数値突合の基準）としてのみ使う。</li>
+  <li><b>変数名・慣用は AMReX 基準</b>（<span class="term" title="AMReX の分散格子データコンテナ。計算領域を「箱（Box）」に分割し、各 MPI rank に割り当てて保持する。">MultiFab</span> / ParmParse / plotfile エコシステムにネイティブに乗る）。</li>
+  <li>カーネルは初日から <code>MFIter + ParallelFor(Array4)</code> 規律（将来の GPU 対応の保険）。</li>
+</ol>
+
+<h2>アーキテクチャ骨子</h2>
+<p>設計の中心は下図の<b>二重格子構造</b>。流れ場（速度・圧力）は粗い一様格子で解き、界面の VOF は同じ領域を 2 倍細分したサブグリッドで持つ。両格子は同じ箱割り・同じ <span class="term" title="AMReX で「どの箱をどの MPI rank が持つか」を決める割当表。これを粗細で共通にするのが FKeX の設計の鍵。">DistributionMapping</span> なので、粗細間のデータのやり取りが各 rank の中で完結する。</p>
+
+<figure>
+<svg viewBox="0 0 740 292" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="二重格子アーキテクチャ図">
+  <defs>
+    <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#2b6cb0"/>
+    </marker>
+  </defs>
+  <text x="30" y="26" font-size="13" fill="#555">MPI rank k（粗箱 i と細箱 i は常に同じ rank に載る）</text>
+  <rect x="20" y="36" width="700" height="240" rx="8" fill="none" stroke="#999" stroke-dasharray="6 4"/>
+  <!-- coarse grid 4x4 -->
+  <text x="142" y="70" font-size="14" font-weight="bold" fill="#2b6cb0" text-anchor="middle">流れ格子（粗）</text>
+  <path d="M70 80V224M106 80V224M142 80V224M178 80V224M214 80V224M70 80H214M70 116H214M70 152H214M70 188H214M70 224H214" stroke="#2b6cb0" stroke-width="1.4" fill="none"/>
+  <circle cx="142" cy="152" r="48" fill="none" stroke="#c0392b" stroke-width="1.2" opacity="0.45"/>
+  <text x="142" y="248" font-size="12" fill="#555" text-anchor="middle">速度・圧力・物性（MAC 配置）</text>
+  <!-- fine grid 8x8 -->
+  <text x="572" y="70" font-size="14" font-weight="bold" fill="#b0602b" text-anchor="middle">界面格子（refine ×2）</text>
+  <path d="M500 80V224M518 80V224M536 80V224M554 80V224M572 80V224M590 80V224M608 80V224M626 80V224M644 80V224M500 80H644M500 98H644M500 116H644M500 134H644M500 152H644M500 170H644M500 188H644M500 206H644M500 224H644" stroke="#b0602b" stroke-width="0.9" fill="none"/>
+  <circle cx="572" cy="152" r="48" fill="none" stroke="#c0392b" stroke-width="2"/>
+  <text x="572" y="248" font-size="12" fill="#555" text-anchor="middle">サブグリッド VOF（全域を ×2 で細分）</text>
+  <!-- transfer arrow -->
+  <line x1="240" y1="150" x2="476" y2="150" stroke="#2b6cb0" stroke-width="1.6" marker-start="url(#ar1)" marker-end="url(#ar1)"/>
+  <text x="358" y="136" font-size="12.5" fill="#222" text-anchor="middle">バルク転送は rank 内で完結（通信ゼロ）</text>
+  <text x="358" y="174" font-size="12" fill="#555" text-anchor="middle">同一の箱割り＋同一 DistributionMapping</text>
+</svg>
+<p class="figcap">図1：二重格子アーキテクチャ。粗い流れ格子と 2 倍細分の界面格子が同じ箱割り・同じ rank 配置を共有し、粗⇄細のデータ転送に MPI 通信が要らない。赤い円は気液界面のイメージ。</p>
+</figure>
+
+<div class="tblwrap">
+<table>
+  <tr><th>要素</th><th>実装</th></tr>
+  <tr><td>格子</td><td>単一レベル一様格子（AMR は将来）。<span class="term" title="速度を格子面（セル境界）、圧力・スカラをセル中心に置く配置。Marker-and-Cell。">MAC スタガード配置</span></td></tr>
+  <tr><td>速度</td><td>面センター MultiFab（<code>Array&lt;MultiFab,AMREX_SPACEDIM&gt;</code>）</td></tr>
+  <tr><td>VOF・圧力・物性</td><td>セルセンター MultiFab</td></tr>
+  <tr><td><b>サブグリッド</b></td><td><code>refine(BoxArray, 2)</code> ＋ <b>粗格子と同一の DistributionMapping</b> を持つ細レベル MultiFab 群。粗箱 i と細箱 i が常に同一 rank ＝ 粗細のバルク転送がローカルに閉じる（図1。判断の経緯は<a href="サブ格子表現の設計判断.html">設計判断ページ</a>）</td></tr>
+  <tr><td>圧力 Poisson</td><td>AMReX <b><span class="term" title="AMReX 付属の幾何マルチグリッド線形ソルバ（MultiLevel MultiGrid）。">MLMG</span></b>（<code>MLABecLaplacian</code>、面係数 β=1/ρ）を直接叩く自前 MAC 射影ラッパ（~150 行）<sup><a href="#fn2">†2</a></sup></td></tr>
+  <tr><td>入力</td><td><code>ParmParse</code> inputs（機能名プレフィクス <code>vof.*</code>, <code>tension.*</code>, <code>proj.*</code> …）。ケース表 CSV → inputs 生成の薄い駆動を併設</td></tr>
+  <tr><td>出力</td><td>ネイティブ plotfile（粗+細の 2 レベル、ref_ratio=2）＝ ParaView / VisIt / yt がそのまま読める</td></tr>
+  <tr><td>ビルド</td><td>GNUMake（<code>AMREX_HOME</code> 参照）。AMReX はリリースタグ <b>26.07</b> にピン留めした submodule</td></tr>
+</table>
+</div>
+
+<h2>マイルストーンと現状</h2>
+<p>移植は「一段ずつ検証を green にしてから次へ進む」方式で積み上げる。完成形の 1 タイムステップは下図の <span class="term" title="非圧縮流の標準的な時間積分法。移流・粘性・（表面張力）・圧力射影を段階に分けて進め、最後に速度場を発散ゼロに戻す。">fractional step</span> で、各マイルストーンはその部品に対応する。</p>
+
+<figure>
+<svg viewBox="0 0 820 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="fractional step パイプライン図">
+  <defs>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#2b6cb0"/>
+    </marker>
+  </defs>
+  <text x="410" y="30" font-size="12.5" fill="#555" text-anchor="middle">1 タイムステップ（Lie 分割・前進 Euler・射影はステップ末 1 回）</text>
+  <!-- start chip -->
+  <rect x="12" y="64" width="56" height="52" rx="6" fill="#f4f4f4" stroke="#999"/>
+  <text x="40" y="94" font-size="13" fill="#222" text-anchor="middle">uⁿ, cⁿ</text>
+  <line x1="68" y1="90" x2="84" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <!-- box 1: advection -->
+  <rect x="86" y="64" width="172" height="52" rx="6" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.5"/>
+  <text x="172" y="84" font-size="13" font-weight="bold" fill="#2b6cb0" text-anchor="middle">① 移流</text>
+  <text x="172" y="103" font-size="11.5" fill="#222" text-anchor="middle">VOF＋質量・運動量（整合）</text>
+  <text x="172" y="136" font-size="11" fill="#888" text-anchor="middle">M1・M3・M5</text>
+  <line x1="258" y1="90" x2="274" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <!-- box 2: viscosity -->
+  <rect x="276" y="64" width="120" height="52" rx="6" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.5"/>
+  <text x="336" y="84" font-size="13" font-weight="bold" fill="#2b6cb0" text-anchor="middle">② 粘性</text>
+  <text x="336" y="103" font-size="11.5" fill="#222" text-anchor="middle">応力発散形・陽解法</text>
+  <text x="336" y="136" font-size="11" fill="#888" text-anchor="middle">M2</text>
+  <line x1="396" y1="90" x2="412" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <!-- box 3: tension (future) -->
+  <rect x="414" y="64" width="150" height="52" rx="6" fill="#fff8e1" stroke="#f0ad4e" stroke-width="1.5" stroke-dasharray="6 3"/>
+  <text x="489" y="84" font-size="13" font-weight="bold" fill="#8a5a00" text-anchor="middle">③ 表面張力</text>
+  <text x="489" y="103" font-size="11.5" fill="#555" text-anchor="middle">これから実装</text>
+  <text x="489" y="136" font-size="11" fill="#888" text-anchor="middle">M4・M6</text>
+  <line x1="564" y1="90" x2="580" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <!-- box 4: projection -->
+  <rect x="582" y="64" width="140" height="52" rx="6" fill="#eef3f9" stroke="#2b6cb0" stroke-width="1.5"/>
+  <text x="652" y="84" font-size="13" font-weight="bold" fill="#2b6cb0" text-anchor="middle">④ MAC 射影</text>
+  <text x="652" y="103" font-size="11.5" fill="#222" text-anchor="middle">MLMG・β=1/ρ</text>
+  <text x="652" y="136" font-size="11" fill="#888" text-anchor="middle">M2・M3</text>
+  <line x1="722" y1="90" x2="738" y2="90" stroke="#2b6cb0" stroke-width="1.6" marker-end="url(#ar2)"/>
+  <!-- end chip -->
+  <rect x="740" y="64" width="68" height="52" rx="6" fill="#e2f5e9" stroke="#2ecc71"/>
+  <text x="774" y="88" font-size="13" fill="#1b6e3a" text-anchor="middle">uⁿ⁺¹</text>
+  <text x="774" y="105" font-size="10.5" fill="#1b6e3a" text-anchor="middle">div-free</text>
+</svg>
+<p class="figcap">図2：fractional step の 1 ステップと、担当マイルストーン。青の実線枠＝実装・検証済み、橙の破線枠＝これから。サブグリッド版（M5・M6）は①③をサブグリッド上で置き換える。</p>
+</figure>
+
+<div class="tblwrap">
+<table>
+  <tr><th>ID</th><th>内容</th><th>状態</th></tr>
+  <tr><td>M0</td><td>ビルド骨格＋データ骨格（全 MultiFab 確保・IC・plotfile）</td><td><span class="status-done">✅ 完了</span>（2026-07-07。実ビルド＋スモーク green）</td></tr>
+  <tr><td>M1</td><td>純移流 VOF（<span class="term" title="Piecewise Linear Interface Calculation。セル内界面を平面（2D では線分）で再構成する VOF の標準手法。">PLIC</span> 再構成、Zalesak / vortex 検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-07。質量保存 ~1e-15・vortex L1 は旧ソルバ同水準）</td></tr>
+  <tr><td>M2</td><td>単相 fractional step ＋ MAC 射影（Taylor–Green 検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-07。射影 2 次収束・TG 減衰誤差 0.2〜0.7%・div(u)&lt;1e-11）</td></tr>
+  <tr><td>M3</td><td>二相・変密度（密度比 1000:1、<span class="term" title="質量フラックスと運動量フラックスを同一の再構成から組み、密度比が大きくても界面で運動量が破綻しない移流。">mass-momentum consistent</span> 移流）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。並進固定点＝u 誤差厳密 0・frozen-RHS クロスコード一致）</td></tr>
+  <tr><td>M4</td><td>従来型 balanced CSF（静止液滴・毛管波検証）</td><td class="status-todo">—</td></tr>
+  <tr><td>M5</td><td>サブグリッド移流（FGVT）</td><td class="status-todo">—</td></tr>
+  <tr><td>M6</td><td>サブグリッド表面張力（FGB-CSF、champion 構成）</td><td class="status-todo">—</td></tr>
+  <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td class="status-todo">—</td></tr>
+  <tr><td>M8</td><td>MPI 並列・富岳（A64FX）ビルド</td><td class="status-todo">—</td></tr>
+  <tr><td>M9</td><td>性能検証</td><td class="status-todo">—</td></tr>
+</table>
+</div>
+
+<p>検証は三層オラクル：(1) 解析解・文献値、(2) 旧ソルバ実行結果とのトレンド突合、(3) <span class="term" title="旧ソルバから 1 ステップ分の中間場（VOF・曲率・面力など）をダンプし、同じ入力から新実装のカーネル単体を回して機械精度（~1e-12）で比較する検証法。時間発展の誤差蓄積と切り離してカーネル単位のバグを特定できる。">frozen-field</span> 突合。層構成の説明と各ケースの詳細設定・実測値は<a href="検証台帳.html">検証台帳</a>に集約し、以下の完了メモには要点だけを載せる。</p>
+
+<h3>M0 完了メモ（2026-07-07）</h3>
+<p>物理演算を入れる前に、データ構造とビルドの骨格を固めた段階。</p>
+<ul>
+  <li><b>できたもの</b>：粗＋<code>refine(2)</code> 細（同一 DistributionMapping）の全 12 MultiFab（ghost 4）、静止液滴 IC（4×4 サブセルサンプリング。VOF 積分の相対誤差＝粗 1.9e-3／細 7.5e-5 vs πR²）、2 レベル plotfile、ゴースト NaN 検査モード、<span class="term" title="面センターの MultiFab は箱境界の面を隣接両箱が valid として持つ。owner 値（OverrideSync）と各箱の計算値が一致することをチェックし、加算集約カーネルの二重計上を防ぐ。">共有面一貫性チェック</span>（面型 MF を OverrideSync と突合＝全方向で厳密 0）、ケース表 CSV→inputs 生成、WSL 同期・ビルドスクリプト一式。リリース／DEBUG 両ビルド・複数箱（max_grid_size 32/16）スモーク green。</li>
+  <li><b>ビルドは 1 コマンド</b>：<code>bash _localdev/fkex/wsl/build.sh</code>（同期→AMReX 26.07 取得→make→スモーク→plotfile 確認）。</li>
+</ul>
+<div class="warn"><b>環境の罠（対策済み・スクリプトに内蔵）</b>：(1) <code>wsl.exe</code> は Windows 側 CWD を継承して失敗する → 全呼び出しに <code>--cd '~'</code>。(2) Git Bash の MSYS パス変換が WSL 向け引数を化かす → <code>MSYS_NO_PATHCONV=1</code>。(3) AMReX 26.07 は既定で Fortran モジュールをビルドする → <code>BL_NO_FORT=TRUE</code>（非 Fortran 方針とも整合）。ビルドフラグ変更時は <code>tmp_build_dir</code> を削除してから再 make。</div>
+
+<h3>M1 完了メモ（2026-07-07）</h3>
+<p>解析的に与えた速度場（規定速度場）で VOF 移流だけを単体で動かし、標準ベンチマークで精度を確認した段階。</p>
+<ul>
+  <li><b>中身</b>：PLIC（Youngs 3^DIM コーナー勾配法線＋<span class="term" title="Scardovelli–Zaleski (2000) / Lehmann–Gekle の閉形式解。体積分率と界面平面オフセットの相互変換を反復なしの解析式で行う。">解析 alpha</span>＝Scardovelli–Zaleski 2000/Lehmann–Gekle の閉形式・反復なし）、方向分割 <b>EI（Eulerian 陰）スイープ＋最終発散整合補正</b>（Scapin et al. 2020 系譜）、6 段回転パリンドロームのスイープ順（2D は 2 段）。カーネルは全て Array4+Box の自由関数（サブグリッドにそのまま載る）。数式仕様ノート <code>doc/vofAdvection.md</code> 先行のクリーンルーム実装。</li>
+  <li><b>用語注記</b>：「<span class="term" title="split-VOF 文献の分類名。1D 圧縮係数が更新値の側＝分母に付く形式を指す。対の LE（Lagrangian Explicit）は係数が掛け算で付く。">EI（Eulerian Implicit）</span>」は split-VOF 文献の<b>形式の呼称</b>で、時間陰解法ではない。全演算は陽的（線形ソルバ・反復なし）。<code>doc/vofAdvection.md</code> に注記済み。</li>
+</ul>
+<div class="ok"><b>検証</b>：質量保存 rel ~1e-15（ゲート 1e-12）／Rider–Kothe 渦の反転 L1=8.8e-3（64²）・3.9e-3（128²）＝旧ソルバ記録値と同水準／Zalesak 3.5e-2（100²）＝文献 PLIC と同オーダー／箱分割不変性 OK。</div>
+<div class="warn"><b>発見 2 つ</b>：(1) 参照ソルバの分裂法は通説の Weymouth–Yue 補正では<b>なく</b> EI＋最終補正だった（ノート作成フェーズで判明・仕様を訂正）。(2) 規定速度場は<b>節点ストリーム関数の差分</b>で組まないと離散 MAC 発散が O(h²) 残り、質量ゲート 1e-12 を割る（点評価は不可）。</div>
+
+<h3>M2 完了メモ（2026-07-07）</h3>
+<p>VOF をいったん脇に置き、単相の Navier–Stokes 時間積分（図2 の②④）と MAC 射影を検証した段階。</p>
+<ul>
+  <li><b>中身</b>：単相 fractional step（Lie 分割・前進 Euler・射影はステップ末 1 回・<span class="term" title="予測子段に圧力勾配を含めず、射影で得た φ から圧力を毎ステップ丸ごと置き換える方式（Chorin projection-1）。増分圧力法（pⁿ⁺¹=pⁿ+φ）とは異なる。">非増分 projection-1</span>＝圧力は毎ステップ置換）。MAC 射影は <code>MLABecLaplacian</code>+MLMG の薄ラッパ（φ=Δt·p′ 規約、β は面配列＝M3 で 1/ρ に差し替わる設計）。運動量移流は保存形（質量 M・運動量 P を方向分割で flux 更新し u=P/M、QUICK 面値）、粘性は応力発散形の陽解法。</li>
+</ul>
+<div class="ok"><b>検証</b>：射影自己検証（<span class="term" title="解析解が既知になるように右辺を作って解かせ、数値解と厳密解を比較する検証法。">manufactured solution</span>）＝配線 3.3e-16／解析 RHS で収束次数 1.99／射影の恒等性・冪等性 1.4e-14。Taylor–Green の KE 減衰＝解析 e<sup>−4k²νt</sup> 比 0.975/0.993/0.998（32²/64²/128²、単調 2 次接近）、動圧振幅誤差 1.3%。<b>射影後 max|div(u)|&lt;1e-11 全ステップ</b>。M1 ケース回帰＝<b>ビット一致</b>。</div>
+<div class="warn"><b>発見</b>：参照ソルバの圧力は「増分累積」ではなく<b>毎ステップ置換</b>（非増分 Chorin projection-1、予測子に ∇p 無し）— 仕様書の当初表記を訂正。参照ソルバの陽的粘性 dt 条件は係数設定で実質無効化されていた＝FKeX は真の条件を既定化（意図的差分として記録）。</div>
+
+<h3>M3 完了メモ（2026-07-08）</h3>
+<p>二相・高密度比に踏み込んだ段階。密度比 1000:1 でも界面で運動量が破綻しない「整合移流」が主役（表面張力はまだ入れない）。</p>
+<ul>
+  <li><b>中身</b>：二相・変密度（密度比 1000:1、張力なし）。整合移流＝c と質量 M・運動量 P が<b>同一の PLIC swept 体積</b>（液/気分割）を共有し、G=ρ<sub>l</sub>·S<sub>l</sub>＋ρ<sub>g</sub>·S<sub>g</sub>、H=G·q<sub>QUICK</sub>、u=P/M。面密度は移流質量 M/V で一貫更新し、<b>粘性の除算・圧力補正・射影 β=1/ρ<sub>f</sub> が全て同一実体</b>（高密度比ロバスト性の生命線）。</li>
+  <li><b>設計決定</b>：整合経路の VOF 更新は参照実装に忠実（スイープ毎 EI＋クリップ・最終補正なし）とし、plain 経路（M1）との差は質量ドリフト・クリップ量の常時診断で監視する方式に確定。</li>
+</ul>
+<div class="ok"><b>検証</b>：密度比 1000 液滴の一様並進（<span class="term" title="一様速度場は整合スキームの厳密な不動点。質量フラックスと運動量フラックスに僅かでも不整合があると、界面で偽の加速度として現れる古典テスト。">固定点テスト</span>）＝<b>速度誤差が厳密 0（ビット一致の固定点）</b>・div=0・保存 ~1e-16。変係数 β の manufactured solution＝2 次収束（1.996/1.999）。<b>クロスコード frozen-RHS</b>＝参照ソルバから静止液滴（Laplace 構成・β 跳び 10³）の圧力方程式 RHS・β・解をダンプし、FKeX の離散作用素・MLMG 解と突合 → 作用素恒等 5.8e-9（＝参照側ソルバ残差水準）・再 solve 一致 rel 3.2e-10。旧マイルストーン回帰は全てビット一致。</div>
+
+<h2>開発環境メモ</h2>
+<ul>
+  <li>ローカル：Windows + <b>WSL2 Ubuntu</b>（g++ 15 / GNU Make）。Google Drive のパスは WSL から直接読めない（I/O error）ため、Windows 側から tar パイプで <code>~/wrk/fkex</code> へ同期して WSL 内でビルドする。</li>
+  <li>本番：富岳（A64FX）。M8 で対応。</li>
+</ul>
+
+<h2>ページ一覧</h2>
+<ul>
+  <li><a href="サブ格子表現の設計判断.html">FKeX - サブ格子表現の設計判断</a> — AmrCore か素の MultiFab か（2026-07-07 確定）</li>
+  <li><a href="検証台帳.html">FKeX - 検証台帳</a> — <b>各検証ケースの詳細設定・ゲート実測・そこから何がわかったか</b>（本体には要約のみ、詳細はこちら）</li>
+</ul>
+
+<h2>関連</h2>
+<ul>
+  <li>AMReX 学習サンドボックス：<a href="https://github.com/kidefumi/amrex-kidena" target="_blank" rel="noopener">amrex-kidena</a></li>
+  <li>手法の理論・検証の詳細は論文発表後にここへ追記する（現段階では非公開）。</li>
+</ul>
+
+<div class="foot">
+  <h2>脚注</h2>
+  <p id="fn1">†1 — FK3 は研究室系譜の Fortran MPI ソルバ。FKeX はその champion 経路（サブグリッド VOF ＋ サブグリッド表面張力）だけを、コードを引き継がずに数式から再実装する。</p>
+  <p id="fn2">†2 — AMReX の <code>MacProjector</code> クラスは 22.01 で AMReX-Hydro リポジトリへ移管されたため本体には無い。依存を AMReX 本体に限る方針から、<code>MLABecLaplacian</code>＋<code>MLMG</code> を直接使う薄いラッパを自前で書く。</p>
+</div>
+
+<p class="hist">更新履歴：2026-07-07 初版（M0 着手時点）。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+
+</main>
+</body>
+</html>
