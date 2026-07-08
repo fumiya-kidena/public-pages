@@ -54,7 +54,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-08（M6 追記）</p>
+<p class="updated">最終更新：2026-07-08（M7 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -236,7 +236,42 @@
 </ul></div>
 <div class="warn">⚠ 細曲率 settled の有界床（3.34e-8）は曲率源 champion 保留中の暫定分類。M7 の動的 A/B で決着予定。</div>
 
-<p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+<h2>M7 — 全物理動的回帰（振動液滴・気泡上昇）（2026-07-08）<small>※公開版は要約</small></h2>
+<p>初めて全段（移流・粘性・表面張力・<b>重力</b>・射影）が入った動的検証。重力は<span class="term" title="重力加速を密度に依らず全面に一様に加え（u −= dt·g）、浮力は β=1/ρ の圧力射影が自動的に生む構成。">密度盲目の一様加速＋浮力は射影が生む</span>参照忠実の構成で、rb2d では<b>初の Neumann-p 面（wall）</b>と outflow 面、そして<span class="term" title="EBUDGET（全体エネルギー収支）・KESTAGE（段別の運動エネルギー変化）・PROJCHK（射影の恒等式チェック）。毎ステップ全ケースで常時計測する。">エネルギー診断 3 系統</span>（EBUDGET／KESTAGE／PROJCHK）がここで入った。champion 経路で走らせ、<b>曲率源</b>（細格子で直接評価＝fine／粗格子から放送＝coarse）の動的 A/B も併走。FKeX は全ゲート green。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>詳細設定</th></tr>
+  <tr><th>od2d / od2d_kc</th><td><span class="term" title="表面張力だけで形が振動する液滴。線形理論（Lamb の mode-2 固有振動）の周期と比較できる、表面張力の動的精度の標準検証。">振動液滴</span>（Lamb mode-2）：[−0.5,0.5]×[−1,1]、粗 64×128（Δ=1/64）＋細×2、全側 openfar、<b>matched 密度 ρ=1/1・無粘性 μ=0</b>・無重力、σ=1、R=0.25 中央＋mode-2 摂動 2%。理論周期 T<sub>lin</sub>=0.45345 の 5 周期（t=2.26725）まで、CFL 0.15＋毛管律速。曲率源＝od2d: fine／od2d_kc: coarse。診断＝二次モーメント D=M<sub>xx</sub>−M<sub>yy</sub>（旧ソルバと同定義）＋エネルギー 3 診断</td></tr>
+  <tr><th>rb2d / rb2d_kc</th><td>気泡上昇→自由界面接近：[−3,3]×[−1.5,1.5]（x=鉛直）、粗 64×32（Δ=3/32）＋細×2、y 周期・x下=<b>wall（Neumann-p）</b>・x上=<b>outflow</b>、気泡 R=0.5 @(−1.5,0)・自由界面 x=0、ρ<sub>l</sub>/ρ<sub>g</sub>=1/1e-3、μ<sub>l</sub>/μ<sub>g</sub>=2e-3/2e-5、σ=0.04、<b>g=1</b>。dt<sub>max</sub> 3e-4・CFL 0.10、10000 step（t=3.0）。<b>proj.solver=gmres_mlmg</b>（rel 1e-13・abs 1e-12）。診断＝中央列 c=0.5 交差（x_c＝気泡交差中点）＋<span class="term" title="気相（1−c）の重心 x 座標。自由界面位置 x_surf より下（x&lt;x_surf）に制限して気泡だけを拾う。旧ソルバ FK3 の BUBPOS xb と同じ定義。">気相重心 x_cg</span>＋Laplace 圧</td></tr>
+  <tr><th>rb2d_smoke</th><td>rb2d の 400 step 短縮版（回帰スイート常設のスモーク）</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>od2d 層1（理論周期）</th><td><b>T=0.460615＝Lamb 理論（0.45345）+1.58%（PASS）</b></td></tr>
+  <tr><th>od2d エネルギー・div</th><td><b>無粘性の粘性段 KE 変化＝厳密 0</b>／射影恒等式 ~1e-15／射影後 div 3.9e-13</td></tr>
+  <tr><th>od2d_kc（曲率源 A/B）</th><td>T=0.466965（理論 +2.98%）＝<b>fine 優位</b>。粗 c ドリフト 3.4e-2（整合経路の LOGGED 枠）</td></tr>
+  <tr><th>rb2d</th><td>x_c(3.0)=−0.2769・<b>上昇量 1.1224 が t∈(0.5,3] で単調</b>（負ステップ 0）・x_surf(3.0)=0.1413・max|u|=1.975・div 4.3e-13</td></tr>
+  <tr><th>rb2d_kc（曲率源 A/B）</th><td>上昇量 1.1518（fine 比 +2.6%）＝±3% 級の記録帯（LOGGED）</td></tr>
+  <tr><th>層2（od2d、旧ソルバ突合）</th><td>規定対（fine 同士）は<b>旧ソルバ側アンカーの汚染で判定不能</b>（下記）→ 代替の κ-coarse 対＝FKeX 0.466965 vs FK3 0.462616＝<b>+0.94%＜1% → green（暫定）</b>。参考：FKeX fine は FK3 champion 歴史回廊 0.458–0.460 の上端 +0.13%</td></tr>
+  <tr><th>層2（rb2d、旧ソルバ突合）</th><td>定義一致窓（気泡深部）で <b>max|FK3 xb−FKeX x_cg|=0.00198＝0.021 粗セル</b>・上昇速度傾き差 <b>−0.1%</b></td></tr>
+  <tr><th>回帰</th><td>M0〜M6 全て維持（rb2d_smoke を回帰スイートに常設）</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>MLMG 崩壊と対策</b>：rb2d 系（outflow＋自由界面＋密度比 1000 の悪条件）で素の MLMG の <span class="term" title="マルチグリッドの 1 反復（V-cycle）あたり残差が縮む比率。悪条件だと 1 に近づき、反復が進まなくなる。">V-cycle 収縮率</span>が崩壊し途中 Abort → <b>GMRES を MLMG 前処理で使う <code>gmres_mlmg</code></b>＋絶対許容 1e-12 で全区間安定。悪条件ケースには Krylov ラッパを既定にする教訓。</li>
+<li><b>細曲率（fine）の動的優位</b>＝曲率源 champion 裁定（M6 から保留）の主材料：od2d で fine +1.58% vs coarse +2.98%（両方クリーン）。旧ソルバでは fine 側が寄生流汚染でアンカー不成立＝「fine の病理は旧実装固有」という M6 所見の動的補強。rb2d の A/B は符号が逆（旧は coarse で遅く FKeX は速い）だが両者 ±3% 級の記録帯内。</li>
+<li><b>重力段のエネルギー整合</b>：エネルギー 3 診断が重力入りの全段で機能し、無粘性 KE 収支は厳密 0・射影恒等式 ~1e-15＝重力（密度盲目＋射影浮力）が KE 台帳と整合。</li>
+<li><b>コスト暫定</b>：od2d 12.1 vs 旧 170.0 ms/step＝<b>14.0×</b>、rb2d 5.3 vs 74.5＝<b>14.1×</b>（同一機単コア同士だが WSL2 g++ -O3 vs native ifx -O2・旧は nz=1 の 3D 機構込み＝条件非対称の暫定値。正式測定は M9）。</li>
+</ul></div>
+<h3>旧ソルバ（FK3）オラクル突合の収穫</h3>
+<ul>
+<li><b>run 健全性</b>：オラクル 5 run 全て step 10000 到達・NaN ゼロ。ただし再投入が restart 経由でログ先頭区間は喪失（物理はダンプから連続と確認）。restart 監査で<b>旧ソルバの restart 入出力の不整合 2 件を発見</b>（本家修正行き。実運用経路では自己修復し実効無害と確認済み）。</li>
+<li><b>od2d アンカー</b>：fine 側 run は T=0.482176（+6.34%）だが<span class="term" title="曲率の離散ノイズが表面張力の不釣合いとして注入され、界面まわりに残り続ける偽の流れ。無粘性だと減衰せず蓄積する。">寄生流</span>で波形汚染（umax が 3.2→6.5 へ単調成長）＝<b>周期アンカー不成立</b>。coarse 側は T=0.462616（+2.02%）・振幅規則的・umax 有界＝クリーン → <b>動的アンカーに採用</b>。</li>
+<li><b>rb2d アンカー</b>：xb は t=3.0 で −0.38510・全区間単調・上昇速度傾き 0.3640。旧ソルバ内部の曲率スキーム比較（HF vs level-set）でも xb(3.0) 差は 0.037 粗セルに留まる＝<b>曲率法差 0.04 セルに対しコード間一致 0.02 セル</b>という頑健性の裏打ち。</li>
+<li><b>⚠ 診断定義の注意</b>：FKeX の x_cg（動的マスク）は気泡が界面に近づくと界面窪みの気相を拾って一段ジャンプする（診断定義のアーティファクト）→ 固定領域重心診断（旧 BUBPOS と同定義）の追加が open。突合はジャンプ前の定義一致窓で実施。</li>
+</ul>
+<div class="warn">⚠ open：(1) 旧ソルバの「クリーンな fine 動的アンカー」は曲率平滑オプション付きの再走が要る（~26 分）——同時に現状の汚染は「旧ソルバに clean fine 動的アンカーは無い」ことの実証データ。(2) FKeX の固定領域重心診断の追加。(3) od2d 層2 の fine 対の正式判定は (1) 待ち（現行 green は κ-coarse 対の暫定）。(4) コスト比は暫定＝M9 で正式化。</div>
+
+<p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6–M7）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
 </main>
 </body>

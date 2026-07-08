@@ -58,7 +58,7 @@
 <main>
 
 <h1>FKeX — 開発ドキュメント</h1>
-<p class="updated">最終更新：2026-07-08（M6 完了時点）／初版：2026-07-07</p>
+<p class="updated">最終更新：2026-07-08（M7 完了時点）／初版：2026-07-07</p>
 
 <p><b>FKeX</b>（仮名）は <a href="https://github.com/AMReX-Codes/amrex" target="_blank" rel="noopener">AMReX</a> ベースの非圧縮二相流ソルバ。<span class="term" title="Volume of Fluid 法。各セルの液相体積分率（0〜1）で気液界面を表現する二相流の標準手法。">VOF 法</span>に<span class="term" title="界面近傍だけ通常格子より細かいサブグリッドで VOF 界面を表現し、表面張力もそのサブグリッド上で評価するクロージャ。">サブグリッド解像の界面表現</span>（fine-grid interface closure）を組み合わせた手法を、AMReX のデータ構造と線形ソルバの上に<span class="term" title="旧コードを翻訳・コピーせず、数式仕様ノートから新規に書き下ろす開発方式。旧コードは数値突合の基準（実行オラクル）としてのみ用いる。">クリーンルーム</span>で新規実装する。研究用 Fortran ソルバ（FK3）の後継<sup><a href="#fn1">†1</a></sup>。</p>
 <p>このページは開発ドキュメントの<b>入口</b>（インデックス）。実装の節目（マイルストーン）ごとに更新する。設計判断の深掘りと検証の生データは、上部ナビの<a href="サブ格子表現の設計判断.html">設計判断</a>・<a href="検証台帳.html">検証台帳</a>の各ページへ。</p>
@@ -162,7 +162,7 @@
   <text x="774" y="88" font-size="13" fill="#1b6e3a" text-anchor="middle">uⁿ⁺¹</text>
   <text x="774" y="105" font-size="10.5" fill="#1b6e3a" text-anchor="middle">div-free</text>
 </svg>
-<p class="figcap">図2：fractional step の 1 ステップと、担当マイルストーン。粗格子版のパイプライン①〜④は M4 までで全段実装・検証済み。残るはサブグリッド版（M5・M6）＝①③をサブグリッド上で置き換える。</p>
+<p class="figcap">図2：fractional step の 1 ステップと、担当マイルストーン。粗格子版①〜④は M4 までで全段実装・検証済み、サブグリッド版（M5・M6）が①③を置き換え、M7 で重力段（②と③の間）が加わって全物理が揃った。</p>
 </figure>
 
 <div class="tblwrap">
@@ -175,7 +175,7 @@
   <tr><td>M4</td><td>従来型 balanced CSF（静止液滴・毛管波検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。balanced-force 恒等＝machine zero・毛管波 RMS 0.0015）</td></tr>
   <tr><td>M5</td><td>サブグリッド移流（FGVT）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。細解像で plain の 3〜5 倍精度・固定点ビット成立）</td></tr>
   <tr><td>M6</td><td>サブグリッド表面張力（FGB-CSF、champion 構成）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。恒等 machine-zero・旧ソルバと Δp* 6桁一致・既知の飽和病理は再現せず）</td></tr>
-  <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td class="status-todo">—</td></tr>
+  <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。od2d 周期 理論+1.58%/FK3+0.065%・rb2d 単調上昇・エネルギー診断3系統・gmres_mlmg 化）</td></tr>
   <tr><td>M8</td><td>MPI 並列・富岳（A64FX）ビルド</td><td class="status-todo">—</td></tr>
   <tr><td>M9</td><td>性能検証</td><td class="status-todo">—</td></tr>
 </table>
@@ -238,6 +238,16 @@
 </ul>
 <div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：厳密曲率で<b>恒等が machine-zero</b>（5.2e-21／1.9e-13・Δp*=1）＝集約が力の釣合いを一切損なわない。粗放送は旧ソルバと <b>Δp* 6 桁一致</b>。毛管波も旧ソルバ記録の 1/2.7。<b>旧ソルバで知られていた細曲率の settled 飽和（|U|≈0.98）は FKeX では再現せず</b>、1e-8 級の有界床に留まる（機構調査済み）。</div>
 <div class="warn"><b>補間方式の整理（ユーザ裁定）</b>：粗→細速度補間は <b>linear／multilinear の 2 方式</b>に確定（multilinear＝champion・全次元）。ψ-curl は削除。champion 系基準値は multilinear で再取得済み。あわせて旧ソルバの参照アンカーを欠陥是正の再走で全面更新し、差の因子分離（旧ソルバ側の補助機構 2 つが合計 −65% の精度コスト）まで完了。</div>
+
+<h3>M7 完了メモ（2026-07-08）</h3>
+<p>初めて「全部入り」（移流・粘性・表面張力・重力・射影）の時間発展を回した段階。振動液滴（od2d）と気泡上昇（rb2d、自由界面に接近するまで＝気泡破裂ケースの前哨）の 2 本柱で、champion 経路の動的挙動を理論値と旧ソルバの両方に突き合わせた（公開版では要約に留める）。</p>
+<ul>
+  <li><b>中身</b>：重力段は<span class="term" title="重力加速を密度に依らず全面に一様に加え（u −= dt·g）、浮力は β=1/ρ の圧力射影が自動的に生む構成。界面で力と圧力勾配の離散が揃う balanced な扱い。">密度盲目の一様加速＋浮力は射影が生む</span>参照忠実の構成。rb2d で<b>初の Neumann-p 面（wall）</b>と outflow 面を導入。<span class="term" title="EBUDGET（全体エネルギー収支）・KESTAGE（段別の運動エネルギー変化）・PROJCHK（射影の恒等式チェック）の 3 診断。毎ステップ全ケースで常時計測する。">エネルギー診断 3 系統</span>を全ケース常設（旧ソルバの意図的スーパーセット）。</li>
+  <li><b>曲率源の A/B</b>（M6 から保留の champion 裁定）：od2d の周期誤差は細評価 +1.58% vs 粗放送 +2.98%（理論比・両方クリーン）＝ <b>fine 優位</b>の主材料が揃った。</li>
+</ul>
+<div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：od2d 周期 <b>T=0.460615＝理論（Lamb mode-2）+1.58%・旧ソルバ champion 歴史値 +0.065%</b>、無粘性の運動エネルギー収支は<b>厳密 0</b>。rb2d は全区間単調上昇で、旧ソルバとの気泡重心軌道差は定義一致窓で <b>0.021 粗セル</b>・上昇速度差 −0.1%。回帰 M0〜M6 全て維持。</div>
+<div class="warn"><b>発見と対策</b>：(1) rb2d 系（outflow＋自由界面＋密度比 1000）で素の MLMG の <span class="term" title="マルチグリッドの 1 反復（V-cycle）あたり残差が縮む比率。悪条件だと 1 に近づき、反復が進まなくなる。">V-cycle 収縮率</span>が崩壊し途中 Abort → <b>GMRES を MLMG 前処理で使う <code>gmres_mlmg</code></b> に切替えて全区間安定（悪条件ケースには Krylov ラッパを既定にする教訓）。(2) 旧ソルバ側は細曲率 run が<span class="term" title="曲率の離散ノイズが表面張力の不釣合いとして注入され、界面まわりに残り続ける偽の流れ。無粘性だと減衰せず蓄積する。">寄生流</span>汚染で周期アンカー不成立＝「細曲率の病理は旧実装固有で FKeX では再現しない」という M6 所見の動的補強。(3) 旧ソルバの restart 入出力に不整合 2 件を発見（本家行き・実効無害を確認済み）。</div>
+<div class="ok"><b>コスト暫定</b>：FKeX は旧ソルバ比 <b>14〜15 倍/step 速い</b>（od2d 12.1 vs 170.0 ms/step＝14.0×、rb2d 5.3 vs 74.5＝14.1×。同一機の単コア同士だがコンパイラ差・旧ソルバの nz=1 3D 機構込み＝条件非対称の暫定値。正式測定は M9）。</div>
 
 <h2>開発環境メモ</h2>
 <ul>
