@@ -54,7 +54,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-08（M7 追記）</p>
+<p class="updated">最終更新：2026-07-08（M9 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -271,6 +271,46 @@
 <li><b>旧ソルバの clean fine 動的アンカーは不成立と確定</b>：曲率平滑オプション付きの追加走（フル 10000 step）でも周期は理論比 +11.0% とアンカー不成立域・寄生流由来の速度包絡成長も解消せず。無平滑版（+6.34%）と合わせ、<b>平滑化の有無によらず旧ソルバでは fine 曲率源の clean 動的アンカーは作れないことが確定</b>。od2d 層2 の fine 対の正式判定は代替の κ-coarse 対（上記）を恒久的な採用値とする。</li>
 </ul>
 <div class="ok">✓ M7 open 項目は全て解消：(1) 旧ソルバの clean fine 動的アンカーは平滑化 on/off の両条件で不成立と確定、(2) FKeX の固定領域重心診断を追加・凍結、(3) od2d 層2 の fine 対の正式判定は κ-coarse 対の採用で確定。コストの正式化のみ M9 で継続（走行条件の対称化）。</div>
+
+<h2>M9 — 性能検証（2026-07-08）<small>※公開版は要約</small></h2>
+<p>M7 の暫定コスト比（14×）を、計測プロトコルを固めた上で因子分解する段。物理検証ではないので、ゲートは「計測の公平性」と「（並列化しても）物理が不変であること」に置く。</p>
+
+<h3>方法論と公平条件</h3>
+<div class="tblwrap"><table>
+  <tr><th>計器</th><td>AMReX <span class="term" title="AMReX 付属の軽量プロファイラ。コード中の計測タグごとに inclusive 時間とシェアを集計する。">TinyProfiler</span>（計測専用 TPROF ビルド。回帰スイートは非計測ビルドのまま分離）</td></tr>
+  <tr><th>対象</th><td>全物理 3 ケース（od2d／rb2d／capwave の champion 経路）各 2000 step の段分解＋OMP スモーク＋MPI strong scaling＋旧ソルバ（FK3）側の同条件走</td></tr>
+  <tr><th>公平条件</th><td>同一機・<span class="term" title="計測中にマシン上の他負荷が走っていないことを監視するゲート。超過した反復は無効として捨てる。">occupancy ゲート</span>・複数反復の代表値・限界コスト ms/step（init/IO 控除）で比較</td></tr>
+  <tr><th>旧ソルバ側</th><td>同一ケース系のプロファイルサンプルから圧力ソルバ（poisson_p）シェアを推定（サンプラ量子化 ~16 ms の誤差込み）</td></tr>
+</table></div>
+
+<h3>実測（段分解、inclusive share、各 2000 step）</h3>
+<div class="tblwrap"><table>
+  <tr><th>段</th><th>シェア（3 ケースの幅）</th></tr>
+  <tr><th>圧力射影（MLMG）</th><td><b>od2d 51.5%／rb2d 73.3%／capwave 48.6%</b>（支配的）</td></tr>
+  <tr><th>移流（整合 VOF＋運動量）</th><td>10〜20%</td></tr>
+  <tr><th>表面張力</th><td>5〜11%</td></tr>
+  <tr><th>サブグリッド転送・集約</th><td>2〜5%</td></tr>
+  <tr><th>粘性</th><td>&lt;1%（行が省略されるほど小さいケースあり）</td></tr>
+  <tr><th>その他（初期化・dt 制御・IO 等）</th><td>9〜11%</td></tr>
+</table></div>
+
+<h3>OMP スモーク（LOGGED、公平プロトコル非適用の簡易値）</h3>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測</th></tr>
+  <tr><th>ビルド</th><td><code>USE_OMP=TRUE</code> のコマンドライン変数オーバーライドのみ（ソース変更なし）で成功。<code>-fopenmp</code> 付与・専用ビルドツリーを確認</td></tr>
+  <tr><th>物理不変性</th><td>vortex アンカー L1=8.757616e-3 をスレッド数 1/2/4 の全てで同値再現。plotfile 構造も正常</td></tr>
+  <tr><th>速度（od2d 600 step）</th><td>T=1 7.31s → T=2 6.33s（−13.4%）→ T=4 6.38s（頭打ち）</td></tr>
+</table></div>
+
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>射影が支配段</b>：全物理ケースで MLMG が 48〜73%。rb2d の突出（73.3%）は M7 で既知の反復増（32→197）と整合＝悪条件ケースのコストは射影に集中する。</li>
+<li><b>旧ソルバとの MLMG シェア比較</b>：FK3 の poisson_p シェアは実測 約 20〜25% に対し FKeX は 48〜73%。仕様書の事前見立て（30〜50%/step）は両者の中間だった＝FKeX は「射影以外が速くなった結果、射影のシェアが上がった」構図。</li>
+<li><b>14× 比は複合効果</b>：総合比（od2d 14.0×・rb2d 14.1×）は射影単独の差では説明しきれず、移流機構の差（FK3 の nz=1 3D 機構による重複演算）とコンパイラ/OS 差（WSL2 g++ -O3 vs Windows ifx -O2）の複合と結論（仕様の想定と整合）。</li>
+<li><b>並列の主軸は box 分割（MPI）</b>：ループ内 OMP は 2 スレッドで −13% どまり・4 スレッドで頭打ち。物理不変性ゲートは全スレッド数で green＝OMP 併用自体は安全。</li>
+<li><b>計測の限界（記録のみ・修正せず）</b>：純移流ファミリ（vortex/zalesak 系）は二相 advance 経路を通らず段分解計器の対象外（プロファイラに段タグが出ない）。プラン指定 4 ケースのうち 1 本（vortex_fgvt）はこの理由で段分解不能。</li>
+</ul></div>
+<div class="warn">⚠ open：(1) <b>strong scaling（od2d、1/2/4/8 rank・median of 3）は測定継続中</b>＝共有機の並行負荷で反復間ばらつきが公平条件（~5%）を大幅超過（occupancy 違反疑い）し、再計測要否を含め未確定。(2) MPI オーバーヘッド比較（非 MPI vs 1 rank。非 MPI 側の基準値は取得済み）は strong scaling の 1 rank データ待ち。完了後に本節へ追記する。</div>
 
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6–M7）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
