@@ -1,0 +1,168 @@
+<!-- built from: Viscous Fingering - 単管毛管バリデーション理論.md — 対のMDと内容ミラー。片方を編集したら他方へ反映。 -->
+<!-- security: 外部CDN(jsdelivr)からMathJaxを読み込むため、CDN側の改ざん/差し替えリスクを
+     軽減する目的でバージョンを固定(3.2.2)し、SRI(integrity)属性でファイルのハッシュ検証を行う。
+     フローティングの @3 のようなタグ指定は将来配信内容が変わり得るため避けている。 -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>単管毛管流：2流体系の Washburn 方程式</title>
+<script>
+  // 各数式ブロックを、はみ出す場合だけフォントサイズを縮めて枠幅に収める。
+  // → スクロールバー不要（式は常に全部見える）。JS無効時は .eq の overflow-x:auto で
+  //   横スクロール（バー表示）にフォールバックするので、その場合も式は切れない。
+  function fitEquations(){
+    document.querySelectorAll('.eq').forEach(function(eq){
+      var m = eq.querySelector('mjx-container');
+      if(!m) return;
+      m.style.fontSize = '';  // いったん既定サイズに戻す（リサイズで広がった時のため）
+      for(var i=0; i<8 && eq.scrollWidth > eq.clientWidth + 1; i++){
+        var cur = parseFloat(getComputedStyle(m).fontSize);
+        var ratio = eq.clientWidth / eq.scrollWidth;
+        m.style.fontSize = Math.max(9, cur * ratio * 0.98) + 'px';
+      }
+    });
+  }
+  var _fitT;
+  window.addEventListener('resize', function(){
+    clearTimeout(_fitT); _fitT = setTimeout(fitEquations, 120);
+  });
+  window.MathJax = {
+    tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
+    startup: {
+      pageReady: function(){
+        return MathJax.startup.defaultPageReady().then(fitEquations);
+      }
+    }
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"
+  integrity="sha384-Wuix6BuhrWbjDBs24bXrjf4ZQ5aFeFWBuKkFekO2t8xFU0iNaLQfp2K6/1Nxveei"
+  crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#0c0d10; --line:#25272e; --ink:#e9e9ec; --mut:#8b8f9a; --dim:#5b5f6a;
+    --accent:#6fd6c8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Helvetica Neue",-apple-system,"Segoe UI",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.75;}
+  .wrap{max-width:780px;margin:0 auto;padding:64px 26px 100px;}
+  header{margin-bottom:44px;}
+  .kicker{font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:var(--accent);font-weight:600;}
+  h1{margin:14px 0 0;font-size:30px;font-weight:300;letter-spacing:.01em;}
+  header .sub{color:var(--mut);font-size:14.5px;margin-top:14px;max-width:62ch;}
+  figure{margin:40px 0;}
+  figure .frame{background:#fff;border-radius:10px;padding:8px;box-shadow:0 18px 50px rgba(0,0,0,.45);}
+  figure svg{display:block;width:100%;height:auto;}
+  figcaption{color:var(--dim);font-size:12.5px;margin-top:10px;text-align:center;}
+  h2{font-size:15px;font-weight:600;color:var(--ink);letter-spacing:.02em;margin:44px 0 14px;
+    border-bottom:1px solid var(--line);padding-bottom:10px;}
+  p{color:#cfd0d6;font-size:15px;}
+  /* fitEquations() が式を枠内に縮めるのでスクロール不要。overflow:hidden で両方向とも
+     バーを出さない（overflow-x:auto だと仕様上 overflow-y が auto に昇格し、式が数px高い
+     だけで縦バーが出てしまうため hidden で固定）。 */
+  .eq{overflow:hidden;padding:18px 4px;margin:8px 0 18px;}
+  .note{color:var(--mut);font-size:13.5px;}
+  /* 用語ホバー：ドット下線＋ネイティブtitleツールチップ（FGB-CSF比較表と同じ流儀） */
+  .tip{border-bottom:1px dotted var(--accent); cursor:help;}
+  footer{margin-top:70px;padding-top:20px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;}
+  @media(max-width:520px){h1{font-size:24px}.wrap{padding:44px 18px 80px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Viscous Fingering — 事前 <span class="tip" title="数値計算の結果が正しいかどうかを、理論解や実験結果と比較して確かめること">Validation</span></div>
+  <h1>単管毛管流：2流体系の Washburn 方程式</h1>
+  <p class="sub">水平単管内を、粘性の異なる2つの非混和流体が入れ替わりながら進む問題（<span class="tip" title="接触角・毛管圧・濡れ性など、界面が壁に接して曲がる現象全般を指す">毛管現象</span>）の解析解。VOFソルバの<span class="tip" title="コードが物理的に正しい結果を出すかどうかの妥当性確認全般">検証</span>に使う。</p>
+</header>
+
+<figure>
+  <div class="frame">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 300" font-family="Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="680" height="300" fill="#ffffff"/>
+  <line x1="60" y1="90" x2="600" y2="90" stroke="#222" stroke-width="3"/>
+  <line x1="60" y1="190" x2="600" y2="190" stroke="#222" stroke-width="3"/>
+  <rect x="61" y="91" width="239" height="98" fill="#8ecae6" fill-opacity="0.55"/>
+  <rect x="300" y="91" width="299" height="98" fill="#f4a261" fill-opacity="0.5"/>
+  <path d="M 300 91 Q 270 140 300 189" fill="none" stroke="#023047" stroke-width="2.5"/>
+  <path d="M 300 91 L 300 108 M 300 91 L 285 115" fill="none" stroke="#555" stroke-width="1"/>
+  <path d="M 296 106 A 9 9 0 0 0 288 100" fill="none" stroke="#555" stroke-width="1.2"/>
+  <text x="268" y="118" font-size="13" fill="#333">&#952;</text>
+  <line x1="300" y1="140" x2="340" y2="140" stroke="#d62828" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="345" y="145" font-size="15" fill="#d62828">v = dx/dt</text>
+  <text x="150" y="145" font-size="17" fill="#023047" text-anchor="middle">&#956;&#8321;（invading）</text>
+  <text x="150" y="165" font-size="12" fill="#023047" text-anchor="middle">fluid 1</text>
+  <text x="450" y="145" font-size="17" fill="#7f3f00" text-anchor="middle">&#956;&#8322;（defending）</text>
+  <text x="450" y="165" font-size="12" fill="#7f3f00" text-anchor="middle">fluid 2</text>
+  <line x1="285" y1="115" x2="295" y2="115" stroke="#023047" stroke-width="1.5" marker-end="url(#arrowsmall)"/>
+  <line x1="285" y1="165" x2="295" y2="165" stroke="#023047" stroke-width="1.5" marker-end="url(#arrowsmall)"/>
+  <text x="255" y="120" font-size="13" fill="#023047">&#963;</text>
+  <line x1="60" y1="220" x2="300" y2="220" stroke="#333" stroke-width="1"/>
+  <line x1="60" y1="213" x2="60" y2="227" stroke="#333" stroke-width="1"/>
+  <line x1="300" y1="213" x2="300" y2="227" stroke="#333" stroke-width="1"/>
+  <text x="180" y="238" font-size="14" fill="#333" text-anchor="middle">x(t)</text>
+  <line x1="60" y1="255" x2="600" y2="255" stroke="#333" stroke-width="1"/>
+  <line x1="60" y1="248" x2="60" y2="262" stroke="#333" stroke-width="1"/>
+  <line x1="600" y1="248" x2="600" y2="262" stroke="#333" stroke-width="1"/>
+  <text x="330" y="273" font-size="14" fill="#333" text-anchor="middle">L</text>
+  <line x1="625" y1="90" x2="625" y2="140" stroke="#333" stroke-width="1"/>
+  <line x1="618" y1="90" x2="632" y2="90" stroke="#333" stroke-width="1"/>
+  <line x1="618" y1="140" x2="632" y2="140" stroke="#333" stroke-width="1"/>
+  <line x1="625" y1="140" x2="625" y2="190" stroke="#333" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="645" y="120" font-size="14" fill="#333">r</text>
+  <line x1="60" y1="140" x2="600" y2="140" stroke="#999" stroke-width="1" stroke-dasharray="4,3"/>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#d62828"/>
+    </marker>
+    <marker id="arrowsmall" markerWidth="6" markerHeight="6" refX="4" refY="2" orient="auto">
+      <path d="M0,0 L4,2 L0,4 Z" fill="#023047"/>
+    </marker>
+  </defs>
+</svg>
+  </div>
+  <figcaption>半径 r・全長 L の単管。<span class="tip" title="界面を後から押して進む側の流体">invading fluid</span>（&#956;&#8321;）が <span class="tip" title="押しのけられて先を占める側の流体">defending fluid</span>（&#956;&#8322;）を押しながら x(t) だけ進む。</figcaption>
+</figure>
+
+<h2>0. セットアップ</h2>
+<p>重力・慣性を無視した<span class="tip" title="各瞬間ごとに力が釣り合っているとみなす近似。加減速の過渡的な効果（慣性項）を無視する">準定常</span>近似（低 <span class="tip" title="Reynolds number Re = 慣性力／粘性力。小さいほど粘性支配（層流）で、この準定常近似が妥当になる">Reynolds数</span>・低 <span class="tip" title="Capillary number Ca = 粘性力／表面張力。小さいほど表面張力が支配的">Capillary数</span>）。<span class="tip" title="メニスカス：2流体の境界面。管壁との接触角θで曲率が決まる">メニスカス</span>位置 $x(t)$ が $x{=}0$（毛管入口）から $x{=}L$（開放端）へ進む。</p>
+
+<h2>1. 力の釣り合い</h2>
+<p><span class="tip" title="Hagen–Poiseuille則：円管内の定常粘性流れにおいて、圧力損失ΔPと流量Qが ΔP = 8μℓQ/(πr⁴) で結ばれるという古典的な関係式">Hagen–Poiseuille則</span>（体積流量 $Q=\pi r^2v$）より、各流体区間の粘性圧力損失は：</p>
+<div class="eq">$$\Delta P = \frac{8\mu\ell}{r^2}v \tag{1}$$</div>
+<p>直列な2区間（長さ $x$ と $L-x$）の圧力損失の和が、<span class="tip" title="Young–Laplace式：曲がった界面をはさむ2流体間の圧力差 ΔP = 2σcosθ/r を、表面張力σと界面の曲率半径から与える式">Young–Laplace式</span>（毛管圧）と釣り合う。(1)式を両区間に適用して足し合わせると：</p>
+<div class="eq">$$\frac{2\sigma\cos\theta}{r} = \frac{8v}{r^2}\big[\mu_1 x+\mu_2(L-x)\big] \tag{2}$$</div>
+
+<h2>2. 速度（瞬間値）</h2>
+<p>(2)式を $v=dx/dt$ について解くと：</p>
+<div class="eq">$$v(x) = \frac{dx}{dt} = \frac{r\sigma\cos\theta}{4\big[\mu_2 L + (\mu_1-\mu_2)x\big]} \tag{3}$$</div>
+<p class="note">$\mu_1,\mu_2$：invading／defending 流体の粘性、$\sigma$：表面張力、$\theta$：接触角。</p>
+
+<h2>3. 積分形（$x(0)=x_0$）</h2>
+<p>(3)式を変数分離すると：</p>
+<div class="eq">$$4\big[\mu_2 L+(\mu_1-\mu_2)x\big]\,dx = r\sigma\cos\theta\,dt \tag{4}$$</div>
+<p>(4)式の両辺を $x_0 \to x$、$0\to t$ で積分：</p>
+<div class="eq">$$\mu_2 L (x-x_0) + \frac{\mu_1-\mu_2}{2}\left(x^2-x_0^2\right) = \frac{r\sigma\cos\theta}{4}\,t \tag{5}$$</div>
+
+<h2>4. 主結果：$x=F(t)$</h2>
+<p>(5)式を $x$ の2次方程式として解くと（$\mu_1\neq\mu_2$ の場合）：</p>
+<div class="eq">$$x(t) = \frac{-\mu_2 L + \sqrt{\big(\mu_2 L+(\mu_1-\mu_2)x_0\big)^2 + \dfrac{(\mu_1-\mu_2)\,r\sigma\cos\theta}{2}\,t}}{\mu_1-\mu_2} \tag{6}$$</div>
+
+<h2>5. <span class="tip" title="式が既知の特別な場合や極限で破綻していないかを簡単に確かめること">Sanity check</span></h2>
+<p>$t=0$ では (6)式の根号内が $\big(\mu_2L+(\mu_1-\mu_2)x_0\big)^2$ となり $x(0)=x_0$ に一致。(3)式で $\mu_2\to0$（defending側が空気などの低粘性流体）とすると、古典的な <span class="tip" title="Lucas–Washburn equation：単一の濡れ性液体が毛管に自然に吸い込まれていく現象を記述する古典式。x(t) ∝ √t">Lucas–Washburn方程式</span>（$x\propto\sqrt{t}$）に一致する。</p>
+
+<h2>6. Validationでの使い方</h2>
+<p>VOFソルバにこのセットアップを与えて数値計算し、$x(t)$ を解析解と時系列で直接比較する。誤差が閾値内なら Viscous Fingering 本編（多孔質構造）へ進む前のV&amp;V（Verification &amp; Validation）の1ステップとして使える。</p>
+
+<footer>
+  導出ノート（Obsidian, 詳細版）: Viscous Fingering - 単管毛管バリデーション理論.md
+</footer>
+
+</div>
+</body>
+</html>
