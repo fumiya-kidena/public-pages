@@ -54,7 +54,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-08（M5 追記）</p>
+<p class="updated">最終更新：2026-07-08（M6 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -211,6 +211,30 @@
 <li>参照ソルバの FGVT アンカーは欠陥 run 由来＝修正済みハーネスでは大幅に下回るのが正常 → 判定は「同粗格子の plain を超える」トレンドゲートへ。</li>
 </ul></div>
 <div class="warn">⚠ 参照ソルバ側の FGVT vortex 再走（是正ハーネス）は M1 と共有の open item のまま。</div>
+
+<h2>M6 — サブグリッド表面張力（FGB-CSF）（2026-07-08）<small>※公開版は要約</small></h2>
+<p>手法の核＝サブグリッド上で評価した表面張力を粗格子へ整合的に集約する経路の検証。詳細な数式・構成は論文発表まで非公開。</p>
+<div class="tblwrap"><table>
+  <tr><th>ケース</th><th>概要</th></tr>
+  <tr><th>sdrop_fgb × {imp,set}</th><td>M4 と同一の静止液滴 S プロトコルを champion 経路で。曲率源＝検証用厳密／細格子直接／粗格子放送の 3 構成</td></tr>
+  <tr><th>capwave_fgb</th><td>毛管波を champion 経路で（曲率源 2 方式）</td></tr>
+</table></div>
+<div class="tblwrap"><table>
+  <tr><th>ゲート</th><th>実測（multilinear 再ベースライン後）</th></tr>
+  <tr><th>恒等（厳密曲率）</th><td>impulsive <b>5.2e-21</b>／settled 1.10e-14・Δp*=1.00000000 ＝ 集約経路は力の釣合いを厳密に保つ</td></tr>
+  <tr><th>粗放送</th><td>impulsive 2.18e-13／settled 2.07e-11・<b>Δp*=1.00189/1.00179（旧ソルバと 6 桁一致）</b></td></tr>
+  <tr><th>細曲率</th><td>impulsive <b>4.77e-14</b>（放送比 4.6 倍良）。settled は <b>3.34e-8 の有界床</b>（旧ソルバの飽和 0.98 は再現せず・機構調査済み。champion 裁定は M7 へ保留）</td></tr>
+  <tr><th>毛管波（粗放送）</th><td>RMS <b>0.002993</b>（旧ソルバ是正アンカー 0.00824 の 1/2.7。M4 粗経路との内部整合 ✓）</td></tr>
+  <tr><th>回帰</th><td>M0〜M5 全て維持</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li><b>集約経路が balanced-force の恒等を厳密に保つ</b>（厳密曲率で machine-zero）＝核の離散が正しい直接証明。</li>
+<li><b>旧ソルバの細曲率 settled 飽和は実装/環境固有</b>の可能性が高い（FKeX では再現せず有界床）＝手法の主経路にとって良い知らせ。</li>
+<li><b>補間 2 方式化＋multilinear champion</b>（ユーザ裁定・ψ-curl 削除）。multilinear 化で毛管波 RMS は 2.3 倍増（それでも旧ソルバの 1/2.7）。</li>
+<li><b>参照アンカー全面更新</b>（欠陥 2 件是正の再走・窓固定）＋<b>因子分離</b>：旧ソルバ側の補助機構 2 つが合計 −65% の精度コスト＝FKeX が良い構造的理由を特定。ソルバ許容誤差の寄与はゼロと確定。</li>
+</ul></div>
+<div class="warn">⚠ 細曲率 settled の有界床（3.34e-8）は曲率源 champion 保留中の暫定分類。M7 の動的 A/B で決着予定。</div>
 
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 

@@ -58,7 +58,7 @@
 <main>
 
 <h1>FKeX — 開発ドキュメント</h1>
-<p class="updated">最終更新：2026-07-08（M5 完了時点）／初版：2026-07-07</p>
+<p class="updated">最終更新：2026-07-08（M6 完了時点）／初版：2026-07-07</p>
 
 <p><b>FKeX</b>（仮名）は <a href="https://github.com/AMReX-Codes/amrex" target="_blank" rel="noopener">AMReX</a> ベースの非圧縮二相流ソルバ。<span class="term" title="Volume of Fluid 法。各セルの液相体積分率（0〜1）で気液界面を表現する二相流の標準手法。">VOF 法</span>に<span class="term" title="界面近傍だけ通常格子より細かいサブグリッドで VOF 界面を表現し、表面張力もそのサブグリッド上で評価するクロージャ。">サブグリッド解像の界面表現</span>（fine-grid interface closure）を組み合わせた手法を、AMReX のデータ構造と線形ソルバの上に<span class="term" title="旧コードを翻訳・コピーせず、数式仕様ノートから新規に書き下ろす開発方式。旧コードは数値突合の基準（実行オラクル）としてのみ用いる。">クリーンルーム</span>で新規実装する。研究用 Fortran ソルバ（FK3）の後継<sup><a href="#fn1">†1</a></sup>。</p>
 <p>このページは開発ドキュメントの<b>入口</b>（インデックス）。実装の節目（マイルストーン）ごとに更新する。設計判断の深掘りと検証の生データは、上部ナビの<a href="サブ格子表現の設計判断.html">設計判断</a>・<a href="検証台帳.html">検証台帳</a>の各ページへ。</p>
@@ -174,7 +174,7 @@
   <tr><td>M3</td><td>二相・変密度（密度比 1000:1、<span class="term" title="質量フラックスと運動量フラックスを同一の再構成から組み、密度比が大きくても界面で運動量が破綻しない移流。">mass-momentum consistent</span> 移流）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。並進固定点＝u 誤差厳密 0・frozen-RHS クロスコード一致）</td></tr>
   <tr><td>M4</td><td>従来型 balanced CSF（静止液滴・毛管波検証）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。balanced-force 恒等＝machine zero・毛管波 RMS 0.0015）</td></tr>
   <tr><td>M5</td><td>サブグリッド移流（FGVT）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。細解像で plain の 3〜5 倍精度・固定点ビット成立）</td></tr>
-  <tr><td>M6</td><td>サブグリッド表面張力（FGB-CSF、champion 構成）</td><td class="status-todo">—</td></tr>
+  <tr><td>M6</td><td>サブグリッド表面張力（FGB-CSF、champion 構成）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。恒等 machine-zero・旧ソルバと Δp* 6桁一致・既知の飽和病理は再現せず）</td></tr>
   <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td class="status-todo">—</td></tr>
   <tr><td>M8</td><td>MPI 並列・富岳（A64FX）ビルド</td><td class="status-todo">—</td></tr>
   <tr><td>M9</td><td>性能検証</td><td class="status-todo">—</td></tr>
@@ -230,6 +230,14 @@
 </ul>
 <div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：vortex 細解像 <b>L1=1.89e-3</b>＝同じ粗格子の plain PLIC（8.76e-3）の 4.6 倍改善で、<b>2 倍細かい plain 128²（5.0e-3）をも上回る</b>。固定点テストが<b>全 3 補間方式でビット厳密成立</b>（集約幾何の直接証明）。frozen サブ場クロスコード全 PASS。回帰全ビット一致。</div>
 <div class="warn"><b>重要発見</b>：massfix 後に u=P/M を再除算すると 1ulp の丸めが播種され、QUICK×密度比 1000（無粘性）で毎ステップ ×1.1 に増幅されて発散する。P/M は数学的に不変なので <b>u 据え置きが浮動小数点的に正しい実装</b>（数式ノートに修正を記録）。</div>
+
+<h3>M6 完了メモ（2026-07-08）＋補間方式の整理</h3>
+<p>手法の核＝サブグリッド上で評価した表面張力を粗格子へ整合的に集約する経路が入った段階（公開版では要約に留める）。</p>
+<ul>
+  <li><b>中身</b>：曲率源は「細格子で直接評価」「粗格子から放送」の 2 方式をノブ化（champion 選定は M7 の動的検証で決定＝保留中）。検証専用の厳密曲率モードで集約経路の恒等性を分離測定。</li>
+</ul>
+<div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：厳密曲率で<b>恒等が machine-zero</b>（5.2e-21／1.9e-13・Δp*=1）＝集約が力の釣合いを一切損なわない。粗放送は旧ソルバと <b>Δp* 6 桁一致</b>。毛管波も旧ソルバ記録の 1/2.7。<b>旧ソルバで知られていた細曲率の settled 飽和（|U|≈0.98）は FKeX では再現せず</b>、1e-8 級の有界床に留まる（機構調査済み）。</div>
+<div class="warn"><b>補間方式の整理（ユーザ裁定）</b>：粗→細速度補間は <b>linear／multilinear の 2 方式</b>に確定（multilinear＝champion・全次元）。ψ-curl は削除。champion 系基準値は multilinear で再取得済み。あわせて旧ソルバの参照アンカーを欠陥是正の再走で全面更新し、差の因子分離（旧ソルバ側の補助機構 2 つが合計 −65% の精度コスト）まで完了。</div>
 
 <h2>開発環境メモ</h2>
 <ul>
