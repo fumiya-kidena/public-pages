@@ -302,6 +302,23 @@
   <tr><th>速度（od2d 600 step）</th><td>T=1 7.31s → T=2 6.33s（−13.4%）→ T=4 6.38s（頭打ち）</td></tr>
 </table></div>
 
+<h3>3D コスト（2026-07-09・同一機・単コア同士・occupancy クリーン）</h3>
+<p>2D の 14× に対する反証可能予測「genuine 3D では FK3 の <span class="term" title="FK3 は真の 2D ビルドを持たず、2D ケースを 1 セル厚の 3D 格子で回す。z 方向の複製セル・ステンシルが 2D では無駄な固定オーバヘッドとして乗る。">nz=1 3D 機構</span>（1 セル厚 3D の handicap）が外れ、比が縮む」を実測で検証した段。</p>
+<div class="tblwrap"><table>
+  <tr><th>対象</th><th>ケース（格子）</th><th>ms/step</th><th>備考</th></tr>
+  <tr><th>FKeX 3D 移流</th><td>dropadvect3d（32³+64³、張力なし）</td><td><b>55.34</b></td><td>median-3 spread 3.4%</td></tr>
+  <tr><th>FKeX 3D champion</th><td>sdrop3d（32³+64³、全物理）</td><td><b>105.94</b></td><td>median-3 spread 1.9%</td></tr>
+  <tr><th>FK3 3D</th><td>od3d（32³、HF）</td><td><b>315.57</b></td><td>timer 総和 94.6719 s/300 step</td></tr>
+</table></div>
+<div class="ok"><b>3D で分かったこと</b>：
+<ul>
+<li><b>3D 比＝315.57/105.94＝2.98×</b>（2D の 14.0× から縮小）＝<b>予測どおり nz=1 ゲタが外れた</b>。</li>
+<li><b>ゲタの定量（FK3 単独・環境差なし）</b>：per-cell-per-step が 2D（40960 セル）4.15e−3 ms vs 3D（294912 セル）1.07e−3 ms＝<b>2D が約 3.9× 高い</b>。固定 3D オーバヘッドが 2D で死荷重として乗り、genuine 3D では 7.2 倍のセルに希釈される指紋。2D→3D で比は約 4.7× 縮小し、残る 2.98× は compiler/OS 差＋残余アルゴリズム差＋ケース非同一の合成。</li>
+<li><b>3D 段分解の署名</b>：2D で射影 51.5%（最大段）だったのが 3D では 23.3% に低下し、<b>移流が最大段（35.7%）</b>・表面張力 19.3%＝非ソルバ段が genuine 3D で重くなる（射影支配は 2D 固有）。</li>
+<li><b>副次の節目</b>：(1) <b>champion（FGVT＋FGB-CSF）の 3D 初実行成功</b>（3D 正規化の数式導出で完走）。(2) <b>FKeX の 3D 曲率が健全</b>（静止球 Laplace 均衡 dp*＝1.00091）。</li>
+</ul></div>
+<div class="warn">⚠ caveat：FKeX 3D（静止球 sdrop3d）と FK3 3D（振動球 od3d）は<b>非同一ケース</b>（同一 champion 機構は共有）。FK3 の 3D 曲率は既知バグにより<b>物理無効＝timing 専用</b>（step 300 完走・有限で per-step 基準は妥当）。3D は<b>単一・非同一点の暫定値</b>、正式 3D 検証は将来課題。</div>
+
 <div class="ok"><b>わかったこと</b>：
 <ul>
 <li><b>射影が支配段</b>：全物理ケースで MLMG が 48〜73%。rb2d の突出（73.3%）は M7 で既知の反復増（32→197）と整合＝悪条件ケースのコストは射影に集中する。</li>
