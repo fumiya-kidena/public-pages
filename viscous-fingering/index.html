@@ -1,22 +1,26 @@
 <!-- built from: Viscous Fingering - 単管毛管バリデーション理論.md — 対のMDと内容ミラー。片方を編集したら他方へ反映。 -->
-<!-- security: 外部CDN(jsdelivr)からMathJaxを読み込むため、CDN側の改ざん/差し替えリスクを
-     軽減する目的でバージョンを固定(3.2.2)し、SRI(integrity)属性でファイルのハッシュ検証を行う。
-     フローティングの @3 のようなタグ指定は将来配信内容が変わり得るため避けている。 -->
+<!-- security: 外部CDN(jsdelivr)からKaTeXを読み込むため、CDN側の改ざん/差し替えリスクを
+     軽減する目的でバージョンを固定(0.16.9)し、SRI(integrity)属性でファイルのハッシュ検証を行う。
+     フローティング指定は将来配信内容が変わり得るため避けている。 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>単管毛管流：2流体系の Washburn 方程式</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+  integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
+  integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+  integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
 <script>
-  // 各数式ブロックを、はみ出す場合だけフォントサイズを縮めて枠幅に収める。
-  // → スクロールバー不要（式は常に全部見える）。JS無効時は .eq の overflow-x:auto で
-  //   横スクロール（バー表示）にフォールバックするので、その場合も式は切れない。
+  // KaTeX描画後、各式ブロックがはみ出す場合だけ font-size を縮めて枠幅に収める（スクロール不要）。
   function fitEquations(){
     document.querySelectorAll('.eq').forEach(function(eq){
-      var m = eq.querySelector('mjx-container');
+      var m = eq.querySelector('.katex-display') || eq.querySelector('.katex');
       if(!m) return;
-      m.style.fontSize = '';  // いったん既定サイズに戻す（リサイズで広がった時のため）
+      m.style.fontSize = '';
       for(var i=0; i<8 && eq.scrollWidth > eq.clientWidth + 1; i++){
         var cur = parseFloat(getComputedStyle(m).fontSize);
         var ratio = eq.clientWidth / eq.scrollWidth;
@@ -25,21 +29,15 @@
     });
   }
   var _fitT;
-  window.addEventListener('resize', function(){
-    clearTimeout(_fitT); _fitT = setTimeout(fitEquations, 120);
+  window.addEventListener('resize', function(){ clearTimeout(_fitT); _fitT = setTimeout(fitEquations, 120); });
+  document.addEventListener('DOMContentLoaded', function(){
+    renderMathInElement(document.body, {
+      delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],
+      throwOnError: false
+    });
+    fitEquations();
   });
-  window.MathJax = {
-    tex: { inlineMath: [['$','$']], displayMath: [['$$','$$']] },
-    startup: {
-      pageReady: function(){
-        return MathJax.startup.defaultPageReady().then(fitEquations);
-      }
-    }
-  };
 </script>
-<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"
-  integrity="sha384-Wuix6BuhrWbjDBs24bXrjf4ZQ5aFeFWBuKkFekO2t8xFU0iNaLQfp2K6/1Nxveei"
-  crossorigin="anonymous"></script>
 <style>
   :root{
     --bg:#0c0d10; --line:#25272e; --ink:#e9e9ec; --mut:#8b8f9a; --dim:#5b5f6a;
