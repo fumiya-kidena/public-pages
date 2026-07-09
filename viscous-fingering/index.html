@@ -1,19 +1,15 @@
 <!-- built from: Viscous Fingering - 単管毛管バリデーション理論.md — 対のMDと内容ミラー。片方を編集したら他方へ反映。 -->
-<!-- security: 外部CDN(jsdelivr)からKaTeXを読み込むため、CDN側の改ざん/差し替えリスクを
-     軽減する目的でバージョンを固定(0.16.9)し、SRI(integrity)属性でファイルのハッシュ検証を行う。
-     フローティング指定は将来配信内容が変わり得るため避けている。 -->
+<!-- 数式は self-host KaTeX 0.16.9（public-pages 直下 /katex/0.16.9/ を相対 ../katex/0.16.9/ で参照）。
+     外部CDN依存なし＝ページが public-pages で開ければ数式も必ず出る。単体ローカルでは katex/ が無いと出ない。 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>単管毛管流：2流体系の Washburn 方程式</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
-  integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
-  integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
-  integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="../katex/0.16.9/katex.min.css">
+<script defer src="../katex/0.16.9/katex.min.js"></script>
+<script defer src="../katex/0.16.9/contrib/auto-render.min.js"></script>
 <script>
   // KaTeX描画後、各式ブロックがはみ出す場合だけ font-size を縮めて枠幅に収める（スクロール不要）。
   function fitEquations(){
