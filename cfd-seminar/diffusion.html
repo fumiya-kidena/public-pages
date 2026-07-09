@@ -6,7 +6,9 @@
 <title>cfd-seminar — 3. 粘性項</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -34,57 +36,57 @@
 
 <h2>支配方程式</h2>
 <p>
-非圧縮の<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。左辺が時間変化＋移流、右辺が圧力勾配＋粘性拡散。">Navier-Stokes方程式</abbr>のうち、このステップで実装するのは<b>粘性項</b>（下線部）:
+非圧縮の<abbr class="tip" title="粘性をもつ流体の運動を表す基礎方程式。左辺が時間変化＋移流、右辺が圧力勾配＋粘性拡散。">Navier-Stokes方程式</abbr>のうち、このステップで実装するのは<b>粘性項</b>（下線部）:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = -\frac{1}{\rho}\nabla p + \underbrace{\nu\nabla^2\mathbf{u}}_{\text{粘性項}} \tag{1} $$</p>
 
 <h2>Step 1: 粘性項だけを取り出す</h2>
 <p>
 運動量式から<b>時間変化項と粘性項だけ</b>を残す。成分ごとに書くと:
 </p>
-<p class="eq-block"><span id="eq-extract-x" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-extract-y" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial u}{\partial t} = \nu\left(\frac{\partial^2 u}{\partial x^2}+\frac{\partial^2 u}{\partial y^2}\right) \tag{2} $$</p>
+<p class="eq">$$ \frac{\partial v}{\partial t} = \nu\left(\frac{\partial^2 v}{\partial x^2}+\frac{\partial^2 v}{\partial y^2}\right) \tag{3} $$</p>
 <p>
-右辺は<abbr class="term" title="動粘性係数。粘性の強さを密度で割ったもの。単位はm²/s。">ν</abbr>と速度のラプラシアン（2階微分の和）の積。
+右辺は<abbr class="tip" title="動粘性係数。粘性の強さを密度で割ったもの。単位はm²/s。">ν</abbr>と速度のラプラシアン（2階微分の和）の積。
 移流項と違って、<code>u</code>の式には<code>u</code>しか出てこない（<code>v</code>の平均は要らない）。
 </p>
 
 <h2>Step 2: 時間の離散化（前進Euler）</h2>
 <p>
-分数ステップ法では、前の項の結果に積み上げていく。出発点は<b>移流で進めた仮流速</b> <span class="katex-eq" id="eq-uadv"></span>、
-粘性まで進めた結果を <span class="katex-eq" id="eq-udiff"></span> と書く。
-<abbr class="term" title="1次精度で時間を進める、最も単純な時間積分。">前進Euler</abbr>で時間微分を前進差分にし、
-右辺のラプラシアンは前ステップの値 <span class="katex-eq" id="eq-un"></span>（コードの <code>un, vn</code>）で
-<abbr class="term" title="右辺を既知の（前ステップの）値だけで評価する解き方。連立方程式を解かずに済むが、時間刻みに安定条件がつく。">陽的</abbr>に評価すると:
+分数ステップ法では、前の項の結果に積み上げていく。出発点は<b>移流で進めた仮流速</b> $u^{\mathrm{adv}},\ v^{\mathrm{adv}}$、
+粘性まで進めた結果を $u^{\mathrm{diff}},\ v^{\mathrm{diff}}$ と書く。
+<abbr class="tip" title="1次精度で時間を進める、最も単純な時間積分。">前進Euler</abbr>で時間微分を前進差分にし、
+右辺のラプラシアンは前ステップの値 $u^{n},\ v^{n}$（コードの <code>un, vn</code>）で
+<abbr class="tip" title="右辺を既知の（前ステップの）値だけで評価する解き方。連立方程式を解かずに済むが、時間刻みに安定条件がつく。">陽的</abbr>に評価すると:
 </p>
-<p class="eq-block"><span id="eq-euler-x" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{u^{\mathrm{diff}} - u^{\mathrm{adv}}}{\Delta t} = \nu\left(\frac{\partial^2 u^{n}}{\partial x^2}+\frac{\partial^2 u^{n}}{\partial y^2}\right) \tag{4} $$</p>
 <p>
-<span class="katex-eq" id="eq-udiff2"></span> について解けば更新式。y成分も同じ手順で:
+$u^{\mathrm{diff}}$ について解けば更新式。y成分も同じ手順で:
 </p>
-<p class="eq-block"><span id="eq-scheme-u" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-scheme-v" class="katex-eq"></span></p>
+<p class="eq">$$ u^{\mathrm{diff}} = u^{\mathrm{adv}} + \Delta t\,\nu\left(\frac{\partial^2 u^{n}}{\partial x^2}+\frac{\partial^2 u^{n}}{\partial y^2}\right) \tag{5} $$</p>
+<p class="eq">$$ v^{\mathrm{diff}} = v^{\mathrm{adv}} + \Delta t\,\nu\left(\frac{\partial^2 v^{n}}{\partial x^2}+\frac{\partial^2 v^{n}}{\partial y^2}\right) \tag{6} $$</p>
 <p>
-コードでは <span class="katex-eq" id="eq-uadv2"></span> も <span class="katex-eq" id="eq-udiff3"></span> も同じ配列 <code>u</code>（移流ステップの結果が入っている <code>u(i,j)</code> に、粘性の分を足して上書きする）。
+コードでは $u^{\mathrm{adv}}$ も $u^{\mathrm{diff}}$ も同じ配列 <code>u</code>（移流ステップの結果が入っている <code>u(i,j)</code> に、粘性の分を足して上書きする）。
 </p>
 
 <h2>Step 3: 空間の離散化（<code>i+1/2</code>ずらし格子）</h2>
 <p>
-2階微分は、隣り合う3点を使った<abbr class="term" title="空間刻みdxについて2次精度。dxを半分にすれば誤差はおよそ4分の1になる（1次精度なら半分）。">2次精度</abbr><abbr class="term" title="両隣と自分の3点（+1, −2, +1の重み）で2階微分を近似する、中心差分の2階微分版。">中心差分</abbr>にする。<code>u</code>の点（<span class="katex-eq" id="eq-uidx"></span>）の上で:
+2階微分は、隣り合う3点を使った<abbr class="tip" title="空間刻みdxについて2次精度。dxを半分にすれば誤差はおよそ4分の1になる（1次精度なら半分）。">2次精度</abbr><abbr class="tip" title="両隣と自分の3点（+1, −2, +1の重み）で2階微分を近似する、中心差分の2階微分版。">中心差分</abbr>にする。<code>u</code>の点（$u_{i+1/2,\,j}$）の上で:
 </p>
-<p class="eq-block"><span id="eq-d2udx2" class="katex-eq"></span></p>
+<p class="eq">$$ \left.\frac{\partial^2 u^{n}}{\partial x^2}\right|_{i+1/2,\,j} \approx \frac{u^{n}_{i+3/2,\,j}-2u^{n}_{i+1/2,\,j}+u^{n}_{i-1/2,\,j}}{\Delta x^2} \tag{7} $$</p>
 <p>
-y方向（<span class="katex-eq" id="eq-d2udy2-name"></span>）も上下の3点で同じ形。これらをStep 2の更新式に入れると、<b>x方向の最終形</b>:
+y方向（$\partial^2 u/\partial y^2$）も上下の3点で同じ形。これらをStep 2の更新式に入れると、<b>x方向の最終形</b>:
 </p>
-<p class="eq-block"><span id="eq-disc-u" class="katex-eq"></span></p>
-<p><b>y方向</b>は<code>u</code>を<code>v</code>に置き換えるだけ（<code>v</code>の点 <span class="katex-eq" id="eq-vidx"></span> の上で評価）:</p>
-<p class="eq-block"><span id="eq-disc-v" class="katex-eq"></span></p>
+<p class="eq">$$ u^{\mathrm{diff}}_{i+1/2,\,j} = u^{\mathrm{adv}}_{i+1/2,\,j} + \Delta t\,\nu\left[\frac{u^{n}_{i+3/2,\,j}-2u^{n}_{i+1/2,\,j}+u^{n}_{i-1/2,\,j}}{\Delta x^2} + \frac{u^{n}_{i+1/2,\,j+1}-2u^{n}_{i+1/2,\,j}+u^{n}_{i+1/2,\,j-1}}{\Delta y^2}\right] \tag{8} $$</p>
+<p><b>y方向</b>は<code>u</code>を<code>v</code>に置き換えるだけ（<code>v</code>の点 $v_{i,\,j+1/2}$ の上で評価）:</p>
+<p class="eq">$$ v^{\mathrm{diff}}_{i,\,j+1/2} = v^{\mathrm{adv}}_{i,\,j+1/2} + \Delta t\,\nu\left[\frac{v^{n}_{i+1,\,j+1/2}-2v^{n}_{i,\,j+1/2}+v^{n}_{i-1,\,j+1/2}}{\Delta x^2} + \frac{v^{n}_{i,\,j+3/2}-2v^{n}_{i,\,j+1/2}+v^{n}_{i,\,j-1/2}}{\Delta y^2}\right] \tag{9} $$</p>
 
 <h2>数式とコードの対応</h2>
 <table>
 <tr><th>数式</th><th>コード</th></tr>
-<tr><td><span class="katex-eq" id="eq-t1"></span>（移流ステップの結果）</td><td><code>u(i,j)</code>（すでに入っている値）</td></tr>
-<tr><td><span class="katex-eq" id="eq-t2"></span></td><td><code>un(i,j)</code>, <code>un(i±1,j)</code>, <code>un(i,j±1)</code></td></tr>
-<tr><td><span class="katex-eq" id="eq-t3"></span>（粘性まで進めた結果）</td><td><code>u(i,j)</code>（同じ配列に上書き）</td></tr>
+<tr><td>$u^{\mathrm{adv}}_{i+1/2,\,j}$（移流ステップの結果）</td><td><code>u(i,j)</code>（すでに入っている値）</td></tr>
+<tr><td>$u^{n}_{i+1/2,\,j}\ \text{など}$</td><td><code>un(i,j)</code>, <code>un(i±1,j)</code>, <code>un(i,j±1)</code></td></tr>
+<tr><td>$u^{\mathrm{diff}}_{i+1/2,\,j}$（粘性まで進めた結果）</td><td><code>u(i,j)</code>（同じ配列に上書き）</td></tr>
 </table>
 <p class="figcap">
 ラプラシアンは前ステップの配列 <code>un</code>・<code>vn</code> から作り、移流後の <code>u</code>・<code>v</code> に足す。
@@ -132,7 +134,7 @@ cd ..
 python post/plot.py wrk/config.csv
 </pre></li>
 <li>結果を確認する。移流項だけのステップでは崩れていった流れが、拡散の
-    <abbr class="term" title="拡散は前後の値をならして急な差をなだらかにする働きがあり、数値的な振動を抑える。">ならす働き</abbr>で安定し、
+    <abbr class="tip" title="拡散は前後の値をならして急な差をなだらかにする働きがあり、数値的な振動を抑える。">ならす働き</abbr>で安定し、
     壁のno-slip条件が内部に伝わって、出口に向かってなめらかな放物線分布に発達していく
     （まだ圧力補正がないので厳密には非圧縮ではない）。右パネルの出口の速度分布が
     plane Poiseuille flow の解析解に近づいていれば正しい。</li>
@@ -151,29 +153,6 @@ python post/plot.py wrk/config.csv
 （<code>diffusion.f90</code> と <code>main.f90</code> をステージ → Commit → Push）。
 </div>
 
-<script>
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\underbrace{\\nu\\nabla^2\\mathbf{u}}_{\\text{粘性項}}", document.getElementById('eq-ns'));
-katex.render("\\frac{\\partial u}{\\partial t} = \\nu\\left(\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}\\right)", document.getElementById('eq-extract-x'));
-katex.render("\\frac{\\partial v}{\\partial t} = \\nu\\left(\\frac{\\partial^2 v}{\\partial x^2}+\\frac{\\partial^2 v}{\\partial y^2}\\right)", document.getElementById('eq-extract-y'));
-katex.render("u^{\\mathrm{adv}},\\ v^{\\mathrm{adv}}", document.getElementById('eq-uadv'));
-katex.render("u^{\\mathrm{diff}},\\ v^{\\mathrm{diff}}", document.getElementById('eq-udiff'));
-katex.render("u^{n},\\ v^{n}", document.getElementById('eq-un'));
-katex.render("\\frac{u^{\\mathrm{diff}} - u^{\\mathrm{adv}}}{\\Delta t} = \\nu\\left(\\frac{\\partial^2 u^{n}}{\\partial x^2}+\\frac{\\partial^2 u^{n}}{\\partial y^2}\\right)", document.getElementById('eq-euler-x'));
-katex.render("u^{\\mathrm{diff}}", document.getElementById('eq-udiff2'));
-katex.render("u^{\\mathrm{diff}} = u^{\\mathrm{adv}} + \\Delta t\\,\\nu\\left(\\frac{\\partial^2 u^{n}}{\\partial x^2}+\\frac{\\partial^2 u^{n}}{\\partial y^2}\\right)", document.getElementById('eq-scheme-u'));
-katex.render("v^{\\mathrm{diff}} = v^{\\mathrm{adv}} + \\Delta t\\,\\nu\\left(\\frac{\\partial^2 v^{n}}{\\partial x^2}+\\frac{\\partial^2 v^{n}}{\\partial y^2}\\right)", document.getElementById('eq-scheme-v'));
-katex.render("u^{\\mathrm{adv}}", document.getElementById('eq-uadv2'));
-katex.render("u^{\\mathrm{diff}}", document.getElementById('eq-udiff3'));
-katex.render("u_{i+1/2,\\,j}", document.getElementById('eq-uidx'));
-katex.render("\\left.\\frac{\\partial^2 u^{n}}{\\partial x^2}\\right|_{i+1/2,\\,j} \\approx \\frac{u^{n}_{i+3/2,\\,j}-2u^{n}_{i+1/2,\\,j}+u^{n}_{i-1/2,\\,j}}{\\Delta x^2}", document.getElementById('eq-d2udx2'));
-katex.render("\\partial^2 u/\\partial y^2", document.getElementById('eq-d2udy2-name'));
-katex.render("u^{\\mathrm{diff}}_{i+1/2,\\,j} = u^{\\mathrm{adv}}_{i+1/2,\\,j} + \\Delta t\\,\\nu\\left[\\frac{u^{n}_{i+3/2,\\,j}-2u^{n}_{i+1/2,\\,j}+u^{n}_{i-1/2,\\,j}}{\\Delta x^2} + \\frac{u^{n}_{i+1/2,\\,j+1}-2u^{n}_{i+1/2,\\,j}+u^{n}_{i+1/2,\\,j-1}}{\\Delta y^2}\\right]", document.getElementById('eq-disc-u'));
-katex.render("v_{i,\\,j+1/2}", document.getElementById('eq-vidx'));
-katex.render("v^{\\mathrm{diff}}_{i,\\,j+1/2} = v^{\\mathrm{adv}}_{i,\\,j+1/2} + \\Delta t\\,\\nu\\left[\\frac{v^{n}_{i+1,\\,j+1/2}-2v^{n}_{i,\\,j+1/2}+v^{n}_{i-1,\\,j+1/2}}{\\Delta x^2} + \\frac{v^{n}_{i,\\,j+3/2}-2v^{n}_{i,\\,j+1/2}+v^{n}_{i,\\,j-1/2}}{\\Delta y^2}\\right]", document.getElementById('eq-disc-v'));
-katex.render("u^{\\mathrm{adv}}_{i+1/2,\\,j}", document.getElementById('eq-t1'));
-katex.render("u^{n}_{i+1/2,\\,j}\\ \\text{など}", document.getElementById('eq-t2'));
-katex.render("u^{\\mathrm{diff}}_{i+1/2,\\,j}", document.getElementById('eq-t3'));
-</script>
   </main>
 </body>
 </html>

@@ -5,8 +5,6 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>cfd-seminar — 概要</title>
         <link rel="stylesheet" href="assets/style.css" />
-        <link rel="stylesheet" href="assets/katex.min.css" />
-        <script src="assets/katex.min.js"></script>
     </head>
     <body>
         <nav class="sidebar">
@@ -25,38 +23,30 @@
         </nav>
         <main>
             <h1>cfd-seminar まとめ</h1>
-            <p class="updated">最終更新: 2026-07-04</p>
+            <p class="updated">最終更新: 2026-07-08</p>
 
             <p>
                 Fortranベースの、ごくシンプルな2次元非圧縮<abbr
-                    class="term"
+                    class="tip"
                     title="Computational Fluid Dynamics（数値流体力学）"
                     >CFD</abbr
                 >コード。速度をセルの面・圧力をセル中心に置く<abbr
-                    class="term"
+                    class="tip"
                     title="Marker-And-Cell法。速度uをセル境界面、圧力pをセル中心に配置する格子の取り方。連続の式・運動量の式の離散化が自然になり、圧力と速度の間のチェッカーボード状の数値振動が起きにくい。"
                     >MAC（スタガード）格子</abbr
-                ><abbr
-                    class="cite"
-                    title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189."
-                    >[4]</abbr
-                >の上で、<abbr
-                    class="term"
+                ><a class="cite" href="#ref-4" title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. doi:10.1063/1.1761178">[4]</a>の上で、<abbr
+                    class="tip"
                     title="速度・圧力を時間分離して解く手法。まず圧力を無視して仮の速度を計算し、その発散を打ち消すように圧力を求めて速度を補正する。"
                     >Fractional Step法</abbr
-                >（射影法）<abbr
-                    class="cite"
-                    title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762."
-                    >[3]</abbr
-                >で解く。
+                >（射影法）<a class="cite" href="#ref-3" title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a>で解く。
             </p>
 
             <p>
                 ソースは
-                <a href="https://github.com/KIDENA-Fumiya/cfd-seminar"
+                <a href="https://github.com/KIDENA-Fumiya/cfd-seminar" target="_blank" rel="noopener"
                     >GitHubリポジトリ</a
                 >（<abbr
-                    class="term"
+                    class="tip"
                     title="MIT License（Copyright © 2026 KIDENA-Fumiya）。著作権表示とこの許諾表示を残せば、商用利用も含めて自由に使用・複製・改変・再配布・販売してよい寛容なライセンス。ソフトウェアは無保証で、作者は生じた損害の責任を負わない。全文はリポジトリの LICENSE ファイルにある。"
                     >MITライセンス</abbr
                 >）にある。
@@ -116,6 +106,11 @@ cfd-seminar/
                     >初期条件</a
                 >を参照）。
             </p>
+            <h2 id="references">参考文献</h2>
+            <ul class="ref-list">
+  <li id="ref-3">[3] Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2" target="_blank" rel="noopener">doi:10.1090/S0025-5718-1968-0242392-2</a></li>
+  <li id="ref-4">[4] Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. <a href="https://doi.org/10.1063/1.1761178" target="_blank" rel="noopener">doi:10.1063/1.1761178</a></li>
+            </ul>
         </main>
     </body>
 </html>

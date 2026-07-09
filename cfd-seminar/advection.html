@@ -6,7 +6,9 @@
 <title>cfd-seminar — 2. 移流項</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -35,17 +37,17 @@ cavityに書き換えるとき）。粘性（<code>diffusion.f90</code>）と圧
 
 <h2>支配方程式</h2>
 <p>
-このコードが解くのは非圧縮の<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。左辺が時間変化＋移流、右辺が圧力勾配＋粘性拡散。">Navier-Stokes方程式</abbr>。ベクトルで書くと:
+このコードが解くのは非圧縮の<abbr class="tip" title="粘性をもつ流体の運動を表す基礎方程式。左辺が時間変化＋移流、右辺が圧力勾配＋粘性拡散。">Navier-Stokes方程式</abbr>。ベクトルで書くと:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + \underbrace{(\mathbf{u}\cdot\nabla)\mathbf{u}}_{\text{移流項}} = -\frac{1}{\rho}\nabla p + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
 <p>
-このステップで実装するのは移流項 <span class="katex-eq" id="eq-adv-vec"></span>（下線部）。他の項（圧力・粘性）は次のステップ以降。
+このステップで実装するのは移流項 $(\mathbf{u}\cdot\nabla)\mathbf{u}$（下線部）。他の項（圧力・粘性）は次のステップ以降。
 </p>
 
 <h2>題材: channel flow（境界条件は与える）</h2>
 <p>
-題材は <abbr class="term" title="2枚の平行な壁の間を流れる流れ。左から一様流を入れると、下流で放物線状の速度分布（plane Poiseuille flow）に発達する。">channel flow</abbr>:
-左端から一様流 <code>U0</code> を流し込み、上下は静止した壁（<abbr class="term" title="壁の上で流体の速度が壁と同じになる（静止壁なら0になる）という条件。粘性流体の基本的な境界条件。">no-slip</abbr>）、右端は自由に流れ出る（流出）。
+題材は <abbr class="tip" title="2枚の平行な壁の間を流れる流れ。左から一様流を入れると、下流で放物線状の速度分布（plane Poiseuille flow）に発達する。">channel flow</abbr>:
+左端から一様流 <code>U0</code> を流し込み、上下は静止した壁（<abbr class="tip" title="壁の上で流体の速度が壁と同じになる（静止壁なら0になる）という条件。粘性流体の基本的な境界条件。">no-slip</abbr>）、右端は自由に流れ出る（流出）。
 </p>
 <div style="text-align:center">
 <svg viewBox="0 0 420 250" width="390" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
@@ -76,7 +78,7 @@ channel flow の計算領域と境界。左＝一様流入、上下＝静止壁�
 </p>
 <p>
 これらを配列に落とし込んだ<code>bc.f90</code>（<code>boundary_condition</code>）はすでに完成させてある。
-壁の値を格子点にどう与えるか（スタガード格子ならではの<abbr class="term" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr>の使い方）は、
+壁の値を格子点にどう与えるか（スタガード格子ならではの<abbr class="tip" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr>の使い方）は、
 <a href="bc.html">4. 境界条件</a>で<code>bc.f90</code>を cavity 用に自分で書き換えるときにまとめて扱う。
 なお channel では流入は固定値、流出は外挿で決めるため、そのままでは出入りの量が釣り合わない。
 <code>bc.f90</code>では出口速度を毎ステップ再スケーリングして質量を保存させている（後で圧力Poissonを解くときに必要になる）。
@@ -87,50 +89,50 @@ channel flow の計算領域と境界。左＝一様流入、上下＝静止壁�
 分数ステップ法では、運動量式の右辺を<b>移流 → 粘性 → 圧力</b>の順に1つずつ処理する。
 まず運動量式を成分ごとに書き下すと:
 </p>
-<p class="eq-block"><span id="eq-mom-x" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-mom-y" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial u}{\partial t} + \underbrace{u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y}}_{\text{移流項}} = -\frac{1}{\rho}\frac{\partial p}{\partial x} + \nu\left(\frac{\partial^2 u}{\partial x^2}+\frac{\partial^2 u}{\partial y^2}\right) \tag{2} $$</p>
+<p class="eq">$$ \frac{\partial v}{\partial t} + \underbrace{u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y}}_{\text{移流項}} = -\frac{1}{\rho}\frac{\partial p}{\partial y} + \nu\left(\frac{\partial^2 v}{\partial x^2}+\frac{\partial^2 v}{\partial y^2}\right) \tag{3} $$</p>
 <p>
 このステップでは<b>時間変化項と移流項だけ</b>を残す（圧力項・粘性項は後のステップで足す）:
 </p>
-<p class="eq-block"><span id="eq-extract-x" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-extract-y" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial u}{\partial t} = -\left(u\frac{\partial u}{\partial x} + v\frac{\partial u}{\partial y}\right) \tag{4} $$</p>
+<p class="eq">$$ \frac{\partial v}{\partial t} = -\left(u\frac{\partial v}{\partial x} + v\frac{\partial v}{\partial y}\right) \tag{5} $$</p>
 <p>
-移流項は見慣れた<b>非保存形</b>で書いた（保存形 <span class="katex-eq" id="eq-cons"></span> とも書けるが、非圧縮 <span class="katex-eq" id="eq-div0"></span> では数学的に等価）。
+移流項は見慣れた<b>非保存形</b>で書いた（保存形 $\tfrac{\partial(uu)}{\partial x}+\tfrac{\partial(uv)}{\partial y}$ とも書けるが、非圧縮 $\nabla\cdot\mathbf{u}=0$ では数学的に等価）。
 </p>
 
 <h2>Step 2: 時間の離散化（前進Euler）</h2>
 <p>
-時間微分を差分に変える。前ステップ（時刻 <span class="katex-eq" id="eq-tn"></span>）の値を <span class="katex-eq" id="eq-un-sup"></span>、
-そこから <span class="katex-eq" id="eq-dt"></span> だけ移流で進めた値を <span class="katex-eq" id="eq-uadv-sup"></span> と書くと、
-<abbr class="term" title="1ステップ前の値だけで時間を1次精度で進める、最も単純な時間積分。">前進Euler</abbr>では時間微分を前進差分で近似する:
+時間微分を差分に変える。前ステップ（時刻 $t_n$）の値を $u^{n}$、
+そこから $\Delta t$ だけ移流で進めた値を $u^{\mathrm{adv}}$ と書くと、
+<abbr class="tip" title="1ステップ前の値だけで時間を1次精度で進める、最も単純な時間積分。">前進Euler</abbr>では時間微分を前進差分で近似する:
 </p>
-<p class="eq-block"><span id="eq-euler-def" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial u}{\partial t} \;\approx\; \frac{u^{\mathrm{adv}} - u^{n}}{\Delta t} \tag{6} $$</p>
 <p>
-これをStep 1の式に代入する。右辺の移流項は、いま手元にある<b>前ステップの値</b>（<span class="katex-eq" id="eq-unvn"></span>）で評価する
-（<abbr class="term" title="右辺を既知の（前ステップの）値だけで評価する解き方。連立方程式を解かずに済むが、時間刻みに安定条件がつく。">陽的</abbr>な扱い）:
+これをStep 1の式に代入する。右辺の移流項は、いま手元にある<b>前ステップの値</b>（$u^{n},\ v^{n}$）で評価する
+（<abbr class="tip" title="右辺を既知の（前ステップの）値だけで評価する解き方。連立方程式を解かずに済むが、時間刻みに安定条件がつく。">陽的</abbr>な扱い）:
 </p>
-<p class="eq-block"><span id="eq-euler-x" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{u^{\mathrm{adv}} - u^{n}}{\Delta t} = -\left(u^{n}\frac{\partial u^{n}}{\partial x} + v^{n}\frac{\partial u^{n}}{\partial y}\right) \tag{7} $$</p>
 <p>
-<span class="katex-eq" id="eq-uadv-sup2"></span> について解けば、そのままコードにできる<b>更新式</b>になる。y成分も同じ手順で:
+$u^{\mathrm{adv}}$ について解けば、そのままコードにできる<b>更新式</b>になる。y成分も同じ手順で:
 </p>
-<p class="eq-block"><span id="eq-update-u" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-update-v" class="katex-eq"></span></p>
+<p class="eq">$$ u^{\mathrm{adv}} = u^{n} - \Delta t\left(u^{n}\frac{\partial u^{n}}{\partial x} + v^{n}\frac{\partial u^{n}}{\partial y}\right) \tag{8} $$</p>
+<p class="eq">$$ v^{\mathrm{adv}} = v^{n} - \Delta t\left(u^{n}\frac{\partial v^{n}}{\partial x} + v^{n}\frac{\partial v^{n}}{\partial y}\right) \tag{9} $$</p>
 <p>
-<span class="katex-eq" id="eq-prov"></span> は移流だけ進めた<b>仮流速</b>（このあと粘性・圧力でさらに更新される。コードでは更新後も同じ配列 <code>u</code>, <code>v</code> に入れる）。
+$u^{\mathrm{adv}},\ v^{\mathrm{adv}}$ は移流だけ進めた<b>仮流速</b>（このあと粘性・圧力でさらに更新される。コードでは更新後も同じ配列 <code>u</code>, <code>v</code> に入れる）。
 </p>
 
 <h2>Step 3: 空間の離散化（<code>i+1/2</code>ずらし格子）</h2>
 <p>
-残るは右辺の空間微分。x成分の式は <code>u</code> の点（<span class="katex-eq" id="eq-uidx"></span>）の上で評価する。必要な量を1つずつ差分にすると:
+残るは右辺の空間微分。x成分の式は <code>u</code> の点（$u_{i+1/2,\,j}$）の上で評価する。必要な量を1つずつ差分にすると:
 </p>
 <ul>
-<li><span class="katex-eq" id="eq-dudx-name"></span> — 両隣の<code>u</code>点を使った<abbr class="term" title="空間刻みdxについて2次精度。dxを半分にすれば誤差はおよそ4分の1になる（1次精度なら半分）。">2次精度</abbr><abbr class="term" title="前後の格子点の差で微分を近似する方法。片側だけの差分より誤差が小さい。ただし移流が強い（セルPeclet数が大きい）と数値振動を起こしやすい。">中心差分</abbr>:
-    <span class="katex-eq" id="eq-dudx"></span></li>
-<li><span class="katex-eq" id="eq-dudy-name"></span> — 上下の<code>u</code>点で同様に:
-    <span class="katex-eq" id="eq-dudy"></span></li>
-<li>係数の <span class="katex-eq" id="eq-coef-u"></span> — その場の値 <span class="katex-eq" id="eq-coef-u2"></span> をそのまま使う。</li>
-<li>係数の <span class="katex-eq" id="eq-coef-v"></span> — <code>u</code>点の上に <code>v</code> は無いので、まわりの4つの <code>v</code> を平均した
-    <span class="katex-eq" id="eq-vbar-inline"></span> を使う（下図）。</li>
+<li>$\partial u/\partial x$ — 両隣の<code>u</code>点を使った<abbr class="tip" title="空間刻みdxについて2次精度。dxを半分にすれば誤差はおよそ4分の1になる（1次精度なら半分）。">2次精度</abbr><abbr class="tip" title="前後の格子点の差で微分を近似する方法。片側だけの差分より誤差が小さい。ただし移流が強い（セルPeclet数が大きい）と数値振動を起こしやすい。">中心差分</abbr>:
+    $\left.\frac{\partial u^{n}}{\partial x}\right|_{i+1/2,\,j} \approx \frac{u^{n}_{i+3/2,\,j}-u^{n}_{i-1/2,\,j}}{2\Delta x}$</li>
+<li>$\partial u/\partial y$ — 上下の<code>u</code>点で同様に:
+    $\left.\frac{\partial u^{n}}{\partial y}\right|_{i+1/2,\,j} \approx \frac{u^{n}_{i+1/2,\,j+1}-u^{n}_{i+1/2,\,j-1}}{2\Delta y}$</li>
+<li>係数の $u^{n}$ — その場の値 $u^{n}_{i+1/2,\,j}$ をそのまま使う。</li>
+<li>係数の $v^{n}$ — <code>u</code>点の上に <code>v</code> は無いので、まわりの4つの <code>v</code> を平均した
+    $\bar{v}$ を使う（下図）。</li>
 </ul>
 <div style="text-align:center">
 <svg viewBox="0 0 430 260" width="390" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
@@ -158,33 +160,33 @@ channel flow の計算領域と境界。左＝一様流入、上下＝静止壁�
 </svg>
 </div>
 <p class="figcap" style="text-align:center">
-<code>u</code>点（赤）のまわりの4つの<code>v</code>点（緑）。この平均が離散式の <span class="katex-eq" id="eq-vbar-cap"></span>（コードの中間変数 <code>va</code>）になる。
+<code>u</code>点（赤）のまわりの4つの<code>v</code>点（緑）。この平均が離散式の $\bar{v}$（コードの中間変数 <code>va</code>）になる。
 </p>
 <p>
 これらを Step 2 の更新式に入れると、<b>x方向の最終形</b>:
 </p>
-<p class="eq-block"><span id="eq-disc-u" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-vbar" class="katex-eq"></span></p>
+<p class="eq">$$ u^{\mathrm{adv}}_{i+1/2,\,j} = u^{n}_{i+1/2,\,j} - \Delta t\left[\, u^{n}_{i+1/2,\,j}\,\frac{u^{n}_{i+3/2,\,j}-u^{n}_{i-1/2,\,j}}{2\Delta x} + \bar{v}\,\frac{u^{n}_{i+1/2,\,j+1}-u^{n}_{i+1/2,\,j-1}}{2\Delta y} \,\right] \tag{10} $$</p>
+<p class="eq">$$ \bar{v} = \tfrac{1}{4}\left(v^{n}_{i,\,j+1/2}+v^{n}_{i+1,\,j+1/2}+v^{n}_{i,\,j-1/2}+v^{n}_{i+1,\,j-1/2}\right) \tag{11} $$</p>
 <p>
-<b>y方向</b>は <code>u</code> と <code>v</code> の役割を入れ替えるだけ。<code>v</code> の点（<span class="katex-eq" id="eq-vidx"></span>）の上で評価し、
-今度は係数の <code>u</code> が無いので4点平均 <span class="katex-eq" id="eq-ubar-inline"></span> を使う:
+<b>y方向</b>は <code>u</code> と <code>v</code> の役割を入れ替えるだけ。<code>v</code> の点（$v_{i,\,j+1/2}$）の上で評価し、
+今度は係数の <code>u</code> が無いので4点平均 $\bar{u}$ を使う:
 </p>
-<p class="eq-block"><span id="eq-disc-v" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-ubar" class="katex-eq"></span></p>
+<p class="eq">$$ v^{\mathrm{adv}}_{i,\,j+1/2} = v^{n}_{i,\,j+1/2} - \Delta t\left[\, \bar{u}\,\frac{v^{n}_{i+1,\,j+1/2}-v^{n}_{i-1,\,j+1/2}}{2\Delta x} + v^{n}_{i,\,j+1/2}\,\frac{v^{n}_{i,\,j+3/2}-v^{n}_{i,\,j-1/2}}{2\Delta y} \,\right] \tag{12} $$</p>
+<p class="eq">$$ \bar{u} = \tfrac{1}{4}\left(u^{n}_{i+1/2,\,j}+u^{n}_{i-1/2,\,j}+u^{n}_{i+1/2,\,j+1}+u^{n}_{i-1/2,\,j+1}\right) \tag{13} $$</p>
 
 <h2>数式とコードの対応</h2>
 <p>
-半整数の添字はコードの配列にそのまま対応する（<code>u(i,j)</code> が <span class="katex-eq" id="eq-map-uidx"></span> を表すという<a href="intro.html">初期条件</a>の規則）。
+半整数の添字はコードの配列にそのまま対応する（<code>u(i,j)</code> が $u_{i+1/2,\,j}$ を表すという<a href="intro.html">初期条件</a>の規則）。
 上の最終形をFortranにするときの対応は:
 </p>
 <table>
 <tr><th>数式</th><th>コード</th></tr>
-<tr><td><span class="katex-eq" id="eq-t1"></span></td><td><code>un(i,j)</code></td></tr>
-<tr><td><span class="katex-eq" id="eq-t2"></span></td><td><code>un(i+1,j)</code>, <code>un(i-1,j)</code></td></tr>
-<tr><td><span class="katex-eq" id="eq-t3"></span></td><td><code>un(i,j+1)</code>, <code>un(i,j-1)</code></td></tr>
-<tr><td><span class="katex-eq" id="eq-t4"></span>（4点平均）</td><td><code>va</code>, <code>ua</code>（中間変数）</td></tr>
-<tr><td><span class="katex-eq" id="eq-t5"></span></td><td><code>dt</code>, <code>dx</code>, <code>dy</code></td></tr>
-<tr><td><span class="katex-eq" id="eq-t6"></span>（更新後の仮流速）</td><td><code>u(i,j)</code>（<code>un</code>とは別の配列）</td></tr>
+<tr><td>$u^{n}_{i+1/2,\,j}$</td><td><code>un(i,j)</code></td></tr>
+<tr><td>$u^{n}_{i+3/2,\,j},\ u^{n}_{i-1/2,\,j}$</td><td><code>un(i+1,j)</code>, <code>un(i-1,j)</code></td></tr>
+<tr><td>$u^{n}_{i+1/2,\,j+1},\ u^{n}_{i+1/2,\,j-1}$</td><td><code>un(i,j+1)</code>, <code>un(i,j-1)</code></td></tr>
+<tr><td>$\bar{v},\ \bar{u}$（4点平均）</td><td><code>va</code>, <code>ua</code>（中間変数）</td></tr>
+<tr><td>$\Delta t,\ \Delta x,\ \Delta y$</td><td><code>dt</code>, <code>dx</code>, <code>dy</code></td></tr>
+<tr><td>$u^{\mathrm{adv}}_{i+1/2,\,j}$（更新後の仮流速）</td><td><code>u(i,j)</code>（<code>un</code>とは別の配列）</td></tr>
 </table>
 <p class="figcap">
 右辺はすべて前ステップの配列 <code>un</code>・<code>vn</code> から作り、結果を <code>u</code>・<code>v</code> に入れる。
@@ -268,50 +270,6 @@ python post/plot.py wrk/config.csv
 （<code>advection.f90</code> と <code>main.f90</code> をステージ → Commit → Push）。
 </div>
 
-<script>
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + \\underbrace{(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}}_{\\text{移流項}} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
-katex.render("(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}", document.getElementById('eq-adv-vec'));
-katex.render("\\frac{\\partial u}{\\partial t} + \\underbrace{u\\frac{\\partial u}{\\partial x} + v\\frac{\\partial u}{\\partial y}}_{\\text{移流項}} = -\\frac{1}{\\rho}\\frac{\\partial p}{\\partial x} + \\nu\\left(\\frac{\\partial^2 u}{\\partial x^2}+\\frac{\\partial^2 u}{\\partial y^2}\\right)", document.getElementById('eq-mom-x'));
-katex.render("\\frac{\\partial v}{\\partial t} + \\underbrace{u\\frac{\\partial v}{\\partial x} + v\\frac{\\partial v}{\\partial y}}_{\\text{移流項}} = -\\frac{1}{\\rho}\\frac{\\partial p}{\\partial y} + \\nu\\left(\\frac{\\partial^2 v}{\\partial x^2}+\\frac{\\partial^2 v}{\\partial y^2}\\right)", document.getElementById('eq-mom-y'));
-katex.render("\\frac{\\partial u}{\\partial t} = -\\left(u\\frac{\\partial u}{\\partial x} + v\\frac{\\partial u}{\\partial y}\\right)", document.getElementById('eq-extract-x'));
-katex.render("\\frac{\\partial v}{\\partial t} = -\\left(u\\frac{\\partial v}{\\partial x} + v\\frac{\\partial v}{\\partial y}\\right)", document.getElementById('eq-extract-y'));
-katex.render("\\tfrac{\\partial(uu)}{\\partial x}+\\tfrac{\\partial(uv)}{\\partial y}", document.getElementById('eq-cons'));
-katex.render("\\nabla\\cdot\\mathbf{u}=0", document.getElementById('eq-div0'));
-katex.render("t_n", document.getElementById('eq-tn'));
-katex.render("u^{n}", document.getElementById('eq-un-sup'));
-katex.render("\\Delta t", document.getElementById('eq-dt'));
-katex.render("u^{\\mathrm{adv}}", document.getElementById('eq-uadv-sup'));
-katex.render("\\frac{\\partial u}{\\partial t} \\;\\approx\\; \\frac{u^{\\mathrm{adv}} - u^{n}}{\\Delta t}", document.getElementById('eq-euler-def'));
-katex.render("u^{n},\\ v^{n}", document.getElementById('eq-unvn'));
-katex.render("\\frac{u^{\\mathrm{adv}} - u^{n}}{\\Delta t} = -\\left(u^{n}\\frac{\\partial u^{n}}{\\partial x} + v^{n}\\frac{\\partial u^{n}}{\\partial y}\\right)", document.getElementById('eq-euler-x'));
-katex.render("u^{\\mathrm{adv}}", document.getElementById('eq-uadv-sup2'));
-katex.render("u^{\\mathrm{adv}} = u^{n} - \\Delta t\\left(u^{n}\\frac{\\partial u^{n}}{\\partial x} + v^{n}\\frac{\\partial u^{n}}{\\partial y}\\right)", document.getElementById('eq-update-u'));
-katex.render("v^{\\mathrm{adv}} = v^{n} - \\Delta t\\left(u^{n}\\frac{\\partial v^{n}}{\\partial x} + v^{n}\\frac{\\partial v^{n}}{\\partial y}\\right)", document.getElementById('eq-update-v'));
-katex.render("u^{\\mathrm{adv}},\\ v^{\\mathrm{adv}}", document.getElementById('eq-prov'));
-katex.render("u_{i+1/2,\\,j}", document.getElementById('eq-uidx'));
-katex.render("\\partial u/\\partial x", document.getElementById('eq-dudx-name'));
-katex.render("\\left.\\frac{\\partial u^{n}}{\\partial x}\\right|_{i+1/2,\\,j} \\approx \\frac{u^{n}_{i+3/2,\\,j}-u^{n}_{i-1/2,\\,j}}{2\\Delta x}", document.getElementById('eq-dudx'));
-katex.render("\\partial u/\\partial y", document.getElementById('eq-dudy-name'));
-katex.render("\\left.\\frac{\\partial u^{n}}{\\partial y}\\right|_{i+1/2,\\,j} \\approx \\frac{u^{n}_{i+1/2,\\,j+1}-u^{n}_{i+1/2,\\,j-1}}{2\\Delta y}", document.getElementById('eq-dudy'));
-katex.render("u^{n}", document.getElementById('eq-coef-u'));
-katex.render("u^{n}_{i+1/2,\\,j}", document.getElementById('eq-coef-u2'));
-katex.render("v^{n}", document.getElementById('eq-coef-v'));
-katex.render("\\bar{v}", document.getElementById('eq-vbar-inline'));
-katex.render("\\bar{v}", document.getElementById('eq-vbar-cap'));
-katex.render("u^{\\mathrm{adv}}_{i+1/2,\\,j} = u^{n}_{i+1/2,\\,j} - \\Delta t\\left[\\, u^{n}_{i+1/2,\\,j}\\,\\frac{u^{n}_{i+3/2,\\,j}-u^{n}_{i-1/2,\\,j}}{2\\Delta x} + \\bar{v}\\,\\frac{u^{n}_{i+1/2,\\,j+1}-u^{n}_{i+1/2,\\,j-1}}{2\\Delta y} \\,\\right]", document.getElementById('eq-disc-u'));
-katex.render("\\bar{v} = \\tfrac{1}{4}\\left(v^{n}_{i,\\,j+1/2}+v^{n}_{i+1,\\,j+1/2}+v^{n}_{i,\\,j-1/2}+v^{n}_{i+1,\\,j-1/2}\\right)", document.getElementById('eq-vbar'));
-katex.render("v_{i,\\,j+1/2}", document.getElementById('eq-vidx'));
-katex.render("\\bar{u}", document.getElementById('eq-ubar-inline'));
-katex.render("v^{\\mathrm{adv}}_{i,\\,j+1/2} = v^{n}_{i,\\,j+1/2} - \\Delta t\\left[\\, \\bar{u}\\,\\frac{v^{n}_{i+1,\\,j+1/2}-v^{n}_{i-1,\\,j+1/2}}{2\\Delta x} + v^{n}_{i,\\,j+1/2}\\,\\frac{v^{n}_{i,\\,j+3/2}-v^{n}_{i,\\,j-1/2}}{2\\Delta y} \\,\\right]", document.getElementById('eq-disc-v'));
-katex.render("\\bar{u} = \\tfrac{1}{4}\\left(u^{n}_{i+1/2,\\,j}+u^{n}_{i-1/2,\\,j}+u^{n}_{i+1/2,\\,j+1}+u^{n}_{i-1/2,\\,j+1}\\right)", document.getElementById('eq-ubar'));
-katex.render("u_{i+1/2,\\,j}", document.getElementById('eq-map-uidx'));
-katex.render("u^{n}_{i+1/2,\\,j}", document.getElementById('eq-t1'));
-katex.render("u^{n}_{i+3/2,\\,j},\\ u^{n}_{i-1/2,\\,j}", document.getElementById('eq-t2'));
-katex.render("u^{n}_{i+1/2,\\,j+1},\\ u^{n}_{i+1/2,\\,j-1}", document.getElementById('eq-t3'));
-katex.render("\\bar{v},\\ \\bar{u}", document.getElementById('eq-t4'));
-katex.render("\\Delta t,\\ \\Delta x,\\ \\Delta y", document.getElementById('eq-t5'));
-katex.render("u^{\\mathrm{adv}}_{i+1/2,\\,j}", document.getElementById('eq-t6'));
-</script>
   </main>
 </body>
 </html>

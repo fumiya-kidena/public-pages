@@ -6,7 +6,9 @@
 <title>cfd-seminar — 1. 初期条件</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -36,10 +38,10 @@
 
 <h2>支配方程式</h2>
 <p>
-このコードの目標は、非圧縮の<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式（速度の時間変化＝移流＋圧力勾配＋粘性）と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>を数値的に解くこと。速度を <span class="katex-eq" id="eq-uvec"></span> として、ベクトルで書くと運動量の式と連続の式は:
+このコードの目標は、非圧縮の<abbr class="tip" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式（速度の時間変化＝移流＋圧力勾配＋粘性）と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>を数値的に解くこと。速度を $\mathbf{u}=(u,v)$ として、ベクトルで書くと運動量の式と連続の式は:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = -\frac{1}{\rho}\nabla p + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
+<p class="eq">$$ \nabla\cdot\mathbf{u} = 0 \tag{2} $$</p>
 <p>
 このあとのステップで、各項（移流・粘性・圧力）を成分ごとに離散化して1つずつ実装していく。このステップでは、まず初期条件だけを作る。
 </p>
@@ -47,7 +49,7 @@
 <h2>格子: MAC（スタガード）格子</h2>
 <p>
 圧力<code>p</code>はセル中心（整数添字 i, j）、速度<code>u,v</code>はセルの面（半整数添字 i+1/2 など）
-に配置する<abbr class="cite" title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189.">[4]</abbr>。等間隔格子なので、座標配列は持たず<code>dx,dy</code>だけで十分。
+に配置する<a class="cite" href="#ref-4" title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. doi:10.1063/1.1761178">[4]</a>。等間隔格子なので、座標配列は持たず<code>dx,dy</code>だけで十分。
 </p>
 <div style="text-align:center">
 <svg viewBox="0 0 420 420" width="380" style="background:#fafafa;border:1px solid #ddd;border-radius:4px;font-family:sans-serif;">
@@ -88,8 +90,8 @@
 </p>
 <p>
 コード上の配列添字はこの「+1/2側」をそのまま使う: <code>u(i,j)</code>が数式の
-<span class="katex-eq" id="eq-uidx"></span>
-そのものを表す（<code>v(i,j)</code>も同様に<span class="katex-eq" id="eq-vidx"></span>）。
+$u_{i+1/2,j}$
+そのものを表す（<code>v(i,j)</code>も同様に$v_{i,j+1/2}$）。
 </p>
 
 <h2>Fortranの最低限の書き方</h2>
@@ -122,13 +124,13 @@ end subroutine initial_condition
 <h2>演習: 初期条件（<code>wrk/initial.f90</code>）</h2>
 <p>
 最初の演習。<code>initial_condition</code>で<code>u,v</code>の初期値を入れる。題材は円柱まわりの
-<abbr class="term" title="粘性・渦を無視した理想流体の流れ。速度場が速度ポテンシャルの勾配で書ける（回転を持たない）という仮定のもとで、閉じた式で解ける。">ポテンシャル流</abbr>
-（一様流＋<abbr class="term" title="吸い込みと吹き出しを限りなく近づけた特異点。一様流に重ねると円柱まわりの流れになることが知られている。">二重湧き出し（ダブレット）</abbr>）の解析解:
+<abbr class="tip" title="粘性・渦を無視した理想流体の流れ。速度場が速度ポテンシャルの勾配で書ける（回転を持たない）という仮定のもとで、閉じた式で解ける。">ポテンシャル流</abbr>
+（一様流＋<abbr class="tip" title="吸い込みと吹き出しを限りなく近づけた特異点。一様流に重ねると円柱まわりの流れになることが知られている。">二重湧き出し（ダブレット）</abbr>）の解析解:
 </p>
-<p class="eq-block"><span id="eq-pot-u" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-pot-v" class="katex-eq"></span></p>
+<p class="eq">$$ u(i,j) = U_0\left(1 - r_0^2\,\frac{(x-x_c)^2-(y-y_c)^2}{r^4}\right) \quad (r \ge r_0) \tag{3} $$</p>
+<p class="eq">$$ v(i,j) = -2\,U_0\,r_0^2\,\frac{(x-x_c)(y-y_c)}{r^4} \quad (r \ge r_0) \tag{4} $$</p>
 <p>
-ここで <span class="katex-eq" id="eq-pot-r"></span>、<code>(xc,yc)</code>は領域中心、<code>r0</code>は円柱の半径。
+ここで $r^2 = (x-x_c)^2 + (y-y_c)^2$、<code>(xc,yc)</code>は領域中心、<code>r0</code>は円柱の半径。
 </p>
 <p>
 <b>足場はひな形に用意してある</b>: 幾何（<code>xc, yc</code>と半径 <code>r0 = 0.2·min(Lx,Ly)</code>）と、
@@ -137,7 +139,7 @@ end subroutine initial_condition
 位置が違うので、2つのループで<code>x,y</code>の作り方が違う点に注意）。
 </p>
 <p>
-埋めるのは<b><code>u,v</code>の式そのもの</b>だけ。円柱の内側（<span class="katex-eq" id="eq-rin"></span>）では
+埋めるのは<b><code>u,v</code>の式そのもの</b>だけ。円柱の内側（$r < r_0$）では
 式が中心で発散するので、単純に一様流（<code>u=U0, v=0</code>）にしておく（<code>if</code>文で分岐）。
 <code>u</code>のループは<b>お手本としてひな形に書いてある</b>ので、これを見ながら<code>v</code>のループを自分で書く:
 </p>
@@ -158,7 +160,7 @@ end do
 </pre>
 <p>
 <code>v</code>のループも形は同じ。<code>else</code>枝に<code>v</code>の解析解（上のKaTeXの式）を入れる。
-<code>u</code>と違い<code>v</code>は<span class="katex-eq" id="eq-vidx2"></span>の位置なので、座標の作り方が
+<code>u</code>と違い<code>v</code>は$v_{i,j+1/2}$の位置なので、座標の作り方が
 <code>x = (i-0.5d0)*dx</code>, <code>y = j*dy</code>になる（これもひな形に用意済み）。
 </p>
 <details class="answer">
@@ -190,12 +192,12 @@ end do
 <tr><th>key</th><th>意味</th></tr>
 <tr><td>Lx, Ly</td><td>領域サイズ [m]</td></tr>
 <tr><td>rho</td><td>密度 [kg/m³]（水を想定: 1000）</td></tr>
-<tr><td>nu</td><td><abbr class="term" title="動粘性係数。粘性の強さを密度で割ったもの。単位はm²/s。値が大きいほど粘性が強く（拡散しやすく）、小さいほど移流が卓越する。">動粘性係数</abbr> ν [m²/s]（水を想定: 1.0×10⁻⁶）</td></tr>
+<tr><td>nu</td><td><abbr class="tip" title="動粘性係数。粘性の強さを密度で割ったもの。単位はm²/s。値が大きいほど粘性が強く（拡散しやすく）、小さいほど移流が卓越する。">動粘性係数</abbr> ν [m²/s]（水を想定: 1.0×10⁻⁶）</td></tr>
 <tr><td>U0</td><td>流入速度 [m/s]</td></tr>
 <tr><td>dt</td><td>時間刻み幅 [s]</td></tr>
 <tr><td>nstep</td><td>総タイムステップ数</td></tr>
 <tr><td>nout</td><td>何ステップごとに結果を出力するか</td></tr>
-<tr><td>omega</td><td><abbr class="term" title="Successive Over-Relaxationの緩和係数。1&lt;omega&lt;2で、Gauss-Seidel法より収束を加速する。">SOR</abbr>の緩和係数（1〜2の間、<a href="poisson.html">5. 圧力Poisson</a>で使う）</td></tr>
+<tr><td>omega</td><td><abbr class="tip" title="Successive Over-Relaxationの緩和係数。1&lt;omega&lt;2で、Gauss-Seidel法より収束を加速する。">SOR</abbr>の緩和係数（1〜2の間、<a href="poisson.html">5. 圧力Poisson</a>で使う）</td></tr>
 <tr><td>tol</td><td>圧力反復の収束判定（相対値）</td></tr>
 <tr><td>max_iter</td><td>圧力反復の最大回数</td></tr>
 <tr><td>case</td><td>後処理（<code>post/plot.py</code>）専用の欄。<code>test</code>/<code>channel</code>/<code>cavity</code>のいずれか。
@@ -266,7 +268,7 @@ make
 ./cfd.exe
 </pre>
 <b>初回の<code>make</code></b>では、まだ空欄の<code>diffusion.f90</code>について
-<code>Unused dummy argument 'un'</code>のような<abbr class="term" title="コンパイルは通っているが気をつけるとよい箇所を知らせるメッセージ。エラーと違い実行ファイルはちゃんとできる。">警告（warning）</abbr>が数行出るが、
+<code>Unused dummy argument 'un'</code>のような<abbr class="tip" title="コンパイルは通っているが気をつけるとよい箇所を知らせるメッセージ。エラーと違い実行ファイルはちゃんとできる。">警告（warning）</abbr>が数行出るが、
 <b>まだ実装していない項があるためで問題ない</b>（粘性項・圧力を埋めれば消える）。<code>Error</code>が出ずに<code>cfd.exe</code>ができていれば成功。</li>
 <li>結果を絵にする（リポジトリ直下に戻ってから）:
 <pre>
@@ -291,20 +293,10 @@ python post/plot.py wrk/config.csv
 ステップごとに残しておくと、あとで前の状態に戻せる。
 </div>
 
-<script>
-
-katex.render("\\mathbf{u}=(u,v)", document.getElementById('eq-uvec'));
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
-katex.render("\\nabla\\cdot\\mathbf{u} = 0", document.getElementById('eq-cont'));
-katex.render("u_{i+1/2,j}", document.getElementById('eq-uidx'));
-katex.render("v_{i,j+1/2}", document.getElementById('eq-vidx'));
-katex.render("v_{i,j+1/2}", document.getElementById('eq-vidx2'));
-katex.render("u(i,j) = U_0\\left(1 - r_0^2\\,\\frac{(x-x_c)^2-(y-y_c)^2}{r^4}\\right) \\quad (r \\ge r_0)", document.getElementById('eq-pot-u'));
-katex.render("v(i,j) = -2\\,U_0\\,r_0^2\\,\\frac{(x-x_c)(y-y_c)}{r^4} \\quad (r \\ge r_0)", document.getElementById('eq-pot-v'));
-katex.render("r^2 = (x-x_c)^2 + (y-y_c)^2", document.getElementById('eq-pot-r'));
-katex.render("r < r_0", document.getElementById('eq-rin'));
-
-</script>
+<h2 id="references">参考文献</h2>
+<ul class="ref-list">
+  <li id="ref-4">[4] Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. <a href="https://doi.org/10.1063/1.1761178" target="_blank" rel="noopener">doi:10.1063/1.1761178</a></li>
+</ul>
   </main>
 </body>
 </html>

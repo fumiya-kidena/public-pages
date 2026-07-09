@@ -6,7 +6,9 @@
 <title>cfd-seminar — 6. 移流項の改良</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -35,12 +37,12 @@
 <p>
 このステップで見直すのは移流項（下線部）——空間の離散化（中心差分）と時間の進め方の両方:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + \underbrace{(\mathbf{u}\cdot\nabla)\mathbf{u}}_{\text{移流項}} = -\frac{1}{\rho}\nabla p + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
 
 <h2>セルPeclet数</h2>
 <p>
 中心差分による移流項は、
-<abbr class="term" title="対流項の卓越度を表す無次元数。ここでは格子1つ分の速さ×格子幅÷動粘性係数（U・dx/ν）で評価する。中心差分は理論上この値が2を超えると数値的な振動（wiggle）を起こしやすい。">セルPeclet数</abbr>
+<abbr class="tip" title="対流項の卓越度を表す無次元数。ここでは格子1つ分の速さ×格子幅÷動粘性係数（U・dx/ν）で評価する。中心差分は理論上この値が2を超えると数値的な振動（wiggle）を起こしやすい。">セルPeclet数</abbr>
 <code>Pe_cell = U・dx/ν</code>がおよそ2を超えると、解に物理的でない振動（wiggle）や基準解からのずれが
 現れやすい。<a href="poisson.html">5. 圧力Poisson</a>の cavity Re=1000（U0=0.01、48×48格子）は
 <code>Pe_cell ≈ 21</code>で、それでもGhia基準解とよく一致した。ここから格子を固定したままReを上げると
@@ -50,7 +52,7 @@
 <h2>実行して確認: cavity Re=3200</h2>
 <p>
 同じ48×48格子のまま Re だけを上げて、中心差分の限界を見る。cavity なら流入・流出や
-<abbr class="term" title="流れが流入から完全発達に至るまでに必要な距離。この長さを取り違えると、物理的な未発達か数値誤差かの切り分けが難しくなる。">助走区間</abbr>
+<abbr class="tip" title="流れが流入から完全発達に至るまでに必要な距離。この長さを取り違えると、物理的な未発達か数値誤差かの切り分けが難しくなる。">助走区間</abbr>
 の交絡がないので、Ghia基準解とのずれを<b>純粋に数値スキームの限界</b>として見られる。
 </p>
 <ol>
@@ -99,13 +101,13 @@ Re=3200, 48×48格子。固定した粗い格子では<code>Pe_cell≈67</code>�
 
 <h3>1次風上差分</h3>
 <p>
-中心差分の代わりに、<abbr class="term" title="風上（流れが来る側）の格子点を優先して使う差分。中心差分より数値振動を起こしにくいが、精度は1次に落ちる。">風上差分</abbr>——微分を流れの来る側の片側差分で作る——にすると振動を抑えられる。
+中心差分の代わりに、<abbr class="tip" title="風上（流れが来る側）の格子点を優先して使う差分。中心差分より数値振動を起こしにくいが、精度は1次に落ちる。">風上差分</abbr>——微分を流れの来る側の片側差分で作る——にすると振動を抑えられる。
 移流速度<code>a</code>の符号で使う側を変える:
 </p>
-<p class="eq-block"><span id="eq-upwind1" class="katex-eq"></span></p>
+<p class="eq">$$ a\,\frac{\partial u}{\partial x} \approx a\,\dfrac{u_i - u_{i-1}}{\Delta x}\ \ (a>0), \qquad a\,\dfrac{u_{i+1}-u_i}{\Delta x}\ \ (a<0) \tag{2} $$</p>
 <p>
-これは中心差分に<abbr class="term" title="離散化の副作用で加わる、物理的でない見かけの拡散。振動を抑える一方で流れをぼやけさせる。">数値粘性</abbr>
-（大きさ <span class="katex-eq" id="eq-numdiff"></span> 程度）を足したことに等しい。振動は消えるが精度は1次に落ち、流れがぼやける。
+これは中心差分に<abbr class="tip" title="離散化の副作用で加わる、物理的でない見かけの拡散。振動を抑える一方で流れをぼやけさせる。">数値粘性</abbr>
+（大きさ $\tfrac{1}{2}\,|a|\,\Delta x\,\dfrac{\partial^2 u}{\partial x^2}$ 程度）を足したことに等しい。振動は消えるが精度は1次に落ち、流れがぼやける。
 実装は<code>advection.f90</code>の中心差分を風上差分に変えるだけで、<code>diffusion.f90</code>・<code>poisson.f90</code>には触らない。
 </p>
 
@@ -114,39 +116,34 @@ Re=3200, 48×48格子。固定した粗い格子では<code>Pe_cell≈67</code>�
 1次風上は安定だが拡散的すぎる。精度と安定性を両立させるため、風上側を優先しつつ高次で内挿する方法がある。
 </p>
 <ul>
-<li><b>2次精度風上差分</b>: 風上側の2点を使う（<code>a&gt;0</code>なら <span class="katex-eq" id="eq-upwind2"></span>）。1次風上より数値粘性が小さい。</li>
-<li><b>QUICK</b><abbr class="cite" title="Leonard, B.P. (1979). A stable and accurate convective modelling procedure based on quadratic upstream interpolation. Computer Methods in Applied Mechanics and Engineering, 19(1), 59-98.">[2]</abbr>: 風上2点＋風下1点の放物線内挿で面の値を作り、面で3次精度になる。</li>
-<li><b><abbr class="term" title="Total Variation Diminishing。解の全変動を増やさない（新しい振動を作らない）ことを保証するスキームの総称。">TVD</abbr>スキーム</b><abbr class="cite" title="Harten, A. (1983). High resolution schemes for hyperbolic conservation laws. Journal of Computational Physics, 49(3), 357-393.">[6]</abbr>: 高次スキームに<abbr class="term" title="流れが急変する所では低次、なめらかな所では高次に自動で切り替える重み。">流束制限関数</abbr>をかけ、振動を出さずに高精度を保つ。実務のCFDでよく使われる。</li>
+<li><b>2次精度風上差分</b>: 風上側の2点を使う（<code>a&gt;0</code>なら $\dfrac{3u_i - 4u_{i-1} + u_{i-2}}{2\,\Delta x}$）。1次風上より数値粘性が小さい。</li>
+<li><b>QUICK</b><a class="cite" href="#ref-2" title="Leonard, B.P. (1979). A stable and accurate convective modelling procedure based on quadratic upstream interpolation. Computer Methods in Applied Mechanics and Engineering, 19(1), 59-98. doi:10.1016/0045-7825(79)90034-3">[2]</a>: 風上2点＋風下1点の放物線内挿で面の値を作り、面で3次精度になる。</li>
+<li><b><abbr class="tip" title="Total Variation Diminishing。解の全変動を増やさない（新しい振動を作らない）ことを保証するスキームの総称。">TVD</abbr>スキーム</b><a class="cite" href="#ref-6" title="Harten, A. (1983). High resolution schemes for hyperbolic conservation laws. Journal of Computational Physics, 49(3), 357-393. doi:10.1016/0021-9991(83)90136-5">[6]</a>: 高次スキームに<abbr class="tip" title="流れが急変する所では低次、なめらかな所では高次に自動で切り替える重み。">流束制限関数</abbr>をかけ、振動を出さずに高精度を保つ。実務のCFDでよく使われる。</li>
 </ul>
 
 <h2>時間精度の改良</h2>
 <p>
-時間の進め方は今<abbr class="term" title="1ステップ前の値だけを使って時間を1次精度で進める、最も単純な時間積分。">前進Euler法</abbr>（1次精度）。移流項の寄与を<span class="katex-eq" id="eq-fadv"></span>（移流項のページの<code>adv</code>）と書くと、1ステップ前の値だけで進めている:
+時間の進め方は今<abbr class="tip" title="1ステップ前の値だけを使って時間を1次精度で進める、最も単純な時間積分。">前進Euler法</abbr>（1次精度）。移流項の寄与を$f_{\mathrm{adv}}$（移流項のページの<code>adv</code>）と書くと、1ステップ前の値だけで進めている:
 </p>
-<p class="eq-block"><span id="eq-euler" class="katex-eq"></span></p>
+<p class="eq">$$ u^{n+1} = u^{n} - \Delta t\, f_{\mathrm{adv}}^{\,n} \tag{3} $$</p>
 
 <h3>Adams-Bashforth法</h3>
 <p>
-<abbr class="term" title="過去数ステップの右辺を線形結合して時間を進める陽的な多段法。2次のAB2が代表的。">Adams-Bashforth法</abbr>（AB2）<abbr class="cite" title="Bashforth, F., Adams, J.C. (1883). An attempt to test the theories of capillary action by comparing the theoretical and measured forms of drops of fluid. Cambridge University Press.">[5]</abbr>は過去2ステップの<code>adv</code>を使って2次精度にする:
+<abbr class="tip" title="過去数ステップの右辺を線形結合して時間を進める陽的な多段法。2次のAB2が代表的。">Adams-Bashforth法</abbr>（AB2）<a class="cite" href="#ref-5" title="Bashforth, F., Adams, J.C. (1883). An attempt to test the theories of capillary action by comparing the theoretical and measured forms of drops of fluid. Cambridge University Press.（DOI表記なし）">[5]</a>は過去2ステップの<code>adv</code>を使って2次精度にする:
 </p>
-<p class="eq-block"><span id="eq-ab2" class="katex-eq"></span></p>
+<p class="eq">$$ u^{n+1} = u^{n} - \Delta t\left(\tfrac{3}{2}\,f_{\mathrm{adv}}^{\,n} - \tfrac{1}{2}\,f_{\mathrm{adv}}^{\,n-1}\right) \tag{4} $$</p>
 <p>
-時間精度が上がるうえ、AB2の<abbr class="term" title="時間積分が安定に進められる時間刻みの範囲。虚軸の近くを含むかどうかで、振動的な移流項を安定に解けるかが決まる。">安定領域</abbr>は虚軸の近くを少し含むので、
-前進Eulerでは本来不安定な中心差分の移流を、ある程度安定に進められる。実装は1ステップ前の<span class="katex-eq" id="eq-fadvprev"></span>を配列に保存しておくだけ。
-粘性項の寄与<span class="katex-eq" id="eq-fdiff"></span>も同じ形で扱え、非圧縮流れでは移流項をAB2・粘性項を<abbr class="term" title="時間方向に中点で評価する2次精度の陰的スキーム。拡散項に使うと時間刻みの制限が緩くなる。">Crank-Nicolson法</abbr>にする組み合わせが定番。
+時間精度が上がるうえ、AB2の<abbr class="tip" title="時間積分が安定に進められる時間刻みの範囲。虚軸の近くを含むかどうかで、振動的な移流項を安定に解けるかが決まる。">安定領域</abbr>は虚軸の近くを少し含むので、
+前進Eulerでは本来不安定な中心差分の移流を、ある程度安定に進められる。実装は1ステップ前の$f_{\mathrm{adv}}^{\,n-1}$を配列に保存しておくだけ。
+粘性項の寄与$f_{\mathrm{diff}}$も同じ形で扱え、非圧縮流れでは移流項をAB2・粘性項を<abbr class="tip" title="時間方向に中点で評価する2次精度の陰的スキーム。拡散項に使うと時間刻みの制限が緩くなる。">Crank-Nicolson法</abbr>にする組み合わせが定番。
 </p>
 
-<script>
-katex.render("a\\,\\frac{\\partial u}{\\partial x} \\approx a\\,\\dfrac{u_i - u_{i-1}}{\\Delta x}\\ \\ (a>0), \\qquad a\\,\\dfrac{u_{i+1}-u_i}{\\Delta x}\\ \\ (a<0)", document.getElementById('eq-upwind1'));
-katex.render("\\tfrac{1}{2}\\,|a|\\,\\Delta x\\,\\dfrac{\\partial^2 u}{\\partial x^2}", document.getElementById('eq-numdiff'));
-katex.render("\\dfrac{3u_i - 4u_{i-1} + u_{i-2}}{2\\,\\Delta x}", document.getElementById('eq-upwind2'));
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + \\underbrace{(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}}_{\\text{移流項}} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
-katex.render("f_{\\mathrm{adv}}", document.getElementById('eq-fadv'));
-katex.render("u^{n+1} = u^{n} - \\Delta t\\, f_{\\mathrm{adv}}^{\\,n}", document.getElementById('eq-euler'));
-katex.render("u^{n+1} = u^{n} - \\Delta t\\left(\\tfrac{3}{2}\\,f_{\\mathrm{adv}}^{\\,n} - \\tfrac{1}{2}\\,f_{\\mathrm{adv}}^{\\,n-1}\\right)", document.getElementById('eq-ab2'));
-katex.render("f_{\\mathrm{adv}}^{\\,n-1}", document.getElementById('eq-fadvprev'));
-katex.render("f_{\\mathrm{diff}}", document.getElementById('eq-fdiff'));
-</script>
+<h2 id="references">参考文献</h2>
+<ul class="ref-list">
+  <li id="ref-2">[2] Leonard, B.P. (1979). A stable and accurate convective modelling procedure based on quadratic upstream interpolation. Computer Methods in Applied Mechanics and Engineering, 19(1), 59-98. <a href="https://doi.org/10.1016/0045-7825(79)90034-3" target="_blank" rel="noopener">doi:10.1016/0045-7825(79)90034-3</a></li>
+  <li id="ref-5">[5] Bashforth, F., Adams, J.C. (1883). An attempt to test the theories of capillary action by comparing the theoretical and measured forms of drops of fluid. Cambridge University Press. <span class="nodoi">DOI表記なし</span></li>
+  <li id="ref-6">[6] Harten, A. (1983). High resolution schemes for hyperbolic conservation laws. Journal of Computational Physics, 49(3), 357-393. <a href="https://doi.org/10.1016/0021-9991(83)90136-5" target="_blank" rel="noopener">doi:10.1016/0021-9991(83)90136-5</a></li>
+</ul>
   </main>
 </body>
 </html>

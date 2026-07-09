@@ -6,7 +6,9 @@
 <title>cfd-seminar — 4. 境界条件</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -28,19 +30,19 @@
 <h1>4. 境界条件</h1>
 <p>
 ここまでは channel flow で進めてきたが、このステップでは題材を
-<abbr class="term" title="正方形の閉じた領域で、上蓋だけが一定速度で動き、それ以外の壁は静止しているという設定の代表的なCFDベンチマーク問題。">lid-driven cavity flow</abbr>
+<abbr class="tip" title="正方形の閉じた領域で、上蓋だけが一定速度で動き、それ以外の壁は静止しているという設定の代表的なCFDベンチマーク問題。">lid-driven cavity flow</abbr>
 に書き換えて、<b>境界条件</b>（<code>bc.f90</code>）を自分で書く。方程式そのものは変わらず、計算領域の縁（壁）で速度に与える条件だけを変える。
 流入・流出のない閉じた箱にすると、次の<a href="poisson.html">圧力Poisson</a>で圧力の必要性が見えやすくなる。
 </p>
 
 <h2>支配方程式</h2>
 <p>
-解く方程式は変わらない（非圧縮<abbr class="term" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>と連続の式）。境界条件は式に項を足すものではなく、計算領域の<b>縁で解に与える条件</b>:
+解く方程式は変わらない（非圧縮<abbr class="tip" title="粘性をもつ流体の運動を表す基礎方程式。運動量の式と、質量保存を表す連続の式からなる。">Navier-Stokes方程式</abbr>と連続の式）。境界条件は式に項を足すものではなく、計算領域の<b>縁で解に与える条件</b>:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = -\frac{1}{\rho}\nabla p + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
+<p class="eq">$$ \nabla\cdot\mathbf{u} = 0 \tag{2} $$</p>
 <p>
-壁では流体が壁と同じ速度になり（<abbr class="term" title="壁の上で流体の速度が壁と同じになる（静止壁なら0になる）という条件。粘性流体の基本的な境界条件。">no-slip</abbr>）、壁を横切る流れは無い（<abbr class="term" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。これをスタガード格子の配列（ゴーストセル）に落とすのがこのステップ。圧力の境界条件は次の<a href="poisson.html">圧力Poisson</a>で扱う。
+壁では流体が壁と同じ速度になり（<abbr class="tip" title="壁の上で流体の速度が壁と同じになる（静止壁なら0になる）という条件。粘性流体の基本的な境界条件。">no-slip</abbr>）、壁を横切る流れは無い（<abbr class="tip" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。これをスタガード格子の配列（ゴーストセル）に落とすのがこのステップ。圧力の境界条件は次の<a href="poisson.html">圧力Poisson</a>で扱う。
 </p>
 
 <h2>lid-driven cavity への書き換え</h2>
@@ -96,12 +98,12 @@ end subroutine initial_condition
 <p>
 スタガード格子では、速度が必ずしも壁の上に載らない。たとえば下壁（<code>y=0</code>）に対して、<code>u</code>は壁から
 半セルずれた位置にある（<code>u(i,1)</code>は壁の半セル内側、<code>u(i,0)</code>は半セル外側）。壁の上に値が無いので、
-壁の外側に<abbr class="term" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr><code>u(i,0)</code>を1枚置き、
+壁の外側に<abbr class="tip" title="計算領域の外側に置く仮想的な格子点。境界条件を配列の演算だけで表現するためのテクニック。">ゴーストセル</abbr><code>u(i,0)</code>を1枚置き、
 <b>壁を挟んだ内側とゴーストの平均が壁での値になる</b>ように逆算する:
 </p>
-<p class="eq-block"><span id="eq-ghost-avg" class="katex-eq"></span></p>
+<p class="eq">$$ \tfrac{1}{2}\left(u_{i,1}+u_{i,0}\right) = u_{\mathrm{wall}} \tag{3} $$</p>
 <p>
-静止壁では壁での値が<code>0</code>なので、ゴーストは内側の<b>符号を反転</b>したものになる（<span class="katex-eq" id="eq-ghost-wall"></span>）。
+静止壁では壁での値が<code>0</code>なので、ゴーストは内側の<b>符号を反転</b>したものになる（$u_{i,0} = -u_{i,1}$）。
 コードでは<code>u(i,0) = -u(i,1)</code>（配列スライスで<code>u(1:Nx-1,0) = -u(1:Nx-1,1)</code>）。
 </p>
 <div style="text-align:center">
@@ -129,9 +131,9 @@ end subroutine initial_condition
 </p>
 <p>
 動く蓋（上壁）だけは壁での値が<code>U0</code>なので、平均が<code>U0</code>になるようゴーストを取る
-（<span class="katex-eq" id="eq-ghost-lid"></span>）——コードでは<code>u(1:Nx-1,Ny+1) = 2*U0 - u(1:Nx-1,Ny)</code>。
+（$u_{i,\mathrm{Ny}+1} = 2U_0 - u_{i,\mathrm{Ny}}$）——コードでは<code>u(1:Nx-1,Ny+1) = 2*U0 - u(1:Nx-1,Ny)</code>。
 一方、壁の上にちょうど載る速度（下壁での<code>v</code>など）は、ゴーストではなく直接<code>0</code>を入れる
-（<abbr class="term" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。
+（<abbr class="tip" title="壁を横切る流れが無いという条件。壁に垂直な速度成分を0にする。">no-penetration</abbr>）。
 </p>
 
 <h3>演習: <code>bc.f90</code>（cavity）</h3>
@@ -203,26 +205,19 @@ python post/plot.py wrk/config.csv
 示す特徴的なS字（上半分でプラス、下半分でマイナスの逆流）とはまるで違う形になっている。
 </p>
 <p>
-これは移流・拡散だけでは<abbr class="term" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0 として表される。">非圧縮条件</abbr>
+これは移流・拡散だけでは<abbr class="tip" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0 として表される。">非圧縮条件</abbr>
 （div u = 0）が保証されないため。蓋の下で押しのけられた流体が横や下に逃げる代わりに、
 その場に溜まって不自然に圧縮・膨張してしまい、循環を生み出す圧力差が生まれない。
 </p>
 
 <p>
-この<abbr class="term" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0。">非圧縮条件</abbr>を満たすために圧力を解くのが、次の<a href="poisson.html">圧力Poisson</a>のステップ。
+この<abbr class="tip" title="ある領域から出ていく量と入ってくる量が釣り合っている状態。非圧縮流れでは div(u)=0。">非圧縮条件</abbr>を満たすために圧力を解くのが、次の<a href="poisson.html">圧力Poisson</a>のステップ。
 </p>
 
 <div class="ok">
 <b>変更を保存する</b>: cavity 用に書き換えた <code>bc.f90</code> と <code>initial.f90</code> を<a href="setup.html#push">コミット・プッシュ</a>しておく（<code>poisson.f90</code> は次のステップ）。
 </div>
 
-<script>
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = -\\frac{1}{\\rho}\\nabla p + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
-katex.render("\\nabla\\cdot\\mathbf{u} = 0", document.getElementById('eq-cont'));
-katex.render("\\tfrac{1}{2}\\left(u_{i,1}+u_{i,0}\\right) = u_{\\mathrm{wall}}", document.getElementById('eq-ghost-avg'));
-katex.render("u_{i,0} = -u_{i,1}", document.getElementById('eq-ghost-wall'));
-katex.render("u_{i,\\mathrm{Ny}+1} = 2U_0 - u_{i,\\mathrm{Ny}}", document.getElementById('eq-ghost-lid'));
-</script>
   </main>
 </body>
 </html>

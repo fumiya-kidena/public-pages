@@ -37,13 +37,17 @@ img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;
 svg { max-width: 100%; height: auto; }
 .figcap { font-size: 0.9em; color: #666; margin-top: -0.3em; margin-bottom: 1.5em; }
 
-/* display equations: scroll horizontally instead of overflowing on narrow screens */
-.eq-block { overflow-x: auto; }
+/* display equations: KaTeX renders them centered; wide ones are scaled to fit by
+   fitEquations() in app.js, and any residual overflow is clipped (not scrolled). */
+.eq { overflow: hidden; }
 
 /* jargon-term tooltip (title attribute) */
-.term { border-bottom: 1px dotted #2b6cb0; cursor: help; text-decoration: none; color: inherit; }
-/* citation tooltip -- same look, slightly different color so it reads as "a reference", not a term */
-.cite { border-bottom: 1px dotted #b0602b; cursor: help; text-decoration: none; color: #b0602b; font-size: 0.9em; }
+.tip { border-bottom: 1px dotted #2b6cb0; cursor: help; text-decoration: none; color: inherit; }
+/* citation: same look, slightly different color so it reads as "a reference"; it is a
+   link (href="#ref-N") that jumps to the References footnote, with the full text in title */
+.cite { border-bottom: 1px dotted #b0602b; text-decoration: none; color: #b0602b; font-size: 0.9em; }
+/* highlight a References entry when jumped to from a citation */
+li[id^="ref-"]:target { background: #fff8e1; }
 
 /* click-to-reveal model-answer results (wrk/ filled in) */
 details.answer { border: 1px solid #cfe0d8; border-radius: 6px; margin: 1em 0; padding: 0 1em; background: #f6fbf8; }

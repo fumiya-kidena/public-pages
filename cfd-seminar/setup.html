@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>cfd-seminar — 0. 環境構築</title>
 <link rel="stylesheet" href="assets/style.css">
-<link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -40,7 +38,7 @@
 </ol>
 <div class="warn">
 <b>大原則: 何かをインストールしたり PATH を変えたりしたら、Zed をいったん完全に終了して開き直す。</b>
-Zed は起動した時点の<abbr class="term" title="コマンド名から実行ファイルを探すフォルダの一覧。ここに載っていないコマンドは「認識されません」になる。">PATH</abbr>を覚え込むため、
+Zed は起動した時点の<abbr class="tip" title="コマンド名から実行ファイルを探すフォルダの一覧。ここに載っていないコマンドは「認識されません」になる。">PATH</abbr>を覚え込むため、
 開いたままだと新しく入れたコマンドが「認識されません」になる。この先の手順で何かが見つからないときは、
 まず Zed の再起動を疑う（それでも駄目なら Windows からサインアウト→サインイン）。
 ページ末尾に<a href="#trouble">つまずいたとき早見表</a>もある。
@@ -48,24 +46,24 @@ Zed は起動した時点の<abbr class="term" title="コマンド名から実�
 
 <h2 id="zed">1. エディタ: Zed</h2>
 <p>
-エディタを決めていない人は <a href="https://zed.dev/">Zed</a> を使う。動作が軽く、
-<abbr class="term" title="文字でコマンドを打ってコンピュータを操作する画面。ここからコンパイラを起動する。">ターミナル</abbr>やGit操作までエディタ内に揃っているので、必要なものがほぼ1つで済む。
+エディタを決めていない人は <a href="https://zed.dev/" target="_blank" rel="noopener">Zed</a> を使う。動作が軽く、
+<abbr class="tip" title="文字でコマンドを打ってコンピュータを操作する画面。ここからコンパイラを起動する。">ターミナル</abbr>やGit操作までエディタ内に揃っているので、必要なものがほぼ1つで済む。
 <b>この先のクローン・コード編集・ビルド・実行・可視化・Git操作は、すべてこのZedの中で行う</b>（ブラウザを使うのはForkのときだけ）。Windows 10以降で動く。
 </p>
 <ol>
-  <li><a href="https://zed.dev/download">zed.dev/download</a> から入れる。</li>
+  <li><a href="https://zed.dev/download" target="_blank" rel="noopener">zed.dev/download</a> から入れる。</li>
   <li>拡張機能パネルを開き（<code>Ctrl+Shift+X</code>）、「<b>Fortran</b>」で検索して <b>Install</b>。
       これで <code>.f90</code> が色分け表示される。</li>
 </ol>
 <p>
 （任意）補完やエラー表示まで欲しい場合は、手順6でPythonを入れたあとに、Fortran用の
-<abbr class="term" title="エディタに補完・定義ジャンプ・エラー表示などの機能を提供する裏方のプログラム。">言語サーバ</abbr>
+<abbr class="tip" title="エディタに補完・定義ジャンプ・エラー表示などの機能を提供する裏方のプログラム。">言語サーバ</abbr>
 <code>fortls</code> を <code>python -m pip install fortls</code> で入れる（拡張が「Fortls not installed」と出すのはこれのこと）。
 </p>
 
 <h3 id="zed-settings">表示の設定（折り返し・パネル配置）</h3>
 <p>
-設定は<abbr class="term" title="Zedの設定を「キー: 値」のJSON形式で書くファイル。">settings.json</abbr>に書く。
+設定は<abbr class="tip" title="Zedの設定を「キー: 値」のJSON形式で書くファイル。">settings.json</abbr>に書く。
 <code>Ctrl+,</code> で開き、次の3行を <code>{ }</code> の中に加える。
 </p>
 <pre>
@@ -96,12 +94,12 @@ Zed は起動した時点の<abbr class="term" title="コマンド名から実�
 
 <h2 id="fork">2. 自分用のリポジトリを作る（Fork）</h2>
 <p>
-この演習は、配布元<abbr class="term" title="プロジェクトのファイルと変更履歴をまとめて管理する入れ物。GitHub上に置かれ、手元にクローンしてコピーを作る。">リポジトリ</abbr> <code>KIDENA-Fumiya/cfd-seminar</code> を各自が
-<abbr class="term" title="GitHub上で他人のリポジトリを自分のアカウントに丸ごと複製する操作。複製後は自分専用として自由に書き換えてよい。">Fork（フォーク）</abbr>して、
+この演習は、配布元<abbr class="tip" title="プロジェクトのファイルと変更履歴をまとめて管理する入れ物。GitHub上に置かれ、手元にクローンしてコピーを作る。">リポジトリ</abbr> <code>KIDENA-Fumiya/cfd-seminar</code> を各自が
+<abbr class="tip" title="GitHub上で他人のリポジトリを自分のアカウントに丸ごと複製する操作。複製後は自分専用として自由に書き換えてよい。">Fork（フォーク）</abbr>して、
 <b>自分のアカウントのコピー</b>の上で進める。Forkだけはgithub.com（ブラウザ）上の操作。
 </p>
 <ol>
-  <li><a href="https://github.com/">github.com</a> で無料アカウントを作る。</li>
+  <li><a href="https://github.com/" target="_blank" rel="noopener">github.com</a> で無料アカウントを作る。</li>
   <li>配布元リポジトリのページを開き、右上の <b>Fork</b> ボタンを押す。</li>
   <li>Fork画面の <b>Repository name</b> を <code>cfd-seminar-<span style="color:#c0392b">kidena</span></code> のように<b>末尾に自分の名前</b>を付けて作成する（誰のForkか分かるように。<span style="color:#c0392b">kidena</span> は例なので <b><span style="color:#c0392b">各自の名前に置き換える</span></b>）。</li>
 </ol>
@@ -115,7 +113,7 @@ Zed は起動した時点の<abbr class="term" title="コマンド名から実�
 クローンや履歴管理には<b>Git本体</b>が必要。
 </p>
 <ol>
-  <li><a href="https://git-scm.com/download/win">git-scm.com</a> から Git for Windows を入れる
+  <li><a href="https://git-scm.com/download/win" target="_blank" rel="noopener">git-scm.com</a> から Git for Windows を入れる
       （インストーラはすべて既定のまま「Next」で進めてよい）。</li>
   <li>名前とメールを登録する（コミットに記録される情報。未設定だと最初のコミットで失敗する）。
       Zedを開き直してから、下部ターミナルで一度だけ実行する:
@@ -132,7 +130,7 @@ git config --global user.email "you@example.com"
 
 <h2 id="clone">4. 自分のForkを C:\wrk\ にクローンする</h2>
 <p>
-Fork（GitHub上のコピー）を、自分のパソコンに<abbr class="term" title="GitHub上のリポジトリを自分のパソコンにコピーして、手元で編集できるようにすること。">クローン</abbr>して編集できるようにする。Zedだけで完結する。
+Fork（GitHub上のコピー）を、自分のパソコンに<abbr class="tip" title="GitHub上のリポジトリを自分のパソコンにコピーして、手元で編集できるようにすること。">クローン</abbr>して編集できるようにする。Zedだけで完結する。
 </p>
 <ol>
   <li>コマンドパレット（<code>Ctrl+Shift+P</code>）で「clone」と打って <b>git: clone</b> を選ぶ
@@ -162,8 +160,8 @@ URLは<b>自分のFork</b>のものを使う（配布元 <code>KIDENA-Fumiya/cfd
 </p>
 <ol>
   <li>変更したファイルにチェック（ステージ）→ メッセージを書いて <b>Commit</b>
-      （<abbr class="term" title="変更内容に区切りをつけて履歴として記録すること。">コミット</abbr>: 変更を履歴に記録）。</li>
-  <li><b>Push</b>（<abbr class="term" title="手元のコミットをGitHub上のリポジトリに送って反映すること。">プッシュ</abbr>: GitHubへ送る）。初回はGitHubログインを求められるので画面の指示に従う。</li>
+      （<abbr class="tip" title="変更内容に区切りをつけて履歴として記録すること。">コミット</abbr>: 変更を履歴に記録）。</li>
+  <li><b>Push</b>（<abbr class="tip" title="手元のコミットをGitHub上のリポジトリに送って反映すること。">プッシュ</abbr>: GitHubへ送る）。初回はGitHubログインを求められるので画面の指示に従う。</li>
 </ol>
 <p>
 Forkだけはブラウザで行う操作で、それ以外（クローン・コミット・プッシュ・ブランチ）はすべてZedの中で完結する。
@@ -172,12 +170,12 @@ Forkだけはブラウザで行う操作で、それ以外（クローン・コ�
 
 <h2 id="gfortran">5. コンパイラ: gfortran と make（MSYS2）</h2>
 <p>
-Fortranのソースを実行できる形に翻訳する<abbr class="term" title="人が書いたソースコードを、コンピュータが実行できる形（実行ファイル）に翻訳するプログラム。">コンパイラ</abbr>
-<abbr class="term" title="GNUが提供する無料のFortranコンパイラ。gcc一式に含まれる。">gfortran</abbr>と、コンパイル手順をまとめて実行する <code>make</code> を、
-<abbr class="term" title="Windows上にUnix風の開発環境とパッケージ管理(pacman)を用意するツール。gfortranもこれで入れる。">MSYS2</abbr>で入れる。
+Fortranのソースを実行できる形に翻訳する<abbr class="tip" title="人が書いたソースコードを、コンピュータが実行できる形（実行ファイル）に翻訳するプログラム。">コンパイラ</abbr>
+<abbr class="tip" title="GNUが提供する無料のFortranコンパイラ。gcc一式に含まれる。">gfortran</abbr>と、コンパイル手順をまとめて実行する <code>make</code> を、
+<abbr class="tip" title="Windows上にUnix風の開発環境とパッケージ管理(pacman)を用意するツール。gfortranもこれで入れる。">MSYS2</abbr>で入れる。
 </p>
 <ol>
-  <li><a href="https://www.msys2.org/">msys2.org</a> のインストーラを入れる（既定のまま。インストール先は <code>C:\msys64</code>）。</li>
+  <li><a href="https://www.msys2.org/" target="_blank" rel="noopener">msys2.org</a> のインストーラを入れる（既定のまま。インストール先は <code>C:\msys64</code>）。</li>
   <li>スタートメニューから <b>MSYS2 UCRT64</b>（緑アイコンの専用ターミナル）を開く。
       以降の <code>pacman</code> は<b>この窓の中でだけ</b>使えるコマンド（Zedのターミナルや PowerShell では動かない）。</li>
   <li>初回のみ、パッケージ情報を最新にする:
@@ -198,8 +196,8 @@ pacman -S mingw-w64-ucrt-x86_64-gcc-fortran make
 <h3 id="path">PATH を通す</h3>
 <p>
 Zedの下部ターミナルから <code>gfortran</code>・<code>make</code> を呼べるよう、MSYS2の2つの <code>bin</code> フォルダを
-<b>Windowsのユーザー<abbr class="term" title="OSがプログラムに渡す設定値のこと。PATHはその一つで、コマンドを探しに行くフォルダの一覧。">環境変数</abbr> <code>Path</code></b> に追加する。
-<b>Zedの下部ターミナル</b>（Windowsでは既定で<abbr class="term" title="Windows標準のコマンド実行環境（シェル）。Zedの下部ターミナルも既定でこれが開く。">PowerShell</abbr>が開く）で次を<b>一度だけ</b>実行する（管理者権限は不要。1行で全部コピーする）:
+<b>Windowsのユーザー<abbr class="tip" title="OSがプログラムに渡す設定値のこと。PATHはその一つで、コマンドを探しに行くフォルダの一覧。">環境変数</abbr> <code>Path</code></b> に追加する。
+<b>Zedの下部ターミナル</b>（Windowsでは既定で<abbr class="tip" title="Windows標準のコマンド実行環境（シェル）。Zedの下部ターミナルも既定でこれが開く。">PowerShell</abbr>が開く）で次を<b>一度だけ</b>実行する（管理者権限は不要。1行で全部コピーする）:
 </p>
 <pre>
 [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";C:\msys64\ucrt64\bin;C:\msys64\usr\bin", "User")
@@ -231,7 +229,7 @@ python -m pip install numpy matplotlib
       <code>pip</code> 単体ではなく <code>python -m pip</code> で呼ぶのが確実（Store版は <code>pip</code> がPATHに無いことがある）。</li>
 </ol>
 <p>
-Storeを使わない場合は、<a href="https://www.python.org/downloads/windows/">python.org のダウンロードページ</a>の
+Storeを使わない場合は、<a href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">python.org のダウンロードページ</a>の
 <b>「Windows installer (64-bit)」</b>（<code>python-3.x.x-amd64.exe</code>）でもよい。その場合は最初の画面で
 <b>「Add python.exe to PATH」に必ずチェック</b>を入れる（これを忘れると <code>python</code> コマンドが見つからない）。
 </p>

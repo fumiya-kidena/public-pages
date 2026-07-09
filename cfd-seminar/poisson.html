@@ -6,7 +6,9 @@
 <title>cfd-seminar — 5. 圧力Poisson</title>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="stylesheet" href="assets/katex.min.css">
-<script src="assets/katex.min.js"></script>
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
 </head>
 <body>
   <nav class="sidebar">
@@ -35,55 +37,55 @@
 <p>
 運動量式に残る<b>圧力項</b>（下線部）と、まだ使っていない<b>連続の式</b>（非圧縮条件）を、このステップで扱う:
 </p>
-<p class="eq-block"><span id="eq-ns" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-cont" class="katex-eq"></span></p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = \underbrace{-\frac{1}{\rho}\nabla p}_{\text{圧力項}} + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
+<p class="eq">$$ \nabla\cdot\mathbf{u} = 0 \tag{2} $$</p>
 <p>
-圧力項のx成分は <span class="katex-eq" id="eq-pcomp"></span>。移流・粘性で進めた仮の速度
-<span class="katex-eq" id="eq-udiff"></span> は連続の式を満たさないので、圧力を解いて速度を補正し、非圧縮
-（<span class="katex-eq" id="eq-div0"></span>）にするのがこのステップ。
+圧力項のx成分は $-\frac{1}{\rho}\frac{\partial p}{\partial x}$。移流・粘性で進めた仮の速度
+$\mathbf{u}^{\mathrm{diff}}$ は連続の式を満たさないので、圧力を解いて速度を補正し、非圧縮
+（$\nabla\cdot\mathbf{u}=0$）にするのがこのステップ。
 </p>
 
 <h3>圧力の境界条件（Neumann）</h3>
 <p>
-圧力（射影ポテンシャル）<span class="katex-eq" id="eq-phi-bc"></span>にも境界条件が要る。壁を横切る流れが無い
-（壁に垂直な速度が0）ということは、あとで出てくる速度補正 <span class="katex-eq" id="eq-corr-bc"></span> の壁に垂直な成分も0、
-すなわち<b>壁で圧力の法線方向勾配が0</b>（<span class="katex-eq" id="eq-neumann"></span>、<abbr class="term" title="境界で法線方向の勾配をゼロに固定する境界条件。ここでは壁に垂直な圧力の傾きを0にする。">Neumann条件</abbr>）を意味する。
+圧力（射影ポテンシャル）$\phi$にも境界条件が要る。壁を横切る流れが無い
+（壁に垂直な速度が0）ということは、あとで出てくる速度補正 $\mathbf{u}^{n+1} = \mathbf{u}^{\mathrm{diff}} - \Delta t\,\nabla\phi$ の壁に垂直な成分も0、
+すなわち<b>壁で圧力の法線方向勾配が0</b>（$\frac{\partial \phi}{\partial n} = 0$、<abbr class="tip" title="境界で法線方向の勾配をゼロに固定する境界条件。ここでは壁に垂直な圧力の傾きを0にする。">Neumann条件</abbr>）を意味する。
 コードでは<code>poisson.f90</code>のSORで、領域端の隣接値を内側に折り返して参照する
 （<code>pe = p(min(i+1,Nx),j)</code>のように添字を<code>min/max</code>で頭打ちにする）ことで勾配ゼロを表している——ここはすでに書いてある。
 </p>
 
 <h2>圧力（射影ポテンシャル）を解く意味</h2>
 <p>
-仮の速度 <span class="katex-eq" id="eq-udiff2"></span> は移流項と粘性項を足しただけで、連続の式 <span class="katex-eq" id="eq-div0b"></span> を満たしていない。
-最終的な <span class="katex-eq" id="eq-unext"></span> には運動量の式と連続の式の<b>両方</b>を満たしてほしい。そこで <span class="katex-eq" id="eq-udiff3"></span> を発散ゼロの場へ射影する。
-<abbr class="term" title="任意のベクトル場を『発散がゼロの部分』と『あるスカラーの勾配』に一意に分解できるという定理。">Helmholtz–Hodge分解</abbr>により、
-仮の速度から勾配部分 <span class="katex-eq" id="eq-gradphi"></span> を引けば、発散ゼロの速度が残る:
+仮の速度 $\mathbf{u}^{\mathrm{diff}}$ は移流項と粘性項を足しただけで、連続の式 $\nabla\cdot\mathbf{u}=0$ を満たしていない。
+最終的な $\mathbf{u}^{n+1}$ には運動量の式と連続の式の<b>両方</b>を満たしてほしい。そこで $\mathbf{u}^{\mathrm{diff}}$ を発散ゼロの場へ射影する。
+<abbr class="tip" title="任意のベクトル場を『発散がゼロの部分』と『あるスカラーの勾配』に一意に分解できるという定理。">Helmholtz–Hodge分解</abbr>により、
+仮の速度から勾配部分 $\Delta t\,\nabla\phi$ を引けば、発散ゼロの速度が残る:
 </p>
-<p class="eq-block"><span id="eq-proj" class="katex-eq"></span></p>
+<p class="eq">$$ \mathbf{u}^{n+1} = \mathbf{u}^{\mathrm{diff}} - \Delta t\,\nabla\phi \tag{3} $$</p>
 <p>
-発散ゼロ（<span class="katex-eq" id="eq-div0c"></span>）を課すと、<span class="katex-eq" id="eq-phi"></span> は次の圧力Poisson方程式を満たす:
+発散ゼロ（$\nabla\cdot\mathbf{u}^{n+1}=0$）を課すと、$\phi$ は次の圧力Poisson方程式を満たす:
 </p>
-<p class="eq-block"><span id="eq-poisson" class="katex-eq"></span></p>
+<p class="eq">$$ \nabla^2\phi = \frac{1}{\Delta t}\,\nabla\cdot\mathbf{u}^{\mathrm{diff}} \tag{4} $$</p>
 <p>
-ここで <span class="katex-eq" id="eq-phi2"></span> は<b>物理的な圧力そのものではない</b>。速度を非圧縮に保つための
-<abbr class="term" title="射影で速度を発散ゼロにするためのスカラー。物理圧力を近似するが、同一ではない。">射影ポテンシャル（擬圧力）</abbr>で、
-物理圧力を近似する（Δt→0で一致）が、分数ステップの分離誤差（特に壁の近くで <span class="katex-eq" id="eq-odt"></span> 程度）を
+ここで $\phi$ は<b>物理的な圧力そのものではない</b>。速度を非圧縮に保つための
+<abbr class="tip" title="射影で速度を発散ゼロにするためのスカラー。物理圧力を近似するが、同一ではない。">射影ポテンシャル（擬圧力）</abbr>で、
+物理圧力を近似する（Δt→0で一致）が、分数ステップの分離誤差（特に壁の近くで $O(\Delta t)$ 程度）を
 このスカラーが引き受ける分だけ厳密な圧力とはずれる。この「圧力もどき」で毎ステップ速度を非圧縮に引き戻すのが、
-<abbr class="term" title="速度・圧力を時間分離して解く手法。仮の速度を作り、その発散を打ち消すよう圧力を解いて速度を補正する。">Fractional Step法</abbr>（射影法）<abbr class="cite" title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762.">[3]</abbr>の肝である。
+<abbr class="tip" title="速度・圧力を時間分離して解く手法。仮の速度を作り、その発散を打ち消すよう圧力を解いて速度を補正する。">Fractional Step法</abbr>（射影法）<a class="cite" href="#ref-3" title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a>の肝である。
 </p>
 <p>
-コードでは <span class="katex-eq" id="eq-phi3"></span> を配列 <code>p</code> で表し、<code>1/ρ</code>は<code>p</code>に吸収させている。
-全周<abbr class="term" title="境界で法線方向の勾配をゼロに固定する境界条件（∂φ/∂n=0）。">Neumann</abbr>境界では
-<span class="katex-eq" id="eq-phi4"></span> は定数分だけ不定なので、毎ステップ平均をゼロに引いてある。
+コードでは $\phi$ を配列 <code>p</code> で表し、<code>1/ρ</code>は<code>p</code>に吸収させている。
+全周<abbr class="tip" title="境界で法線方向の勾配をゼロに固定する境界条件（∂φ/∂n=0）。">Neumann</abbr>境界では
+$\phi$ は定数分だけ不定なので、毎ステップ平均をゼロに引いてある。
 </p>
 
 <h2>離散化と演習（<code>poisson.f90</code>）</h2>
 
 <h3>1. 発散（Poissonの右辺 <code>rhs_p</code>）</h3>
 <p>
-セル(i,j)の発散は、隣り合う面の速度の差で作る（<code>u(i,j)</code>が <span class="katex-eq" id="eq-uidx"></span>）。それを<code>dt</code>で割ったものが右辺:
+セル(i,j)の発散は、隣り合う面の速度の差で作る（<code>u(i,j)</code>が $u_{i+1/2,\,j}$）。それを<code>dt</code>で割ったものが右辺:
 </p>
-<p class="eq-block"><span id="eq-rhs" class="katex-eq"></span></p>
+<p class="eq">$$ \mathrm{rhs}_{i,j} = \frac{1}{\Delta t}\left(\frac{u^{\mathrm{diff}}_{i+1/2,\,j}-u^{\mathrm{diff}}_{i-1/2,\,j}}{\Delta x} + \frac{v^{\mathrm{diff}}_{i,\,j+1/2}-v^{\mathrm{diff}}_{i,\,j-1/2}}{\Delta y}\right) \tag{5} $$</p>
 <details class="answer">
 <summary>答えを見る</summary>
 <pre>
@@ -93,15 +95,15 @@ rhs_p(i,j) = ((u(i,j)-u(i-1,j))/dx + (v(i,j)-v(i,j-1))/dy) / dt
 
 <h3>2. SOR（Gauss-Seidel＋緩和係数）</h3>
 <p>
-Poisson方程式は<abbr class="term" title="Successive Over-Relaxation（逐次過緩和）。">SOR</abbr>で反復的に解く。これは
-<abbr class="term" title="連立一次方程式を反復で解く古典的な手法。各格子点を順に、周囲の最新値を使って更新していく。">Gauss-Seidel法</abbr>
+Poisson方程式は<abbr class="tip" title="Successive Over-Relaxation（逐次過緩和）。">SOR</abbr>で反復的に解く。これは
+<abbr class="tip" title="連立一次方程式を反復で解く古典的な手法。各格子点を順に、周囲の最新値を使って更新していく。">Gauss-Seidel法</abbr>
 に緩和係数 ω（1〜2）を掛けて収束を速めただけの手法。まず各格子点で Gauss-Seidel の新値を作り:
 </p>
-<p class="eq-block"><span id="eq-gs" class="katex-eq"></span></p>
+<p class="eq">$$ \phi^{\mathrm{GS}}_{i,j} = \frac{1}{\text{coef}}\left(\frac{\phi_{i+1,j}+\phi_{i-1,j}}{\Delta x^2} + \frac{\phi_{i,j+1}+\phi_{i,j-1}}{\Delta y^2} - \mathrm{rhs}_{i,j}\right) \tag{6} $$</p>
 <p>
-（<span class="katex-eq" id="eq-coef"></span>）。次に、旧値からの変化量を ω 倍して適用する（<code>ω=1</code>なら Gauss-Seidel そのもの、<code>1&lt;ω&lt;2</code>で加速）:
+（$\text{coef} = \frac{2}{\Delta x^2}+\frac{2}{\Delta y^2}$）。次に、旧値からの変化量を ω 倍して適用する（<code>ω=1</code>なら Gauss-Seidel そのもの、<code>1&lt;ω&lt;2</code>で加速）:
 </p>
-<p class="eq-block"><span id="eq-relax" class="katex-eq"></span></p>
+<p class="eq">$$ \phi^{\mathrm{new}}_{i,j} = \phi_{i,j} + \omega\left(\phi^{\mathrm{GS}}_{i,j} - \phi_{i,j}\right) \tag{7} $$</p>
 <details class="answer">
 <summary>答えを見る</summary>
 <pre>
@@ -115,10 +117,10 @@ p_new = omega*p_new + (1.0d0 - omega)*p(i,j)
 
 <h3>3. 速度補正</h3>
 <p>
-求めた <span class="katex-eq" id="eq-phi5"></span> の勾配を仮の速度から引くと、発散ゼロの <span class="katex-eq" id="eq-unext2"></span> になる:
+求めた $\phi$ の勾配を仮の速度から引くと、発散ゼロの $\mathbf{u}^{n+1}$ になる:
 </p>
-<p class="eq-block"><span id="eq-corr-u" class="katex-eq"></span></p>
-<p class="eq-block"><span id="eq-corr-v" class="katex-eq"></span></p>
+<p class="eq">$$ u^{n+1}_{i+1/2,\,j} = u^{\mathrm{diff}}_{i+1/2,\,j} - \Delta t\,\frac{\phi_{i+1,j}-\phi_{i,j}}{\Delta x} \tag{8} $$</p>
+<p class="eq">$$ v^{n+1}_{i,\,j+1/2} = v^{\mathrm{diff}}_{i,\,j+1/2} - \Delta t\,\frac{\phi_{i,j+1}-\phi_{i,j}}{\Delta y} \tag{9} $$</p>
 <details class="answer">
 <summary>答えを見る</summary>
 <pre>
@@ -128,7 +130,7 @@ v(i,j) = v(i,j) - dt*(p(i,j+1) - p(i,j))/dy
 </details>
 <h2>実行して確認: 圧力を入れて Ghia 基準解と比較する</h2>
 <p>
-lid-driven cavity flow の定番の検証には、Ghia ら<abbr class="cite" title="Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. Journal of Computational Physics, 48(3), 387-411.">[1]</abbr>
+lid-driven cavity flow の定番の検証には、Ghia ら<a class="cite" href="#ref-1" title="Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. Journal of Computational Physics, 48(3), 387-411. doi:10.1016/0021-9991(82)90058-4">[1]</a>
 の数値解が使われる。これは非常に細かい格子＋マルチグリッド法で解いたもので、中心線上の離散点データ
 （Re=100, 400, 1000, ...）がCFDコードの比較用ベンチマークとして広く用いられている。
 </p>
@@ -179,38 +181,11 @@ Ghia基準解（赤四角）とよく一致する渦が再現されている。�
 <b>変更を保存する</b>: これで分数ステップの全体（移流→粘性→圧力）が完成した。<code>poisson.f90</code> と <code>main.f90</code> を<a href="setup.html#push">コミット・プッシュ</a>しておく（<code>bc.f90</code>・<code>initial.f90</code> は前のステップで保存済み）。
 </div>
 
-<script>
-katex.render("\\frac{\\partial \\mathbf{u}}{\\partial t} + (\\mathbf{u}\\cdot\\nabla)\\mathbf{u} = \\underbrace{-\\frac{1}{\\rho}\\nabla p}_{\\text{圧力項}} + \\nu\\nabla^2\\mathbf{u}", document.getElementById('eq-ns'));
-katex.render("\\nabla\\cdot\\mathbf{u} = 0", document.getElementById('eq-cont'));
-katex.render("-\\frac{1}{\\rho}\\frac{\\partial p}{\\partial x}", document.getElementById('eq-pcomp'));
-katex.render("\\phi", document.getElementById('eq-phi-bc'));
-katex.render("\\mathbf{u}^{n+1} = \\mathbf{u}^{\\mathrm{diff}} - \\Delta t\\,\\nabla\\phi", document.getElementById('eq-corr-bc'));
-katex.render("\\frac{\\partial \\phi}{\\partial n} = 0", document.getElementById('eq-neumann'));
-katex.render("\\mathbf{u}^{\\mathrm{diff}}", document.getElementById('eq-udiff'));
-katex.render("\\nabla\\cdot\\mathbf{u}=0", document.getElementById('eq-div0'));
-katex.render("\\mathbf{u}^{\\mathrm{diff}}", document.getElementById('eq-udiff2'));
-katex.render("\\nabla\\cdot\\mathbf{u}=0", document.getElementById('eq-div0b'));
-katex.render("\\mathbf{u}^{n+1}", document.getElementById('eq-unext'));
-katex.render("\\mathbf{u}^{\\mathrm{diff}}", document.getElementById('eq-udiff3'));
-katex.render("\\Delta t\\,\\nabla\\phi", document.getElementById('eq-gradphi'));
-katex.render("\\mathbf{u}^{n+1} = \\mathbf{u}^{\\mathrm{diff}} - \\Delta t\\,\\nabla\\phi", document.getElementById('eq-proj'));
-katex.render("\\nabla\\cdot\\mathbf{u}^{n+1}=0", document.getElementById('eq-div0c'));
-katex.render("\\phi", document.getElementById('eq-phi'));
-katex.render("\\nabla^2\\phi = \\frac{1}{\\Delta t}\\,\\nabla\\cdot\\mathbf{u}^{\\mathrm{diff}}", document.getElementById('eq-poisson'));
-katex.render("\\phi", document.getElementById('eq-phi2'));
-katex.render("O(\\Delta t)", document.getElementById('eq-odt'));
-katex.render("\\phi", document.getElementById('eq-phi3'));
-katex.render("\\phi", document.getElementById('eq-phi4'));
-katex.render("u_{i+1/2,\\,j}", document.getElementById('eq-uidx'));
-katex.render("\\mathrm{rhs}_{i,j} = \\frac{1}{\\Delta t}\\left(\\frac{u^{\\mathrm{diff}}_{i+1/2,\\,j}-u^{\\mathrm{diff}}_{i-1/2,\\,j}}{\\Delta x} + \\frac{v^{\\mathrm{diff}}_{i,\\,j+1/2}-v^{\\mathrm{diff}}_{i,\\,j-1/2}}{\\Delta y}\\right)", document.getElementById('eq-rhs'));
-katex.render("\\phi^{\\mathrm{GS}}_{i,j} = \\frac{1}{\\text{coef}}\\left(\\frac{\\phi_{i+1,j}+\\phi_{i-1,j}}{\\Delta x^2} + \\frac{\\phi_{i,j+1}+\\phi_{i,j-1}}{\\Delta y^2} - \\mathrm{rhs}_{i,j}\\right)", document.getElementById('eq-gs'));
-katex.render("\\text{coef} = \\frac{2}{\\Delta x^2}+\\frac{2}{\\Delta y^2}", document.getElementById('eq-coef'));
-katex.render("\\phi^{\\mathrm{new}}_{i,j} = \\phi_{i,j} + \\omega\\left(\\phi^{\\mathrm{GS}}_{i,j} - \\phi_{i,j}\\right)", document.getElementById('eq-relax'));
-katex.render("\\phi", document.getElementById('eq-phi5'));
-katex.render("\\mathbf{u}^{n+1}", document.getElementById('eq-unext2'));
-katex.render("u^{n+1}_{i+1/2,\\,j} = u^{\\mathrm{diff}}_{i+1/2,\\,j} - \\Delta t\\,\\frac{\\phi_{i+1,j}-\\phi_{i,j}}{\\Delta x}", document.getElementById('eq-corr-u'));
-katex.render("v^{n+1}_{i,\\,j+1/2} = v^{\\mathrm{diff}}_{i,\\,j+1/2} - \\Delta t\\,\\frac{\\phi_{i,j+1}-\\phi_{i,j}}{\\Delta y}", document.getElementById('eq-corr-v'));
-</script>
+<h2 id="references">参考文献</h2>
+<ul class="ref-list">
+  <li id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. Journal of Computational Physics, 48(3), 387-411. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></li>
+  <li id="ref-3">[3] Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2" target="_blank" rel="noopener">doi:10.1090/S0025-5718-1968-0242392-2</a></li>
+</ul>
   </main>
 </body>
 </html>
