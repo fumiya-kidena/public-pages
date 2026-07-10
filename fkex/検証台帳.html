@@ -54,7 +54,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-08（M9 追記）</p>
+<p class="updated">最終更新：2026-07-10（M10・M11 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -328,6 +328,26 @@
 <li><b>計測の限界（記録のみ・修正せず）</b>：純移流ファミリ（vortex/zalesak 系）は二相 advance 経路を通らず段分解計器の対象外（プロファイラに段タグが出ない）。プラン指定 4 ケースのうち 1 本（vortex_fgvt）はこの理由で段分解不能。</li>
 </ul></div>
 <div class="warn">⚠ open：(1) <b>strong scaling（od2d、1/2/4/8 rank・median of 3）は測定継続中</b>＝共有機の並行負荷で反復間ばらつきが公平条件（~5%）を大幅超過（occupancy 違反疑い）し、再計測要否を含め未確定。(2) MPI オーバーヘッド比較（非 MPI vs 1 rank。非 MPI 側の基準値は取得済み）は strong scaling の 1 rank データ待ち。完了後に本節へ追記する。</div>
+
+<h2>M10 — AmrCore 派生・静的2レベル再現（2026-07-10）</h2>
+<p>3レベル適応 AMR 移行の第一段。<span class="term" title="Adaptive Mesh Refinement の骨組みを提供する AMReX の基底クラス。ボックスのタグ付け・regrid（格子の再構成）を担う。">AmrCore</span> はメッシュ骨組み（タグ付け・regrid）だけを担当させ、物理量のデータフローは M0〜M9 と同じ自前配線を維持したまま、既存の静的 2 レベル構成をその上に載せ替える段。</p>
+<div class="tblwrap"><table>
+  <tr><th>設定</th><td>AmrCore 派生クラスを新設。regrid を発火させない<b>退化構成</b>（2 レベル固定・粗＋refine(2) 細、格子は Berger–Rigoutsos クラスタリングを使わず手動設置）で、M0〜M9 の全検証ケースを再走</td></tr>
+  <tr><th>ゲートと実測</th><td><b>常設回帰 <code>G-M10-0</code></b>：既存の 14 検証アンカー（M0〜M9 の代表ケース群）全てで<b>ビット一致</b></td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：
+<ul>
+<li>挙動不変のリファクタは「全アンカーのビット一致」という機械精度の基準で担保できる。AmrCore を骨組み層だけに限定して物理データフローを自前に残す設計判断（AmrCore=メッシュ、自前配線=物理）が、実装移行の初段でそのまま機能した。</li>
+<li>格子の手動設置（Berger–Rigoutsos 不使用）は、静的構成の段階ではタグ付けアルゴリズムの正しさを検証範囲に含める必要がないための意図的な切り分け。タグ付け自体の検証は後続マイルストーン（M15 想定）に回す。</li>
+</ul></div>
+
+<h2>M11 — composite MLMG 射影の多レベル一般化（2026-07-10）</h2>
+<p>圧力射影を単一レベル版から複数レベル同時解（composite MLMG）へ一般化する段。</p>
+<div class="tblwrap"><table>
+  <tr><th>設定</th><td>MLABecLaplacian＋MLMG の射影ラッパを <code>Vector&lt;MultiFab*&gt;</code> によるレベル間演算子渡しに拡張。レベル数 L=1 に退化させた構成で M10 と同じ回帰ケースを再走</td></tr>
+  <tr><th>ゲートと実測</th><td>L=1 退化構成が単レベル射影経路と<b>厳密一致</b>。<code>G-M10-0</code> を含む既存回帰は維持</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：composite（Vector 化）実装が単レベルへの正しい還元になっていることを直接確認できた。射影のレベル一般化が、既存の静的構成の物理結果を一切変えずに導入できている。</div>
 
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6–M7）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 

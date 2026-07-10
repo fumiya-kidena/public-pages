@@ -58,7 +58,7 @@
 <main>
 
 <h1>FKeX — 開発ドキュメント</h1>
-<p class="updated">最終更新：2026-07-08（M9 追記）／初版：2026-07-07</p>
+<p class="updated">最終更新：2026-07-10（M10・M11 追記）／初版：2026-07-07</p>
 
 <p><b>FKeX</b>（仮名）は <a href="https://github.com/AMReX-Codes/amrex" target="_blank" rel="noopener">AMReX</a> ベースの非圧縮二相流ソルバ。<span class="term" title="Volume of Fluid 法。各セルの液相体積分率（0〜1）で気液界面を表現する二相流の標準手法。">VOF 法</span>に<span class="term" title="界面近傍だけ通常格子より細かいサブグリッドで VOF 界面を表現し、表面張力もそのサブグリッド上で評価するクロージャ。">サブグリッド解像の界面表現</span>（fine-grid interface closure）を組み合わせた手法を、AMReX のデータ構造と線形ソルバの上に<span class="term" title="旧コードを翻訳・コピーせず、数式仕様ノートから新規に書き下ろす開発方式。旧コードは数値突合の基準（実行オラクル）としてのみ用いる。">クリーンルーム</span>で新規実装する。研究用 Fortran ソルバ（FK3）の後継<sup><a href="#fn1">†1</a></sup>。</p>
 <p>このページは開発ドキュメントの<b>入口</b>（インデックス）。実装の節目（マイルストーン）ごとに更新する。設計判断の深掘りと検証の生データは、上部ナビの<a href="サブ格子表現の設計判断.html">設計判断</a>・<a href="検証台帳.html">検証台帳</a>の各ページへ。</p>
@@ -178,6 +178,8 @@
   <tr><td>M7</td><td>全物理回帰（振動液滴・気泡破裂）</td><td><span class="status-done">✅ 完了</span>（2026-07-08。od2d 周期 理論+1.58%/FK3+0.065%・rb2d 単調上昇・エネルギー診断3系統・gmres_mlmg 化）</td></tr>
   <tr><td>M8</td><td>MPI 並列・富岳（A64FX）ビルド</td><td><b>ローカル部完了</b>（2026-07-08。MPI ビルド・複数 rank 検証はローカルで green。富岳（A64FX）実機はユーザ側で後日）</td></tr>
   <tr><td>M9</td><td>性能検証</td><td><span class="status-done">✅ 完了</span>（2026-07-08。段分解＝射影が 48〜73% で支配・OMP スモーク・14× 比は複合効果と結論。strong scaling のみ測定継続中）</td></tr>
+  <tr><td>M10</td><td>AmrCore 派生・静的2レベル再現</td><td><span class="status-done">✅ 完了</span>（2026-07-10。退化構成で全14アンカーがビット一致＝常設回帰 G-M10-0）</td></tr>
+  <tr><td>M11</td><td>composite MLMG 射影の多レベル一般化</td><td><span class="status-done">✅ 完了</span>（2026-07-10。L=1 で単レベルと厳密一致）</td></tr>
 </table>
 </div>
 
@@ -260,6 +262,31 @@
   <li><b>計測の限界</b>：純移流ファミリ（vortex/zalesak 系）は二相 advance 経路を通らないため段分解計器の対象外（記録のみ）。</li>
 </ul>
 
+<h3>3レベル適応 AMR へ移行開始（2026-07-10）</h3>
+<p>M9 までは単一レベル一様格子＋固定 refine(2) サブグリッドだった。ここから、界面バンドを常に最細レベルで運ぶ<b>3レベル適応 AMR</b>（応用先＝bag breakup）への移行に着手する。</p>
+<ol>
+  <li><b>目標</b>：界面近傍だけを常に最細レベルで解像する 3 レベル適応格子。応用は bag breakup（薄膜の破断）で、界面が動き回る領域でだけ細格子コストを払いたい。</li>
+  <li><b>方式</b>：AMReX の <span class="term" title="Adaptive Mesh Refinement の骨組みを提供する AMReX の基底クラス。ボックスのタグ付け・regrid（格子の再構成）を担う。">AmrCore</span> は<b>メッシュの骨組み（タグ付け・regrid）だけ</b>を担当させ、物理量のデータフローは従来どおり<b>全レベル自前で「fine が真実」</b>の設計を維持する。標準的な AMR でも細レベルを粗レベルが上書きすることはない（<span class="term" title="AMReX で複数レベルにまたがるゴーストセルを埋める標準操作。regrid で新規にできたセルもこの経路で埋まる。粗格子データで既存の細格子データを上書きする操作ではない。">FillPatch</span> が触るのはゴーストセルと regrid で新規にできたセルだけ）という事実は正しく踏まえたうえで、FKeX は物理段のデータフロー配線を AmrCore に委ねず自前で持つ方針。</li>
+  <li><b>M10</b>：AmrCore 派生クラスを新設し、既存の静的 2 レベル構成をその上で再現。<b>退化構成（2 レベル固定・regrid なし）で全 14 の検証アンカーがビット一致</b>＝常設回帰 <code>G-M10-0</code> として確立（挙動不変のリファクタであることの証明）。</li>
+  <li><b>M11</b>：圧力射影を <b>composite MLMG</b>（多レベル版）へ一般化。レベル数 L=1 に退化させると単レベル射影と厳密一致することを確認。</li>
+  <li><b>今後</b>：M12 で初の粗細境界を持つ静的 3 レベル構成、以降 regrid・タグ付けロジックを積み上げ、M15 でタグ＋regrid による本物の 3 レベル AMR に到達する計画。</li>
+</ol>
+
+<h3>M10 完了メモ（2026-07-10）</h3>
+<p>AmrCore をメッシュ骨組み専任として導入し、既存の静的 2 レベル構成をその上に載せ替えた段階。</p>
+<ul>
+  <li><b>中身</b>：AmrCore 派生クラス（メッシュ骨組みのみ担当）を新設し、M0〜M9 の静的 2 レベル構成（粗＋refine(2) 細）をこの上で再現。物理量のデータフロー配線（粗細転送・集約）は従来どおり自前実装のまま変更なし。</li>
+  <li><b>設計判断</b>：格子は手動設置（Berger–Rigoutsos クラスタリングは不使用）— 静的構成の段階ではタグ付けアルゴリズムの正しさを検証対象に含める必要がないため、既知のボックス配置を明示的に与えて AmrCore の骨組み機能だけを検証する。</li>
+</ul>
+<div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：退化構成（regrid を発火させない 2 レベル固定）で走らせ、既存の全 14 検証アンカーと<b>ビット一致</b>。挙動不変のリファクタであることを機械精度で担保する常設回帰 <code>G-M10-0</code> として確立。</div>
+
+<h3>M11 完了メモ（2026-07-10）</h3>
+<p>圧力射影を composite（多レベル同時解）へ一般化した段階。</p>
+<ul>
+  <li><b>中身</b>：MLABecLaplacian＋MLMG の射影ラッパを <code>Vector&lt;MultiFab*&gt;</code> によるレベル間演算子渡しに拡張。</li>
+</ul>
+<div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：レベル数 L=1 に退化させた構成が単レベル射影経路と<b>厳密一致</b>（Vector 化が単レベルへの正しい還元になっている直接証拠）。<code>G-M10-0</code> を含む既存回帰は維持。</div>
+
 <h2>開発環境メモ</h2>
 <ul>
   <li>ローカル：Windows + <b>WSL2 Ubuntu</b>（g++ 15 / GNU Make）。Google Drive のパスは WSL から直接読めない（I/O error）ため、Windows 側から tar パイプで <code>~/wrk/fkex</code> へ同期して WSL 内でビルドする。</li>
@@ -284,7 +311,7 @@
   <p id="fn2">†2 — AMReX の <code>MacProjector</code> クラスは 22.01 で AMReX-Hydro リポジトリへ移管されたため本体には無い。依存を AMReX 本体に限る方針から、<code>MLABecLaplacian</code>＋<code>MLMG</code> を直接使う薄いラッパを自前で書く。</p>
 </div>
 
-<p class="hist">更新履歴：2026-07-07 初版（M0 着手時点）。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+<p class="hist">更新履歴：2026-07-07 初版（M0 着手時点）。2026-07-10 M10・M11（3レベル適応 AMR 移行着手）追記。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
 </main>
 </body>
