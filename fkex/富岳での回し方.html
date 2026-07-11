@@ -1,0 +1,133 @@
+<!-- built from: FKeX - 富岳での回し方.md -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FKeX — 富岳での回し方</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;color:#222;
+    font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;line-height:1.7}
+  nav.topnav{background:#f4f7fa;border-bottom:1px solid #dde3ea;padding:.55em 1.2em;
+    display:flex;flex-wrap:wrap;align-items:baseline;gap:.3em 1.1em;font-size:.92rem}
+  nav.topnav .brand{font-weight:700;color:#2b6cb0;letter-spacing:.05em;margin-right:.4em}
+  nav.topnav a{color:#2b6cb0;text-decoration:none;padding:.12em .55em;border-radius:4px;white-space:nowrap}
+  nav.topnav a:hover{text-decoration:underline}
+  nav.topnav a.current{background:#2b6cb0;color:#fff}
+  nav.topnav a.current:hover{text-decoration:none}
+  main{max-width:900px;margin:0 auto;padding:0 1.5em 5em}
+  h1{font-size:1.55rem;font-weight:700;border-bottom:3px solid #2b6cb0;padding-bottom:.3em;margin:1.3em 0 .4em}
+  h2{font-size:1.22rem;color:#2b6cb0;border-bottom:2px solid #2b6cb0;padding-bottom:.15em;margin:2.2em 0 .7em}
+  h3{font-size:1.02rem;margin:1.7em 0 .5em}
+  .updated{color:#888;font-size:.85em;margin:.1em 0 1.6em}
+  code{font-family:Consolas,"SF Mono",ui-monospace,monospace;background:#f4f4f4;border-radius:4px;padding:.1em .35em;font-size:.88em}
+  pre{background:#f4f4f4;border:1px solid #ddd;border-radius:6px;padding:.8em 1em;overflow-x:auto;font-size:.85em}
+  pre code{background:none;padding:0}
+  table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.9rem}
+  th,td{border:1px solid #ccc;padding:.42em .65em;text-align:left;vertical-align:top}
+  th{background:#eef3f9;font-weight:600}
+  .tblwrap{overflow-x:auto}
+  a{color:#2b6cb0}
+  a[target="_blank"]::after{content:"↗";font-size:.75em;margin-left:.15em;color:#888}
+  .term{text-decoration:underline dotted;cursor:help}
+  .warn,.ok{padding:.8em 1em;margin:1em 0;border-left:4px solid}
+  .warn{background:#fff8e1;border-color:#f0ad4e}
+  .ok{background:#eafaf1;border-color:#2ecc71}
+  ol li,ul li{margin:.3em 0}
+  .foot{color:#888;font-size:.85em;margin-top:2.5em;border-top:1px solid #eee;padding-top:1em}
+  @media (max-width:700px){main{padding:0 1em 4em}}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">FKeX 開発ノート</span>
+  <a href="index.html">開発ドキュメント</a>
+  <a href="サブ格子表現の設計判断.html">サブ格子表現の設計判断</a>
+  <a href="検証台帳.html">検証台帳</a>
+  <a class="current" href="富岳での回し方.html">富岳での回し方</a>
+</nav>
+
+<main>
+
+<h1>富岳での回し方</h1>
+<p class="updated">最終更新：2026-07-11</p>
+
+<p>FKeX（AMReX ベースの二相流ソルバ）を富岳（A64FX）で転送・ビルド・投入・後処理するまでの最短手順。設計判断や検証結果は<a href="index.html">開発ドキュメント</a>・<a href="検証台帳.html">検証台帳</a>を参照。ここは実行手順のみに絞る。</p>
+
+<h2>1. 設定の作り方</h2>
+<p>設定は AMReX ネイティブの <a href="https://amrex-codes.github.io/amrex/docs_html/Basics.html#parmparse" target="_blank" rel="noopener"><span class="term" title="AMReX 組み込みの key=value 形式パーサ。inputs ファイル1本と実行時コマンドライン引数の両方から同じ書式で読める。">ParmParse</span></a> <code>inputs</code> ファイルが一次（そのまま使う）。手で書いてもよいが、ケース表 <code>case/case.csv</code> → <code>python3 case/genInput.py &lt;case&gt;</code> の1変換で生成する運用（FK3 の <code>config.csv</code> と同じ操作感）。ノブ名は機能プレフィクスで分類：<code>vof.</code>（VOF/サブグリッド）・<code>tension.</code>（表面張力）・<code>amr.</code>（AMReX格子）・<code>bc.</code>（境界条件）・<code>fluid.</code>・<code>setup.</code>・<code>time.</code>・<code>proj.</code>・<code>diag.</code>。</p>
+
+<p><code>case.csv</code> の bb3d（3D bag breakup）行の抜粋（列は機能プレフィクス付きヘッダ）：</p>
+<pre><code>amr.n_cell = 756 224 224
+amr.max_grid_size = 14
+bc.lo_x = inflow
+bc.hi_x = outflow
+bc.lo_y = slipwall / bc.hi_y = slipwall
+bc.lo_z = slipwall / bc.hi_z = slipwall
+bc.inflow_velocity = 21.796909486
+bc.inflow_perturb = 0.01
+vof.n_subgrid = 2
+vof.scheme = fgvt
+tension.curvature = hf
+tension.force = subgrid
+tension.kappa_source = fine
+setup.case = bagbreakup</code></pre>
+
+<p>生成：</p>
+<pre><code>python3 case/genInput.py bb3d</code></pre>
+<p>→ <code>input/bb3d</code> を書き出す（<code>case.csv</code> が正、<code>input/*</code> は生成物＝手編集しない）。</p>
+
+<h2>2. 回し方 4手</h2>
+
+<p><b>(1) ローカルでバンドル作成</b>（自己完結 tar・AMReX 同梱、ネット不要でビルド可）：</p>
+<pre><code>bash job/makeFugakuBundle.sh</code></pre>
+
+<p><b>(2) 転送</b>：</p>
+<pre><code>scp fkexFugakuBundle.tar.gz fugaku:~/
+ssh fugaku 'tar xzf fkexFugakuBundle.tar.gz'</code></pre>
+
+<p><b>(3) ビルド</b>（ログインノードで、FKeX ツリー直下から）：</p>
+<pre><code>cd ~/FKeX && bash job/buildFugaku.sh clang mpi</code></pre>
+<p><code>fkex2d.llvm.MPI.ex</code> / <code>fkex3d.llvm.MPI.ex</code> が生成される（次元は入力ファイルの <code>amr.n_cell</code> の成分数から自動判定）。</p>
+
+<p><b>(4) 投入</b>（ケースごとの run ディレクトリで）：</p>
+<pre><code>cd run/bb3d && pjsub -x FKEX_CASE=bb3d -x FKEX_NP=&lt;n&gt; ../../job/fugakuRun.sh</code></pre>
+<p><code>pjsub</code> の資源パラメタ（<code>rscgrp</code>・<code>elapse</code>・<code>-g</code> 等）は <code>job/fugakuRun.sh</code> 内に焼き込み済み（PJM ディレクティブ）。出力は <code>log.dat</code> 一本（rank 別ログではない）。ランク数 <code>NP</code> はケースの箱数（<code>amr.n_cell</code>/<code>amr.max_grid_size</code> の分割）を超えないこと（超えるとスクリプトが assert で止まる）。</p>
+
+<p>後処理は：</p>
+<pre><code>python3 post/plot.py run/bb3d/</code></pre>
+<p>（各種 <code>post/plot*.py</code> はケース種別ごとに用意済み。README は <code>post/README.md</code>）</p>
+
+<h2>3. bb3d（3D bag breakup）設定要点</h2>
+<div class="tblwrap"><table>
+  <tr><th>項目</th><th>値</th></tr>
+  <tr><td>格子</td><td>756×224×224（<code>amr.max_grid_size=14</code> → 54×16×16=13,824 箱、各14³）</td></tr>
+  <tr><td>液滴密度・粘性</td><td>ρ<sub>l</sub>=1000 kg/m³、μ<sub>l</sub>=1.0e-3 Pa·s</td></tr>
+  <tr><td>気相密度・粘性</td><td>ρ<sub>g</sub>=1.2 kg/m³、μ<sub>g</sub>=1.8e-5 Pa·s</td></tr>
+  <tr><td>表面張力係数 σ</td><td>7.08e-2 N/m（一様）</td></tr>
+  <tr><td>液滴径 D0</td><td>1.9 mm</td></tr>
+  <tr><td>Weber数</td><td>15.3</td></tr>
+  <tr><td>曲率・表面張力ノブ</td><td><code>tension.curvature=hf</code>（<span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。">height function</span>）、<code>tension.force=subgrid</code>、<code>tension.kappa_source=fine</code>（champion 経路）</td></tr>
+  <tr><td>境界条件</td><td>x下=inflow（一様流入＋摂動）、x上=outflow、y/z=slipwall</td></tr>
+  <tr><td>想定並列</td><td>本番：6912 rank＝144 node flat-MPI（48 rank/node）＝2 箱/rank。pilot（先行必須）：1152 rank＝24 node、<code>FKEX_EXTRA=time.max_step=3000</code>、elapse=03:00:00</td></tr>
+  <tr><td>想定 wall（本番）</td><td><span class="term" title="FK3 実績（同ケース 9216 rank/192 node/48 h）× FKeX 3D 約3倍速（M9 暫定値）から外挿。pilot 未実測のため確定値ではない。">【暫定】約 21h</span>（<code>elapse=36:00:00</code> で投入）。pilot 実測で再校正すること</td></tr>
+</table></div>
+
+<div class="warn">⚠ <b>pilot を必ず先行させる</b>：s/step 実測から本番 wall を確定し、inflow BC の MPI スケール健全性と SUBDIAG の <code>sumcf_rel</code> ドリフト率（全窓で &lt;&lt;1% が受け入れ基準）を確認する。FKeX は restart 未実装のため、本番は 1 job で完結させる必要がある。メモリは ~12 MB/rank で余裕あり。</div>
+
+<p style="color:#888;font-size:.85em">物性値の出所：旧ツリー <code>FugakuTestRun_FK3_BagBreakup/Jakiw_We15_3_1per_Re2</code> のソース直書き（<code>main.f90</code>/<code>initial.f90</code>）から抽出（config.txt に物性キーはなし）。</p>
+
+<h2>参考</h2>
+<ul>
+  <li><a href="index.html">開発ドキュメント</a> — マイルストーン一覧・設計判断</li>
+  <li><a href="検証台帳.html">検証台帳</a> — 検証ケースの詳細設定・ゲート・実測値</li>
+  <li>リポジトリ内 <code>AGENTS.md</code>・<code>job/fugakuRun.sh</code>・<code>job/makeFugakuBundle.sh</code>・<code>job/buildFugaku.sh</code> のコメントが一次情報</li>
+</ul>
+
+<p class="foot">⚠ 未発表手法（FGB-CSF）の詳細な数式・検証データは論文発表まで非公開。ここはノブ名と操作手順のみ。</p>
+
+</main>
+</body>
+</html>
