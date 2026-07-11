@@ -67,13 +67,14 @@ bc.hi_x = outflow
 bc.lo_y = slipwall / bc.hi_y = slipwall
 bc.lo_z = slipwall / bc.hi_z = slipwall
 bc.inflow_velocity = 21.796909486
-bc.inflow_perturb = 0.01
+bc.inflow_turb_intensity = 0.01
 vof.n_subgrid = 2
 vof.scheme = fgvt
 tension.curvature = hf
 tension.force = subgrid
 tension.kappa_source = fine
-setup.case = bagbreakup</code></pre>
+setup.case = bagbreakup
+chk.interval = 2000</code></pre>
 
 <p>生成：</p>
 <pre><code>python3 case/genInput.py bb3d</code></pre>
@@ -110,14 +111,22 @@ ssh fugaku 'tar xzf fkexFugakuBundle.tar.gz'</code></pre>
   <tr><td>液滴径 D0</td><td>1.9 mm</td></tr>
   <tr><td>Weber数</td><td>15.3</td></tr>
   <tr><td>曲率・表面張力ノブ</td><td><code>tension.curvature=hf</code>（<span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。">height function</span>）、<code>tension.force=subgrid</code>、<code>tension.kappa_source=fine</code>（champion 経路）</td></tr>
-  <tr><td>境界条件</td><td>x下=inflow（一様流入＋摂動）、x上=outflow、y/z=slipwall</td></tr>
+  <tr><td>境界条件</td><td>x下=inflow（一様流入＋Klein乱流、§5）、x上=outflow、y/z=slipwall</td></tr>
   <tr><td>想定並列</td><td>本番：6912 rank＝144 node flat-MPI（48 rank/node）＝2 箱/rank。pilot（先行必須）：1152 rank＝24 node、<code>FKEX_EXTRA=time.max_step=3000</code>、elapse=03:00:00</td></tr>
   <tr><td>想定 wall（本番）</td><td><span class="term" title="FK3 実績（同ケース 9216 rank/192 node/48 h）× FKeX 3D 約3倍速（M9 暫定値）から外挿。pilot 未実測のため確定値ではない。">【暫定】約 21h</span>（<code>elapse=36:00:00</code> で投入）。pilot 実測で再校正すること</td></tr>
 </table></div>
 
-<div class="warn">⚠ <b>pilot を必ず先行させる</b>：s/step 実測から本番 wall を確定し、inflow BC の MPI スケール健全性と SUBDIAG の <code>sumcf_rel</code> ドリフト率（全窓で &lt;&lt;1% が受け入れ基準）を確認する。FKeX は restart 未実装のため、本番は 1 job で完結させる必要がある。メモリは ~12 MB/rank で余裕あり。</div>
+<div class="warn">⚠ <b>pilot を必ず先行させる</b>：s/step 実測から本番 wall を確定し、inflow BC の MPI スケール健全性と SUBDIAG の <code>sumcf_rel</code> ドリフト率（全窓で &lt;&lt;1% が受け入れ基準）を確認する。本番は <code>chk.interval=2000</code> でチェックポイントを刻むので、elapse 切れでも次節の手順でそのまま継続できる。メモリは ~12 MB/rank で余裕あり。</div>
 
 <p style="color:#888;font-size:.85em">物性値の出所：旧ツリー <code>FugakuTestRun_FK3_BagBreakup/Jakiw_We15_3_1per_Re2</code> のソース直書き（<code>main.f90</code>/<code>initial.f90</code>）から抽出（config.txt に物性キーはなし）。</p>
+
+<h2>4. restart（チェックポイント/再開）</h2>
+<p>ノブ <code>chk.interval=&lt;step間隔&gt;</code>（または sim 秒間隔の <code>chk.time_interval</code>）で、run ディレクトリ直下に <code>chk&lt;step&gt;/</code> を書き出す（ネイティブ <span class="term" title="AMReX 組み込みの並列 MultiFab I/O 形式。外部ライブラリ非依存で各 rank が自分の担当箱を並列に書き出す。">VisMF</span> 保存＝外部依存なし、並列書き込み）。<code>chk.keep=2</code>（既定）でリングバッファ：常に最新2世代だけ残り、古い世代は書き込み完了後に削除される。</p>
+<p>運用の要点：<b>elapse が切れても、同じ run ディレクトリで再度 <code>pjsub</code> するだけで最新チェックポイントから自動継続する</b>（<code>chk.auto_restart</code> 既定 on＝<code>./chkLatest</code> を見て再開、pjsub の行は変えない・追加フラグ不要）。目安は「<code>elapse</code> ≥ チェックポイント間隔（の実測 wall）に余裕を見た値」＝1 job で最低1回はチェックポイントを踏める設定にする。bb3d 本番の <code>chk.interval=2000</code> は pilot 実測で間隔を再校正すること。</p>
+<div class="ok">「連続走と再開走がバイト完全一致」を検証済み（2D・3D・乱流ON・8 rank すべてで、restart 後の全ログ・CSV・plotfile・checkpoint payload が完全一致）。</div>
+
+<h2>5. 乱流流入（Klein synthetic turbulence inlet）</h2>
+<p><code>bc.inflow_turb_intensity=0.01</code>（流入速度の1% rms の <span class="term" title="Klein et al. (2003) 系の、指定 rms・波数帯を満たす divergence-free 合成乱流を流入面に重畳する手法。">Klein 合成乱流</span>。既定 0=一様流入・摂動なし）。モード数は <code>bc.inflow_turb_nmode</code>（既定128）、乱数シードは <code>bc.inflow_turb_seed</code>（既定固定）で調整。bb3d は参照ケースに合わせ 0.01 に設定済み。</p>
 
 <h2>参考</h2>
 <ul>
