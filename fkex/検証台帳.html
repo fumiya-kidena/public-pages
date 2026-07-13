@@ -55,7 +55,7 @@
 <main>
 
 <h1>検証台帳</h1>
-<p class="updated">最終更新：2026-07-10（M16 追記＝動的3レベル AMR 実戦投入・移行完了）</p>
+<p class="updated">最終更新：2026-07-13（M17・M18、code review repair 追記）</p>
 
 <p>マイルストーンごとの検証ケースの<b>詳細設定・ゲート・実測値・そこから何がわかったか</b>の台帳。<a href="index.html">本体（開発ドキュメント）</a>には要約のみを載せ、詳細はここに集約する。各ケースの inputs はリポジトリの <code>input/&lt;case&gt;</code>（ケース表 <code>case/case.csv</code>＋<code>case/genInput.py</code> から生成）に同梱＝再現可能。</p>
 
@@ -166,7 +166,7 @@
 <div class="tblwrap"><table>
   <tr><th>ケース</th><th>詳細設定</th></tr>
   <tr><th>sdrop_ex / sdrop_hf</th><td>静止液滴：2D 64²（Δ=1/64）、1×1 領域中心に R=0.25 液滴、σ=1、ρ<sub>l</sub>/ρ<sub>g</sub>=1/1e-3、μ<sub>l</sub>/μ<sub>g</sub>=0.1/1e-3、無重力、遠方場 BC（openfar）、c 初期化は厳密（解析円とセルの重なり）。曲率＝exact（定数 κ=1/R=4、検証専用）と <span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。3×3 列×高さ方向 7 セル。">HF（3×3×7）</span>の 2 構成。<b>2 モード測定</b>：impulsive＝dt 固定 1e-11×2 step（初期離散インバランス）／settled＝物理 dt 制御で t≈τ=ρ<sub>l</sub>R²/μ<sub>l</sub>=0.625（自己維持スプリアス流）。指標：|U*|=|U|max/(σ/μ<sub>l</sub>)、Δp*=(p̄<sub>in</sub>−p̄<sub>out</sub>)/(σ/R)（in: c&gt;0.99、out: c&lt;0.01＝CSF 力帯除外）</td></tr>
-  <tr><th>capwave / capwave_inv</th><td>毛管波：領域 1×2、64×128、x 周期・y 壁（自由すべり u<sub>n</sub>=0、射影は Dirichlet-p 壁＝D13）、界面 y=a0·cos(kx)（a0=0.01、k=2π）静止開始。matched 物性 ρ 両相=1、μ 両相=0.018257（La=σρλ/μ²=3000）、σ=1。毛管律速 dt。振幅診断＝列液高の固定第 1 列符号付き振幅（旧ソルバと同定義）。無粘性変種は μ=0</td></tr>
+  <tr><th>capwave / capwave_inv</th><td>毛管波：領域 1×2、64×128、x 周期・y slipwall（自由すべり u<sub>n</sub>=0）。M4 初回記録では参照実装由来の Dirichlet-p を使ったが、2026-07-13 の監査で <b>impermeable wall と整合する Neumann projection BC</b> へ修正（末尾のreview repair）。界面 y=a0·cos(kx)（a0=0.01、k=2π）静止開始。matched 物性 ρ 両相=1、μ 両相=0.018257（La=σρλ/μ²=3000）、σ=1。毛管律速 dt。振幅診断＝列液高の固定第 1 列符号付き振幅（旧ソルバと同定義）。無粘性変種は μ=0</td></tr>
 </table></div>
 <div class="tblwrap"><table>
   <tr><th>ゲート</th><th>実測</th></tr>
@@ -181,7 +181,7 @@
 <li><b>balanced-force が離散恒等として成立</b>：κ を厳密値にすると面力 σκ(∇c)<sub>f</sub> が厳密な離散勾配になり射影が完全吸収 → スプリアス流 machine-zero。成立条件（①面力の ∇c＝圧力勾配と同一の 2 点面ステンシル、②力を割る ρ<sub>f</sub>＝射影 β の同一実体、③同一面）が正しく組めたことの直接証明。</li>
 <li><b>HF 曲率は旧ソルバと同じ離散に到達</b>：Δp* が 5 桁一致＝曲率・力・射影の離散が実質同一。スプリアスがやや良いのはソルバ許容誤差（1e-11 vs 旧 1e-8）の寄与とみられる。</li>
 <li><b>毛管波 RMS が旧ソルバ記録の約 1/5</b>（0.0015 vs 0.0081）：明確に良い方向だが要因は未分離（ソルバ許容誤差・曲率交差微分の式の差・dt 制御が候補）。</li>
-<li>初の非周期 BC（壁）が設計どおり機能（境界面 valid への法線直接代入）。射影の壁 BC は参照忠実の Dirichlet-p を採用。</li>
+<li>初の非周期 BC（壁）が設計どおり機能（境界面 valid への法線直接代入）。なお当時採用した Dirichlet-p は後日の監査でno-penetrationと不整合と判明し、現在は <b>Neumann projection BC</b> に修正済み（末尾の2026-07-13 review repair）。</li>
 <li>旧ソルバ側の発見：HF 交差微分の分母に誤記（均一格子では無影響・FKeX は正しい式＝ストレッチ格子では両者が一致しなくなる点に将来注意）／未初期化フラグの潜在 UB。</li>
 </ul></div>
 <div class="warn">⚠ 暫定事項：HF 系のゲート帯は kappa_source（fine|coarse）未決着前提の「アンカー×3」帯。capwave RMS の評価窓は今回 τ≤25 で固定（旧側台帳の窓は非明記＝厳密比較には旧側の再走が要る）。</div>
@@ -384,8 +384,8 @@
 <div class="ok"><b>わかったこと</b>：M10〜M14 で積み上げてきた「挙動不変・機械精度で担保」という規律が、動的なタグ＋regrid という最も複雑な段でも貫徹した。移動する界面を自動追従しながら、静的構成と同じ厳密さ（固定点厳密ゼロ、no-op バイト不変）を保てることを確認し、3レベル適応 AMR という当初目標に到達した。</div>
 <p>常設回帰 <code>G-M10-0</code>（退化構成の全14アンカー）は M12〜M15 の全マイルストーンでビット一致を維持している。</p>
 
-<h2>M16 — 動的3レベル AMR の実戦投入（最終、2026-07-10）※公開版は要約</h2>
-<p>M10〜M15 で確立した3レベル適応 AMR（骨組み＝AmrCore、物理データフロー＝自前配線）を、界面が動的に移動する実戦ケースへ投入する最終段。regrid が走行中に繰り返し発火する条件での精度・保存性の確認と、適応構成での計算負荷分散を扱う。</p>
+<h2>M16 — 動的3レベル AMR の実戦投入（2026-07-10）※公開版は要約</h2>
+<p>M10〜M15 で確立した3レベル適応 AMR（骨組み＝AmrCore、物理データフロー＝自前配線）を、界面が動的に移動する実戦ケースへ投入する段。regrid が走行中に繰り返し発火する条件での精度・保存性の確認と、適応構成での計算負荷分散を扱う。</p>
 <div class="tblwrap"><table>
   <tr><th>ケース</th><th>詳細設定</th></tr>
   <tr><td><b>capwave3l</b></td><td>毛管波（M4/M6 の capwave と同一物理設定）を3レベル動的 AMR 版で実行。界面バンドが x 方向に振動しながら regrid が動的に発火する条件。2レベル基準（M4/M6 の champion 経路）との精度比較</td></tr>
@@ -416,6 +416,40 @@
 </table></div>
 <div class="ok"><b>わかったこと（性能）</b>：3レベル AMR 化のオーバーヘッドは「界面解像度を上げる対価」として毛管波では妥当な範囲に収まる一方、気泡上昇のような小規模・バンド支配ケースでは複合ソルバの反復増加という形でコストが顕在化する。これは M9 で確立した「射影（MLMG）がコストの支配段」という知見の3レベル版であり、次の性能改善は composite MLMG の反復挙動そのものに向くべきという方向性を示している。旧ソルバ比の速度優位（3.4×）は3レベル化後も維持されており、精度と性能の両面で AMR 移行の目的（界面精度と計算コストの両立）が達成されたと言える。</div>
 <div class="warn">⚠ open：気泡上昇トイ問題の 5.2× のうち composite ソルバ反復増の寄与分の定量分離、knapsack 負荷分散の本番スケールでの便益計測は今後の課題として持ち越し。</div>
+
+<h2>M17 — N-level 一般化（2026-07-12）</h2>
+<p>固定3レベルだったflow state・transfer・composite projectionをN-level化し、まず最細flow levelだけをband化する構成で階層方向の配線を検証した。</p>
+<div class="tblwrap"><table>
+  <tr><th>項目</th><th>実測</th></tr>
+  <tr><td>退化・既存経路</td><td>既存3レベルanchorと <code>G-M10-0</code> のbit-identityを維持</td></tr>
+  <tr><td>depth</td><td>周期箱で4〜8 AMR levelまで主要gate green。深い階層で増えたのはround-offで、gate margin内</td></tr>
+  <tr><td>制約の切り分け</td><td>9 level目は中間global levelのmemoryで停止。correctness wallではなくmemory wallと判定</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：AMR階層を深くしてもcomposite solve・transfer・INV-BANDの基本構造は維持できる。一方、最細band以外をglobalに保つM17構成は深い階層でmemory効率が悪く、全中間levelをband化するM18が必要。</div>
+
+<h2>M18 — stacked-CFI adaptive AMR（2026-07-13）</h2>
+<p><code>amr.band_levels=all</code> で各中間levelも界面band化し、level pairごとのCFI context・ghost chain・INV-BAND・regridを積み重ねた構成。</p>
+<div class="tblwrap"><table>
+  <tr><th>項目</th><th>実測</th></tr>
+  <tr><td>static N-CFI stack</td><td>2〜7 CFIの静止構成でmass・divergence・INV-BAND等の主要gateを維持</td></tr>
+  <tr><td>dynamic all-level regrid</td><td>moving-interfaceの4〜6 AMR levelで全bandが追従。並進固定点 0、new-cell purity 0、proper nestingを各remake後に再確認</td></tr>
+  <tr><td>per-level制御</td><td><code>regrid_int_lev</code>／<code>tag_buffer_lev</code> を各levelのcell単位で実行時に使用し、odd bufferはceilingを含むproper-nesting条件で検査</td></tr>
+  <tr><td>plotfile</td><td>全AMR level＋最細subgridをref_ratio=2のfull nested hierarchyとして出力し、ParaView系readerで読める構造を確認</td></tr>
+  <tr><td>memory</td><td>moving dropのdepth sweepで、全level adaptive bandが中間global構成より小さいfootprint。差はdepthとinterface占有率に依存するため固定倍率にはしない</td></tr>
+</table></div>
+<div class="ok"><b>わかったこと</b>：N-level化の実用上のmemory leverは、中間levelだけでなく最細levelを含む全bandをinterfaceへ追従させること。stacked-CFIの正しさはstaticだけでなくdynamic regridでもINV-BAND・new-cell purity・保存gateを併用して確認する必要がある。</div>
+
+<h2>2026-07-13 code review repair</h2>
+<p>徹底レビューで見つかった問題のうち、公開可能で独立に説明できる基盤部分を修正し、軽量回帰を実施した。未発表手法の内部変更は本節に含めない。</p>
+<div class="tblwrap"><table>
+  <tr><th>対象</th><th>修正</th><th>軽量検証</th></tr>
+  <tr><td>checkpoint</td><td>Headerを <b>v2</b> 化し、load-bearing ParmParse設定のfingerprintと可読Configを保存。<code>chkLatest</code> はlocal <code>chk&lt;digits&gt;</code> basenameだけを許し、temporary file＋atomic rename後に旧世代を削除</td><td>2D sdropでcontinuous 0→4 と 0→2→restart→4 の <code>chk00004</code> 全payload・energy/sdrop/subgrid CSVがbyte-exact。<code>tension.sigma</code>変更restartはconfiguration mismatchでabort。<code>../</code>をmarkerへ混入した場合もunsafe entryでabortし、run外sentinelを保持</td></tr>
+  <tr><td>slipwall projection</td><td>impermeable wallのnormal correction fluxを0に保つ <b>Neumann BC</b> へ統一</td><td>capwave 2 stepで <code>DIVGATE=1.321e-12</code> PASS</td></tr>
+  <tr><td>Klein inflow</td><td>位相 <code>k·x+ωt</code> に対しTaylor-frozen条件を <b>ω=−U·k</b> へ修正</td><td>inflow 1 stepで <code>DIVGATE=5.491e-13</code> PASS</td></tr>
+  <tr><td>coarse plotfile</td><td>coarse schemeでは未発展のfine storageを出力せずsingle-level plotfileにした。FGVTのmulti-level出力は維持</td><td>coarse plotの <code>finest_level=0</code>、<code>Level_1</code>不在を確認</td></tr>
+  <tr><td>Fugaku shell</td><td><code>.sh</code>をLFへ統一し、buildを <code>set -euo pipefail</code>、ledger比較用buildを <code>FKEX_VALIDATION=TRUE</code>（<code>-ffp-contract=off</code>）対応。restart時は<code>log.dat</code>へsegment delimiter付きappend</td><td>全shellでCRなし、<code>bash -n</code> PASS</td></tr>
+  <tr><td>oscdrop exact IC</td><td>perturbed-diskのcell積分をkinkで分割し、tipの平方根特異性を変数変換して積分</td><td>独立高精度積分比のmax cell-fraction誤差：coarse <code>2.085e-5→2.114e-11</code>、fine <code>1.041e-5→1.026e-11</code>。area誤差 coarse <code>4.238e-14</code>、fine <code>2.470e-15</code>。2D build＋1 step <code>DIVGATE</code> PASS</td></tr>
+</table></div>
 
 <p class="hist">運用：各マイルストーンの green 時にここへ追記。本体ドキュメントには 1 行要約のみ。未発表手法（FGB-CSF、M6–M7）の検証は公開版では要約に留める。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 

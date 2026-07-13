@@ -59,7 +59,7 @@
 <main>
 
 <h1>FKeX — 開発ドキュメント</h1>
-<p class="updated">最終更新：2026-07-10（M16 追記＝動的3レベル AMR 実戦投入・移行完了）／初版：2026-07-07</p>
+<p class="updated">最終更新：2026-07-13（M17・M18＝N-level／stacked-CFI adaptive AMR）／初版：2026-07-07</p>
 
 <p><b>FKeX</b>（仮名）は <a href="https://github.com/AMReX-Codes/amrex" target="_blank" rel="noopener">AMReX</a> ベースの非圧縮二相流ソルバ。<span class="term" title="Volume of Fluid 法。各セルの液相体積分率（0〜1）で気液界面を表現する二相流の標準手法。">VOF 法</span>に<span class="term" title="界面近傍だけ通常格子より細かいサブグリッドで VOF 界面を表現し、表面張力もそのサブグリッド上で評価するクロージャ。">サブグリッド解像の界面表現</span>（fine-grid interface closure）を組み合わせた手法を、AMReX のデータ構造と線形ソルバの上に<span class="term" title="旧コードを翻訳・コピーせず、数式仕様ノートから新規に書き下ろす開発方式。旧コードは数値突合の基準（実行オラクル）としてのみ用いる。">クリーンルーム</span>で新規実装する。研究用 Fortran ソルバ（FK3）の後継<sup><a href="#fn1">†1</a></sup>。</p>
 <p>このページは開発ドキュメントの<b>入口</b>（インデックス）。実装の節目（マイルストーン）ごとに更新する。設計判断の深掘りと検証の生データは、上部ナビの<a href="サブ格子表現の設計判断.html">設計判断</a>・<a href="検証台帳.html">検証台帳</a>の各ページへ。</p>
@@ -76,7 +76,7 @@
 </ol>
 
 <h2>アーキテクチャ骨子</h2>
-<p>設計の中心は下図の<b>二重格子構造</b>。流れ場（速度・圧力）は粗い一様格子で解き、界面の VOF は同じ領域を 2 倍細分したサブグリッドで持つ。両格子は同じ箱割り・同じ <span class="term" title="AMReX で「どの箱をどの MPI rank が持つか」を決める割当表。これを粗細で共通にするのが FKeX の設計の鍵。">DistributionMapping</span> なので、粗細間のデータのやり取りが各 rank の中で完結する。</p>
+<p>設計の中心は下図の<b>二重格子構造</b>。現在はこのflow-grid＋界面subgridのpairを最細段に保ったまま、flow grid側を <b>N-level adaptive AMR</b> へ拡張している。各levelは界面を追うnested bandを持て、最細pairは同じ箱割り・同じ <span class="term" title="AMReX で「どの箱をどの MPI rank が持つか」を決める割当表。最細flow/subgrid pairでは同じ割当を共有する。">DistributionMapping</span> を維持する。</p>
 
 <figure>
 <svg viewBox="0 0 740 292" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="二重格子アーキテクチャ図">
@@ -88,7 +88,7 @@
   <text x="30" y="26" font-size="13" fill="#555">MPI rank k（粗箱 i と細箱 i は常に同じ rank に載る）</text>
   <rect x="20" y="36" width="700" height="240" rx="8" fill="none" stroke="#999" stroke-dasharray="6 4"/>
   <!-- coarse grid 4x4 -->
-  <text x="142" y="70" font-size="14" font-weight="bold" fill="#2b6cb0" text-anchor="middle">流れ格子（粗）</text>
+  <text x="142" y="70" font-size="14" font-weight="bold" fill="#2b6cb0" text-anchor="middle">最細 flow level</text>
   <path d="M70 80V224M106 80V224M142 80V224M178 80V224M214 80V224M70 80H214M70 116H214M70 152H214M70 188H214M70 224H214" stroke="#2b6cb0" stroke-width="1.4" fill="none"/>
   <circle cx="142" cy="152" r="48" fill="none" stroke="#c0392b" stroke-width="1.2" opacity="0.45"/>
   <text x="142" y="248" font-size="12" fill="#555" text-anchor="middle">速度・圧力・物性（MAC 配置）</text>
@@ -96,25 +96,25 @@
   <text x="572" y="70" font-size="14" font-weight="bold" fill="#b0602b" text-anchor="middle">界面格子（refine ×2）</text>
   <path d="M500 80V224M518 80V224M536 80V224M554 80V224M572 80V224M590 80V224M608 80V224M626 80V224M644 80V224M500 80H644M500 98H644M500 116H644M500 134H644M500 152H644M500 170H644M500 188H644M500 206H644M500 224H644" stroke="#b0602b" stroke-width="0.9" fill="none"/>
   <circle cx="572" cy="152" r="48" fill="none" stroke="#c0392b" stroke-width="2"/>
-  <text x="572" y="248" font-size="12" fill="#555" text-anchor="middle">サブグリッド VOF（全域を ×2 で細分）</text>
+  <text x="572" y="248" font-size="12" fill="#555" text-anchor="middle">界面 subgrid（最細 band を ×2）</text>
   <!-- transfer arrow -->
   <line x1="240" y1="150" x2="476" y2="150" stroke="#2b6cb0" stroke-width="1.6" marker-start="url(#ar1)" marker-end="url(#ar1)"/>
   <text x="358" y="136" font-size="12.5" fill="#222" text-anchor="middle">バルク転送は rank 内で完結（通信ゼロ）</text>
   <text x="358" y="174" font-size="12" fill="#555" text-anchor="middle">同一の箱割り＋同一 DistributionMapping</text>
 </svg>
-<p class="figcap">図1：二重格子アーキテクチャ。粗い流れ格子と 2 倍細分の界面格子が同じ箱割り・同じ rank 配置を共有し、粗⇄細のデータ転送に MPI 通信が要らない。赤い円は気液界面のイメージ。</p>
+<p class="figcap">図1：最細flow/subgrid pairの基本単位。最細flow levelと2倍細分の界面subgridが同じ箱割り・同じrank配置を共有し、pair内のデータ転送をrank内に閉じる。赤い円は気液界面のイメージ。</p>
 </figure>
 
 <div class="tblwrap">
 <table>
   <tr><th>要素</th><th>実装</th></tr>
-  <tr><td>格子</td><td>単一レベル一様格子（AMR は将来）。<span class="term" title="速度を格子面（セル境界）、圧力・スカラをセル中心に置く配置。Marker-and-Cell。">MAC スタガード配置</span></td></tr>
+  <tr><td>格子</td><td>AmrCore による <b>N-level adaptive AMR</b>。界面を追う nested band を各levelに持てる。<span class="term" title="速度を格子面（セル境界）、圧力・スカラをセル中心に置く配置。Marker-and-Cell。">MAC スタガード配置</span></td></tr>
   <tr><td>速度</td><td>面センター MultiFab（<code>Array&lt;MultiFab,AMREX_SPACEDIM&gt;</code>）</td></tr>
   <tr><td>VOF・圧力・物性</td><td>セルセンター MultiFab</td></tr>
-  <tr><td><b>サブグリッド</b></td><td><code>refine(BoxArray, 2)</code> ＋ <b>粗格子と同一の DistributionMapping</b> を持つ細レベル MultiFab 群。粗箱 i と細箱 i が常に同一 rank ＝ 粗細のバルク転送がローカルに閉じる（図1。判断の経緯は<a href="サブ格子表現の設計判断.html">設計判断ページ</a>）</td></tr>
+  <tr><td><b>サブグリッド</b></td><td>最細flow levelを <code>refine(BoxArray, 2)</code> した界面subgrid。最細pairは同一 DistributionMappingを維持し、AMRの各CFIはlevelごとのband contextで管理（図1は最細pairの基本単位。判断の経緯は<a href="サブ格子表現の設計判断.html">設計判断ページ</a>）</td></tr>
   <tr><td>圧力 Poisson</td><td>AMReX <b><span class="term" title="AMReX 付属の幾何マルチグリッド線形ソルバ（MultiLevel MultiGrid）。">MLMG</span></b>（<code>MLABecLaplacian</code>、面係数 β=1/ρ）を直接叩く自前 MAC 射影ラッパ（~150 行）<sup><a href="#fn2">†2</a></sup></td></tr>
   <tr><td>入力</td><td><code>ParmParse</code> inputs（機能名プレフィクス <code>vof.*</code>, <code>tension.*</code>, <code>proj.*</code> …）。ケース表 CSV → inputs 生成の薄い駆動を併設</td></tr>
-  <tr><td>出力</td><td>ネイティブ plotfile（粗+細の 2 レベル、ref_ratio=2）＝ ParaView / VisIt / yt がそのまま読める</td></tr>
+  <tr><td>出力</td><td>ネイティブ plotfile。coarse schemeは1 level、FGVT一様構成は粗＋subgrid、adaptive構成は全AMR level＋subgridをnested hierarchyとして出力</td></tr>
   <tr><td>ビルド</td><td>GNUMake（<code>AMREX_HOME</code> 参照）。AMReX はリリースタグ <b>26.07</b> にピン留めした submodule</td></tr>
 </table>
 </div>
@@ -185,19 +185,22 @@
   <tr><td>M13</td><td>界面バッファ監視＋ネガティブテスト</td><td><span class="status-done">✅ 完了</span>（2026-07-10。意図的な微小欠陥を理論値どおり検出・3レベルの方が細κソースの床が良いと判明）</td></tr>
   <tr><td>M14</td><td>粗細境界の運動量整合</td><td><span class="status-done">✅ 完了</span>（2026-07-10。ratio-1000 並進固定点が厳密ゼロ・整合オラクル bitwise 0）</td></tr>
   <tr><td>M15</td><td>タグ＋regrid で3レベル AMR 到達</td><td><span class="status-done">✅ 完了</span>（2026-07-10。移動液滴を自動追従・16回の regrid を跨いで並進固定点が厳密ゼロ）</td></tr>
-  <tr><td>M16</td><td>動的3レベル AMR の実戦投入（最終）</td><td><span class="status-done">✅ 完了</span>（2026-07-10。毛管波・気泡上昇の動的ケースで3レベル AMR を実走・適応負荷分散を実装。移行完了）</td></tr>
+  <tr><td>M16</td><td>動的3レベル AMR の実戦投入</td><td><span class="status-done">✅ 完了</span>（2026-07-10。毛管波・気泡上昇の動的ケースで3レベル AMR を実走・適応負荷分散を実装）</td></tr>
+  <tr><td>M17</td><td>N-level 一般化（最細bandのみ）</td><td><span class="status-done">✅ 完了</span>（2026-07-12。4〜8 AMR levelでcomposite solve・telescoping・INV-BANDを確認。深い階層の制約がcorrectnessでなく中間global levelのmemoryと判明）</td></tr>
+  <tr><td>M18</td><td>stacked-CFI adaptive AMR</td><td><span class="status-done">✅ 完了</span>（2026-07-13。各中間levelもband化し、全levelのdynamic regrid・per-level cadence・full nested plotfileまで到達）</td></tr>
 </table>
 </div>
 
 <div class="ok">
-<b>移行完了（M0–M16）</b>：2026-07-07 の M0 着手から 2026-07-10 の M16 まで、3日間でクリーンルーム移植（M0–M9）と3レベル適応 AMR（M10–M16）の両段を完走した。全行程を通じて「挙動不変のリファクタは全アンカーのビット一致で担保する」という規律（<code>G-M10-0</code> 常設回帰）と、恒等性・固定点・frozen-field といった敵対的検証を維持したまま到達した。
+<b>移行完了（M0–M18）</b>：クリーンルーム移植（M0–M9）、3レベル適応 AMR（M10–M16）、N-level／stacked-CFI一般化（M17–M18）まで到達した。全行程を通じて「挙動不変のリファクタは全アンカーのビット一致で担保する」という規律（<code>G-M10-0</code> 常設回帰）と、恒等性・固定点・frozen-field といった敵対的検証を維持している。
 <ul>
   <li>M16 は動的3レベル AMR を実戦ケース（毛管波 capwave3l・気泡上昇 rb2d3l）に投入。regrid が繰り返し発火する条件での検証と、適応構成における負荷分散（knapsack 方式のボックス割当）を実装。</li>
   <li>M13 で確定した3レベルの静止液滴 spurious current 整定床＝<b>4.8e-9</b>（2レベルの 6.9 倍良い）が、動的ケースでの3レベル AMR の精度優位性の裏付けとなった。</li>
   <li>性能は正直に記録：3レベル化のオーバーヘッド係数は毛管波で 1.39×（界面2倍細解像の対価として妥当）、気泡上昇のトイ問題では 5.2×（バンドが領域大半＋複合ソルバの反復増＝既知の改善ポイント）。旧ソルバ比では3レベルでも 3.4× 速い。</li>
+  <li>M17–M18ではflow state・projection・transferをN-level化し、中間levelを含む全CFIをnested bandとして動的に追従可能にした。深い階層でも全levelをglobalに持たず、interface footprintに応じたmemoryへ寄せられる。</li>
   <li>残る課題：富岳（A64FX）実機ビルド・投入、公開リポジトリ化、bag breakup 本番ケースへの適用。</li>
 </ul>
-詳細は<a href="検証台帳.html">検証台帳</a>の M16 節を参照。
+詳細は<a href="検証台帳.html">検証台帳</a>の M16〜M18 節を参照。
 </div>
 
 <p>検証は三層オラクル：(1) 解析解・文献値、(2) 旧ソルバ実行結果とのトレンド突合、(3) <span class="term" title="旧ソルバから 1 ステップ分の中間場（VOF・曲率・面力など）をダンプし、同じ入力から新実装のカーネル単体を回して機械精度（~1e-12）で比較する検証法。時間発展の誤差蓄積と切り離してカーネル単位のバグを特定できる。">frozen-field</span> 突合。層構成の説明と各ケースの詳細設定・実測値は<a href="検証台帳.html">検証台帳</a>に集約し、以下の完了メモには要点だけを載せる。</p>
@@ -238,7 +241,7 @@
 <h3>M4 完了メモ（2026-07-08）</h3>
 <p>表面張力（粗格子の balanced CSF）が入り、粗格子版パイプラインが全段そろった段階。初の非周期境界（壁）もここで導入。</p>
 <ul>
-  <li><b>中身</b>：<span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。">height-function 曲率</span>（3×3×7）＋κ 拡張＋<span class="term" title="表面張力の面力を圧力勾配と同一の離散ステンシルで組むことで、静止液滴で力と圧力が厳密に釣り合い、偽の流れ（スプリアス・カレント）が出ない構成。">balanced-force CSF</span> 面力。検証専用の exact-κ モード、壁 BC（自由すべり）、毛管 dt 条件。</li>
+  <li><b>中身</b>：<span class="term" title="VOF の列和から界面の高さ関数を組み、その微分で曲率を求める標準手法。">height-function 曲率</span>（3×3×7）＋κ 拡張＋<span class="term" title="表面張力の面力を圧力勾配と同一の離散ステンシルで組むことで、静止液滴で力と圧力が厳密に釣り合い、偽の流れ（スプリアス・カレント）が出ない構成。">balanced-force CSF</span> 面力。検証専用の exact-κ モード、壁 BC（自由すべり）、毛管 dt 条件。M4初回は参照由来のDirichlet-pだったが、2026-07-13監査でno-penetrationと整合する <b>Neumann projection BC</b> へ修正。</li>
 </ul>
 <div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：exact-κ の静止液滴で <b>balanced-force 恒等が machine-zero</b>（settled 1.5e-14）・Laplace 圧 Δp*=1.00000000。HF 曲率では旧ソルバのアンカーと <b>Δp* が 5 桁一致</b>、スプリアス・カレントは同水準以下。毛管波の減衰は Prosperetti 厳密解に対し <b>RMS 0.0015</b>（旧ソルバ記録 0.0081 の約 1/5）。全回帰ビット一致。</div>
 
@@ -333,13 +336,21 @@
 </ul>
 <div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：<b>16回の regrid を跨いでも並進固定点が厳密ゼロ</b>。regrid で新規にできた細分セルは常に純流体（界面情報の損失なし）。regrid が発火しない no-op ケースは<b>バイト不変</b>。M10〜M14 で積み上げてきた「挙動不変・機械精度で担保」という規律が、動的なタグ＋regrid という最も複雑な段でも貫徹し、3レベル適応 AMR という当初目標に到達した。</div>
 
-<h3>M16 完了メモ（2026-07-10、最終）</h3>
-<p>M10〜M15 で確立した3レベル適応 AMR を、界面が動的に移動する実戦ケースへ投入する最終段階。regrid が走行中に繰り返し発火する条件での精度・保存性の確認と、適応構成での計算負荷分散を扱う（公開版では要約に留める）。</p>
+<h3>M16 完了メモ（2026-07-10）</h3>
+<p>M10〜M15 で確立した3レベル適応 AMR を、界面が動的に移動する実戦ケースへ投入する段階。regrid が走行中に繰り返し発火する条件での精度・保存性の確認と、適応構成での計算負荷分散を扱う（公開版では要約に留める）。</p>
 <ul>
   <li><b>中身</b>：毛管波（capwave3l）・気泡上昇（rb2d3l）を3レベル動的 AMR 版で実行。適応負荷分散（<span class="term" title="ナップサック問題の近似解法。各 MPI rank が担当する箱（Box）の計算コスト合計をできるだけ均等にする割当方式。">knapsack</span> 方式のボックス割当）を実装。</li>
 </ul>
 <div class="ok"><b>検証</b>（詳細は<a href="検証台帳.html">検証台帳</a>）：毛管波 RMS <b>0.002492</b>（vs Prosperetti・2レベル帯内でやや良い）。気泡上昇は t*=3 まで完走・上昇量が2レベル比 <b>Δ0.42%</b>・<b>625 回の regrid</b> を通じて新規細分セルの純度 0.0 を維持（界面情報の損失なし）。MPI rank 不変スイープ全 PASS。knapsack 負荷分散は物理結果に対して<b>ビット同一</b>（純粋に性能側のノブとして安全）。</div>
 <div class="warn"><b>性能は正直に記録</b>：3レベル化のオーバーヘッド係数は毛管波で <b>1.39×</b>（界面2倍細解像の対価として妥当）、気泡上昇のトイ問題では <b>5.2×</b>（適応バンドが領域大半を占める小規模ケース＋composite ソルバの反復増加が主因＝今後の改善ポイントとして記録）。旧ソルバ（FK3）比では3レベルでも <b>3.4×</b> 速い。</div>
+
+<h3>M17 完了メモ（2026-07-12）</h3>
+<p>固定3レベルだったflow state・transfer・composite projection・down-syncを <code>Vector</code> ベースの <b>N-level path</b> へ一般化した。M17では最細flow levelだけをband化し、中間levelをglobalに保つことで、stacked-CFIへ進む前に階層方向の代数と配線を分離して検証した。</p>
+<div class="ok"><b>検証</b>：既存3レベルpathと退化構成のbit-identityを維持し、周期箱では4〜8 AMR levelまで主要gateを通過。深さ8でcorrectnessの劣化は見られず、より深い階層の実用上の制約が中間global levelのmemoryであることを切り分けた。</div>
+
+<h3>M18 完了メモ（2026-07-13）</h3>
+<p><code>amr.band_levels=all</code> で中間levelもband化し、各level pairにCFI context・ghost chain・INV-BAND監視を持たせた <b>stacked-CFI</b> 構成へ移行。static N-CFI stackに加え、全bandのper-level tagging／regrid cadence、proper-nesting再検査、per-level load balance、全階層plotfileまで実装した。</p>
+<div class="ok"><b>検証</b>：4〜6 AMR levelのmoving-interface sweepで、全levelのbandがinterfaceを追従しながら、並進固定点・mass・divergence・INV-BAND・new-cell purityのgateを維持。中間global levelを持つM17構成よりmemoryを抑え、depthが増すほど差が広がることを確認した。数値はcase依存なので固定倍率とは扱わない。</div>
 
 <h2>開発環境メモ</h2>
 <ul>
@@ -365,7 +376,7 @@
   <p id="fn2">†2 — AMReX の <code>MacProjector</code> クラスは 22.01 で AMReX-Hydro リポジトリへ移管されたため本体には無い。依存を AMReX 本体に限る方針から、<code>MLABecLaplacian</code>＋<code>MLMG</code> を直接使う薄いラッパを自前で書く。</p>
 </div>
 
-<p class="hist">更新履歴：2026-07-07 初版（M0 着手時点）。2026-07-10 M10・M11（3レベル適応 AMR 移行着手）追記。2026-07-10 M12〜M15（3レベル適応 AMR 到達）追記。2026-07-10 M16（動的3レベル AMR 実戦投入・移行完了）追記。このページは Obsidian ノート（MD）とミラーで維持される。</p>
+<p class="hist">更新履歴：2026-07-07 初版（M0 着手時点）。2026-07-10 M10〜M16（動的3レベル AMR）追記。2026-07-13 M17・M18（N-level／stacked-CFI adaptive AMR）追記。このページは Obsidian ノート（MD）とミラーで維持される。</p>
 
 </main>
 </body>
