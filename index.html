@@ -51,7 +51,12 @@
 
 <script>
   var REPO = 'KIDENA-Fumiya/public-pages', BRANCH = 'gh-pages';
-  var KNOWN = ['cfd-gallery','viscous-fingering','fkex','civ-nova']; // API制限時のフォールバック
+  var KNOWN = ['cfd-gallery','cfd-seminar','civ-nova','contact-line-debate','fkex',
+               'oscillating-droplet','two-phase-turbulence','viscous-fingering']; // API制限時のフォールバック
+  // 一覧に載せないもの：'_' 始まり（ユーティリティ/非公開の規約）＋明示リスト
+  // （katex はページ側の相対参照 ../katex/ に焼き込まれているため改名できず明示除外）。
+  var HIDDEN = ['katex'];
+  function visible(name){ return name.charAt(0)!=='.' && name.charAt(0)!=='_' && HIDDEN.indexOf(name)===-1; }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function render(entries){
@@ -80,7 +85,7 @@
   })
   .then(function(r){ if(!r.ok) throw new Error('api '+r.status); return r.json(); })
   .then(function(items){
-    var dirs = items.filter(function(i){ return i.type==='dir' && i.name.charAt(0)!=='.'; })
+    var dirs = items.filter(function(i){ return i.type==='dir' && visible(i.name); })
                     .map(function(i){ return i.name; })
                     .sort(function(a,b){ return a.localeCompare(b); });
     if(!dirs.length){ render([]); return; }
