@@ -54,8 +54,8 @@
   var KNOWN = ['cfd-gallery','cfd-seminar','civ-nova','contact-line-debate','fkex',
                'oscillating-droplet','two-phase-turbulence','viscous-fingering']; // API制限時のフォールバック
   // 一覧に載せないもの：'_' 始まり（ユーティリティ/非公開の規約）＋明示リスト
-  // （katex はページ側の相対参照 ../katex/ に焼き込まれているため改名できず明示除外）。
-  var HIDDEN = ['katex'];
+  // （KaTeX は /_katex/ へ改名済＝'_' 規約で自動非表示。明示リストは予備）。
+  var HIDDEN = [];
   function visible(name){ return name.charAt(0)!=='.' && name.charAt(0)!=='_' && HIDDEN.indexOf(name)===-1; }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
