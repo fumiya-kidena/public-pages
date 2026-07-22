@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071019">
+  <title>Flow in AR</title>
+  <script type="module" src="./vendor/model-viewer.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #071019;
+      color: #edf6fb;
+      --muted: #9fb2bd;
+      --line: rgba(208, 232, 243, .16);
+      --panel: rgba(9, 22, 32, .84);
+      --accent: #86d8f7;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 50% 10%, rgba(52, 125, 153, .22), transparent 42%),
+        #071019;
+    }
+
+    button, summary { font: inherit; }
+
+    .app {
+      width: min(100%, 920px);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-rows: auto auto auto minmax(390px, 1fr) auto;
+      gap: 10px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.05rem, 4.4vw, 1.35rem);
+      font-weight: 600;
+      letter-spacing: .01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: .72rem;
+      letter-spacing: .04em;
+    }
+
+    .mode-select {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .035);
+    }
+
+    .mode-select button {
+      min-height: 48px;
+      padding: 5px 4px;
+      border: 0;
+      border-radius: 9px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      line-height: 1.15;
+    }
+
+    .mode-select button:focus-visible,
+    .play-button:focus-visible,
+    .ar-button:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .mode-name,
+    .mode-sub {
+      display: block;
+    }
+
+    .mode-name {
+      font-size: .82rem;
+    }
+
+    .mode-sub {
+      margin-top: 2px;
+      font-size: .66rem;
+      opacity: .72;
+    }
+
+    .mode-select button[aria-pressed="true"] {
+      background: #e6f6fc;
+      color: #071019;
+      font-weight: 600;
+    }
+
+    .visitor-flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: .7rem;
+    }
+
+    .visitor-flow li {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .visitor-flow b {
+      display: inline-grid;
+      flex: 0 0 auto;
+      width: 19px;
+      height: 19px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      color: #dcebf1;
+      font-size: .66rem;
+      font-weight: 600;
+    }
+
+    .stage {
+      position: relative;
+      min-height: 390px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(rgba(7, 16, 25, .08), rgba(7, 16, 25, .72)),
+        radial-gradient(circle at 50% 35%, #234859 0, #0f2430 44%, #071019 76%);
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
+      min-height: 390px;
+      display: block;
+      --poster-color: transparent;
+      --progress-bar-color: var(--accent);
+    }
+
+    .ar-button {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      min-width: 164px;
+      min-height: 46px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 999px;
+      background: #edf8fc;
+      color: #071019;
+      font-weight: 700;
+      box-shadow: 0 9px 28px rgba(0, 0, 0, .28);
+      cursor: pointer;
+    }
+
+    .load-state {
+      position: absolute;
+      z-index: 4;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      padding: 7px 11px;
+      border: 1px solid rgba(237, 246, 251, .16);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .46);
+      color: #edf6fb;
+      backdrop-filter: blur(8px);
+      font-size: .76rem;
+      pointer-events: none;
+    }
+
+    .load-state[hidden] { display: none; }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: .52;
+    }
+
+    .play-button {
+      position: absolute;
+      z-index: 3;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      min-height: 30px;
+      padding: 4px 11px;
+      border: 1px solid rgba(237, 246, 251, .20);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .25);
+      color: rgba(237, 246, 251, .88);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      font-size: .73rem;
+    }
+
+    .hint {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      pointer-events: none;
+      color: rgba(237, 246, 251, .78);
+      font-size: .73rem;
+    }
+
+    .hint span {
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .22);
+      backdrop-filter: blur(8px);
+    }
+
+    .info {
+      display: grid;
+      gap: 8px;
+    }
+
+    .summary {
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+
+    .summary strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: .94rem;
+    }
+
+    .summary p {
+      margin: 0;
+      color: var(--muted);
+      font-size: .8rem;
+      line-height: 1.55;
+    }
+
+    .colour-legend {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 7px;
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: .7rem;
+    }
+
+    .colour-legend[hidden] { display: none; }
+
+    .colour-bar {
+      height: 7px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #0f4687, #5cadd5, #f0f0f0, #e65b4b, #9e0817);
+    }
+
+    details {
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    summary {
+      padding: 11px 2px 6px;
+      color: #dcebf1;
+      cursor: pointer;
+      font-size: .82rem;
+    }
+
+    video {
+      display: block;
+      width: 100%;
+      max-height: 54dvh;
+      margin-top: 6px;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    .reference-note {
+      margin: 7px 2px 0;
+      font-size: .73rem;
+      line-height: 1.5;
+    }
+
+    .ar-message {
+      min-height: 1.2em;
+      margin: 0 2px;
+      color: var(--muted);
+      font-size: .72rem;
+    }
+
+    .source-note {
+      margin: 0 2px;
+      color: var(--muted);
+      font-size: .7rem;
+    }
+
+    .source-note a { color: #bdeaff; }
+
+    @media (min-width: 700px) {
+      .app {
+        grid-template-columns: minmax(0, 1.55fr) minmax(260px, .7fr);
+        grid-template-rows: auto auto auto minmax(520px, 1fr);
+        padding-inline: 18px;
+      }
+
+      header, .mode-select, .visitor-flow { grid-column: 1 / -1; }
+      .stage { grid-column: 1; grid-row: 4; min-height: 520px; }
+      model-viewer { min-height: 520px; }
+      .info { grid-column: 2; grid-row: 4; align-content: start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      model-viewer { --progress-mask: transparent; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>Flow in AR</h1>
+      <span class="status">DEMONSTRATION</span>
+    </header>
+
+    <nav class="mode-select" aria-label="表示方式">
+      <button type="button" data-mode="glass" aria-pressed="true"><span class="mode-name">透明な液滴</span><span class="mode-sub">Glass</span></button>
+      <button type="button" data-mode="contour" aria-pressed="false"><span class="mode-name">赤–青contour</span><span class="mode-sub">Residual</span></button>
+      <button type="button" data-mode="cruller" aria-pressed="false"><span class="mode-name">クルーラー</span><span class="mode-sub">Image-to-3D</span></button>
+    </nav>
+
+    <ol class="visitor-flow" aria-label="使い方">
+      <li><b>1</b><span>表示を選ぶ</span></li>
+      <li><b>2</b><span>指で回す</span></li>
+      <li><b>3</b><span>ARで置く</span></li>
+    </ol>
+
+    <section class="stage" aria-label="3D可視化">
+      <model-viewer
+        id="droplet-viewer"
+        alt="振動液滴の透明な3Dモデル"
+        ar
+        ar-modes="webxr scene-viewer quick-look"
+        ar-scale="fixed"
+        ar-placement="floor"
+        camera-controls
+        touch-action="pan-y"
+        animation-name="oscillation"
+        shadow-intensity="1"
+        shadow-softness=".85"
+        exposure="1.12"
+        environment-image="neutral"
+        camera-orbit="35deg 72deg 0.28m"
+        min-camera-orbit="auto auto 0.16m"
+        max-camera-orbit="auto auto 0.65m">
+        <button class="ar-button" slot="ar-button" type="button">ARで机に置く</button>
+      </model-viewer>
+      <div class="load-state" id="load-state" role="status">3Dを読み込み中…</div>
+      <button class="play-button" id="play-button" type="button" disabled>一時停止</button>
+      <div class="hint" aria-hidden="true">
+        <span>1本指: 回転</span>
+        <span>2本指: 拡大</span>
+      </div>
+    </section>
+
+    <section class="info" aria-live="polite">
+      <div class="summary">
+        <strong id="mode-title">Animated glass · 3D</strong>
+        <p id="mode-description">44 frameの3D形状を7.3秒でloop再生。透明表現は全端末で動くreal-time alpha glassです。</p>
+        <p id="mode-scale">solver R = 0.375 → AR表示半径 0.060 m（展示用scale）</p>
+        <div class="colour-legend" id="colour-legend" hidden>
+          <span>negative</span><span class="colour-bar" aria-hidden="true"></span><span>positive</span>
+        </div>
+      </div>
+      <p class="ar-message" id="ar-message">3Dを回してから「机の上に置く」を押してください。</p>
+      <p class="source-note" id="mode-source" hidden>Visual reference: <a id="mode-source-link" target="_blank" rel="noopener"></a></p>
+      <details id="reference">
+        <summary>元の176 frame動画と比較</summary>
+        <video id="reference-video" controls muted loop playsinline preload="metadata">
+          <source id="reference-source" src="./asset/raytraceReference.mp4" type="video/mp4">
+        </video>
+        <p class="reference-note" id="reference-note">ParaView 6.1 / OSPRay path tracerによる176 frameの透明render。AR内のglassは実時間近似です。</p>
+      </details>
+    </section>
+  </main>
+
+  <script>
+    const viewer = document.getElementById("droplet-viewer");
+    const modeTitle = document.getElementById("mode-title");
+    const modeDescription = document.getElementById("mode-description");
+    const modeScale = document.getElementById("mode-scale");
+    const colourLegend = document.getElementById("colour-legend");
+    const playButton = document.getElementById("play-button");
+    const arMessage = document.getElementById("ar-message");
+    const modeSource = document.getElementById("mode-source");
+    const modeSourceLink = document.getElementById("mode-source-link");
+    const reference = document.getElementById("reference");
+    const video = document.getElementById("reference-video");
+    const source = document.getElementById("reference-source");
+    const referenceNote = document.getElementById("reference-note");
+    const loadState = document.getElementById("load-state");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const modes = {
+      glass: {
+        src: "./asset/dropletGlass.glb?v=animated7",
+        iosSrc: "./asset/dropletGlass.usdz?v=animated7",
+        alt: "振動液滴の透明な3Dモデル",
+        title: "Animated glass · 3D",
+        description: "44 frameの3D形状を7.3秒でloop再生。透明表現は全端末で動くreal-time alpha glassです。",
+        scale: "solver R = 0.375 → AR表示半径 0.060 m（展示用scale）",
+        video: "./asset/raytraceReference.mp4",
+        note: "ParaView 6.1 / OSPRay path tracerによる176 frameの透明render。AR内のglassは実時間近似です。",
+        animationName: "oscillation",
+        exposure: "1.12",
+        cameraOrbit: "35deg 72deg 0.28m"
+      },
+      contour: {
+        src: "./asset/modeContour.glb?v=animated7",
+        iosSrc: "./asset/modeContour.usdz?v=animated7",
+        alt: "振動液滴の赤青コンター3Dモデル",
+        title: "Animated residual contour, ℓ > 2",
+        description: "P₂を除いたresidualを固定84倍で立体化し、44 frameをloop再生。iOS ARでも赤青のreference phaseを保持します。",
+        scale: "AR表示の基準半径 0.060 m（変形は展示用に誇張）",
+        video: "./asset/modeContourReference.mp4",
+        note: "同じ固定colour scale・固定84倍で作成した176 frameのreference動画です。iOS ARは色の強いphaseからloopを開始します。",
+        animationName: "oscillation",
+        initialTime: 8 / 6,
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      cruller: {
+        src: "./asset/frenchCruller.glb?v=animated7",
+        iosSrc: "./asset/frenchCruller.usdz?v=animated7",
+        alt: "回転するストロベリーフレンチクルーラーの3Dモデル",
+        title: "Strawberry French cruller",
+        description: "Hunyuan3Dで生成したtwisted ridgeへ粉糖とstrawberry icingを加え、8秒で1回転させています。",
+        scale: "外径 0.140 m（image-to-3D demonstration）",
+        video: null,
+        note: "",
+        sourceLabel: "SGS109 ストロベリーカスタードフレンチ",
+        sourceUrl: "https://sgs109.com/n/16765/3/",
+        animationName: "spin",
+        exposure: "1.05",
+        cameraOrbit: "28deg 18deg 0.32m"
+      }
+    };
+
+    const requestedMode = new URLSearchParams(window.location.search).get("mode");
+    let selectedMode = modes[requestedMode] ? requestedMode : "glass";
+    let isPlaying = !reduceMotion;
+
+    function updateModeUrl(name) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("mode", name);
+      window.history.replaceState(null, "", url);
+    }
+
+    function setLoading(isLoading, message = "3Dを読み込み中…") {
+      viewer.setAttribute("aria-busy", String(isLoading));
+      loadState.hidden = !isLoading;
+      loadState.textContent = message;
+      playButton.disabled = isLoading;
+    }
+
+    function updatePlayButton() {
+      playButton.textContent = isPlaying ? "一時停止" : "再生";
+      playButton.setAttribute("aria-label", isPlaying ? "3D animationを一時停止" : "3D animationを再生");
+    }
+
+    function updateArAvailability() {
+      const fallback = modes[selectedMode].video
+        ? "3D表示とreference動画を使用できます。"
+        : "3D表示を使用できます。";
+      arMessage.textContent = viewer.canActivateAR
+        ? "3Dを回してから「机の上に置く」を押してください。"
+        : `この環境ではARを起動できないため、${fallback}`;
+    }
+
+    function selectMode(name, syncUrl = true) {
+      const mode = modes[name];
+      if (!mode) return;
+      selectedMode = name;
+      setLoading(true);
+      document.querySelectorAll("[data-mode]").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button.dataset.mode === name));
+      });
+      viewer.setAttribute("animation-name", mode.animationName);
+      viewer.setAttribute("src", mode.src);
+      viewer.setAttribute("ios-src", mode.iosSrc);
+      viewer.alt = mode.alt;
+      viewer.setAttribute("exposure", mode.exposure);
+      viewer.setAttribute("camera-orbit", mode.cameraOrbit);
+      modeTitle.textContent = mode.title;
+      modeDescription.textContent = mode.description;
+      modeScale.textContent = mode.scale;
+      modeSource.hidden = !mode.sourceUrl;
+      if (mode.sourceUrl) {
+        modeSourceLink.href = mode.sourceUrl;
+        modeSourceLink.textContent = mode.sourceLabel;
+      }
+      reference.hidden = !mode.video;
+      if (mode.video) {
+        source.src = mode.video;
+        video.load();
+        referenceNote.textContent = mode.note;
+      } else {
+        reference.open = false;
+        video.pause();
+      }
+      colourLegend.hidden = name !== "contour";
+      updateArAvailability();
+      isPlaying = !reduceMotion;
+      updatePlayButton();
+      if (syncUrl) updateModeUrl(name);
+      if (reference.open && !reduceMotion) video.play().catch(() => {});
+    }
+
+    document.querySelectorAll("[data-mode]").forEach((button) => {
+      button.addEventListener("click", () => selectMode(button.dataset.mode));
+    });
+
+    playButton.addEventListener("click", () => {
+      if (isPlaying) viewer.pause();
+      else viewer.play();
+      isPlaying = !isPlaying;
+      updatePlayButton();
+    });
+
+    reference.addEventListener("toggle", () => {
+      if (reference.open && !reduceMotion) video.play().catch(() => {});
+      else video.pause();
+    });
+
+    viewer.addEventListener("progress", (event) => {
+      if (loadState.hidden) return;
+      const percent = Math.round((event.detail.totalProgress || 0) * 100);
+      loadState.textContent = percent > 0 ? `3Dを読み込み中 ${percent}%` : "3Dを読み込み中…";
+    });
+
+    viewer.addEventListener("ar-status", (event) => {
+      const message = {
+        "session-started": "ARを開始しました。平らな面をゆっくり映してください。",
+        "object-placed": "配置できました。端末を動かして形状を観察できます。",
+        "failed": "ARを開始できないため、このまま3D表示を使用します。",
+        "not-presenting": "ARを終了しました。"
+      }[event.detail.status];
+      if (message) arMessage.textContent = message;
+    });
+
+    viewer.addEventListener("error", () => {
+      setLoading(false);
+      arMessage.textContent = "3D modelを読み込めませんでした。通信または配信設定を確認してください。";
+    });
+
+    viewer.addEventListener("load", () => {
+      setLoading(false);
+      updateArAvailability();
+      const initialTime = modes[selectedMode].initialTime;
+      if (isPlaying) {
+        if (Number.isFinite(initialTime)) viewer.currentTime = initialTime;
+        viewer.play();
+      } else {
+        viewer.pause();
+        if (Number.isFinite(initialTime)) viewer.currentTime = initialTime;
+      }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        viewer.pause();
+        video.pause();
+      } else if (isPlaying) {
+        viewer.play();
+        if (reference.open && !reduceMotion) video.play().catch(() => {});
+      }
+    });
+
+    window.addEventListener("offline", () => {
+      arMessage.textContent = "通信が切れました。読み込み済みの3Dはそのまま操作できます。";
+    });
+
+    window.addEventListener("online", updateArAvailability);
+
+    customElements.whenDefined("model-viewer").then(() => {
+      selectMode(selectedMode, false);
+    });
+  </script>
+</body>
+</html>
