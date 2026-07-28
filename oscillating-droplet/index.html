@@ -1,0 +1,54 @@
+<!-- built from: Oscillating Droplet - 公開ページ一覧.md — 対のMDと内容ミラー。 -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oscillating Droplet</title>
+<style>
+  :root{--bg:#0c0d10;--panel:#11151a;--line:#252b33;--ink:#e9e9ec;--mut:#9299a5;--dim:#626a76;--accent:#6fd6c8}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Helvetica Neue",-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.75}
+  .wrap{max-width:820px;margin:0 auto;padding:64px 26px 100px}
+  header{display:grid;grid-template-columns:1fr 180px;gap:34px;align-items:center;margin-bottom:42px}
+  .kicker{font-size:11px;letter-spacing:.38em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{margin:12px 0 0;font-size:34px;font-weight:250;letter-spacing:.01em}
+  .sub{color:var(--mut);font-size:14.5px;max-width:52ch}
+  .mark{width:180px;height:140px}
+  h2{font-size:14px;margin:0 0 14px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .card{display:block;min-width:0;color:inherit;text-decoration:none;border:1px solid var(--line);border-radius:13px;padding:21px 22px;background:var(--panel);transition:.18s ease}
+  .card:hover{transform:translateY(-3px);border-color:#42645f;box-shadow:0 16px 42px rgba(0,0,0,.42)}
+  .title{display:block;font-size:18px;font-weight:520;color:var(--ink)}
+  .path{display:block;margin-top:3px;color:var(--accent);font:12px/1.6 "SFMono-Regular",Consolas,monospace;overflow-wrap:anywhere}
+  .desc{display:block;margin-top:11px;color:#c8cbd1;font-size:14px;overflow-wrap:anywhere}
+  footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:12px}
+  footer a{color:var(--mut)}
+  @media(max-width:620px){.wrap{padding:44px 18px 78px}header{grid-template-columns:1fr}.mark{display:none}h1{font-size:28px}.sub{font-size:14px}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <div>
+      <div class="kicker">Topic Index</div>
+      <h1>Oscillating Droplet</h1>
+      <p class="sub">液滴振動に関する公開ページの入口。</p>
+    </div>
+    <svg class="mark" viewBox="0 0 180 140" role="img" aria-label="振動する液滴の模式図">
+      <defs><linearGradient id="drop" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#70d7c8" stop-opacity=".88"/><stop offset="1" stop-color="#286d76" stop-opacity=".45"/></linearGradient></defs>
+      <path d="M90 12 C69 38 45 67 47 93 C49 119 67 130 90 130 C113 130 131 119 133 93 C135 67 111 38 90 12Z" fill="url(#drop)" stroke="#91e6d9" stroke-width="1.5"/>
+      <path d="M24 82 C42 61 57 104 76 82 C95 60 111 104 156 74" fill="none" stroke="#6fd6c8" stroke-width="2" stroke-linecap="round" opacity=".65"/>
+    </svg>
+  </header>
+
+  <h2>Page</h2>
+  <a class="card" href="./drop-resonance/">
+    <span class="title">液滴の共鳴振動 — 基礎から</span>
+    <span class="path">/oscillating-droplet/drop-resonance/</span>
+    <span class="desc">線形固有振動、非線形mode coupling、3:1内部共鳴、粘性減衰の一般論。</span>
+  </a>
+
+  <footer><a href="../">public-pages</a> / oscillating-droplet</footer>
+</main>
+</body>
+</html>
