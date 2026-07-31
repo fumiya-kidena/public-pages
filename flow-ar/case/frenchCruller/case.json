@@ -1,0 +1,35 @@
+{
+    "schemaVersion":  1,
+    "id":  "frenchCruller",
+    "label":  "French cruller",
+    "defaultMode":  "cruller",
+    "assetRoot":  "../../asset/",
+    "modes":  [
+                  {
+                      "id":  "cruller",
+                      "label":  "French cruller · Image-to-3D",
+                      "kind":  "model",
+                      "src":  "frenchCruller.glb",
+                      "iosSrc":  "frenchCruller.usdz#allowsContentScaling=0",
+                      "alt":  "回転するストロベリーフレンチクルーラーの3Dモデル",
+                      "title":  "Strawberry French cruller",
+                      "description":  "Hunyuan3Dで生成したtwisted ridgeへ粉糖とstrawberry icingを加え、8秒で1回転させています。flow resultではありません。",
+                      "scale":  "外径 0.140 m（image-to-3D demonstration）",
+                      "magnification":  "振幅 —",
+                      "animationName":  "spin",
+                      "exposure":  1.05,
+                      "cameraOrbit":  "28deg 18deg 0.32m",
+                      "source":  {
+                                     "prefix":  "Visual reference:",
+                                     "label":  "SGS109 ストロベリーカスタードフレンチ",
+                                     "url":  "https://sgs109.com/n/16765/3/"
+                                 },
+                      "iosAnchorSrc":  "frenchCrullerAnchor.usdz#allowsContentScaling=0"
+                  }
+              ],
+    "anchor":  {
+                   "image":  "marker/frenchCruller.png",
+                   "physicalWidthCm":  18.0,
+                   "liftMetres":  0.025
+               }
+}

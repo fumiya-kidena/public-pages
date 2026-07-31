@@ -1,0 +1,25 @@
+{
+    "schemaVersion":  1,
+    "id":  "bagBreakup",
+    "label":  "Bag breakup",
+    "defaultMode":  "bag",
+    "assetRoot":  "../../asset/",
+    "modes":  [
+                  {
+                      "id":  "bag",
+                      "label":  "Bag breakup · CFD動画",
+                      "kind":  "video",
+                      "videoSrc":  "bagBreakup.mp4",
+                      "poster":  "bagBreakupAfterimage.png",
+                      "title":  "Bag breakup · CFD render",
+                      "description":  "26 frameのCFD renderをloop再生します。真正の3D fieldは未回収のため、現段階はMP4とafterimageによる表示です。",
+                      "scale":  "rendered movie（振幅の変換なし）",
+                      "magnification":  "振幅 —",
+                      "source":  {
+                                     "prefix":  "Render environment:",
+                                     "label":  "Poly Haven / Sergej Majboroda, Brown Photostudio 02 (CC0)",
+                                     "url":  "https://polyhaven.com/a/brown_photostudio_02"
+                                 }
+                  }
+              ]
+}

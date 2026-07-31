@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "assetVersion": "case-c840da8ae825",
+  "defaultMode": "glass",
+  "aliases": {
+    "contour": "residual"
+  },
+  "categories": [
+    {
+      "id": "dropletOscillation",
+      "label": "液滴振動",
+      "case": [
+        {
+          "id": "oscillatingDroplet",
+          "manifest": "./oscillatingDroplet/case.json"
+        }
+      ]
+    },
+    {
+      "id": "atomization",
+      "label": "微粒化",
+      "case": [
+        {
+          "id": "bagBreakup",
+          "manifest": "./bagBreakup/case.json"
+        }
+      ]
+    }
+  ],
+  "auxiliary": [
+    {
+      "id": "frenchCruller",
+      "label": "3D表示デモ",
+      "manifest": "./frenchCruller/case.json"
+    }
+  ]
+}

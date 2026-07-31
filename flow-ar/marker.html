@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>FLOW AR · Anchor sheet</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm; }
+
+    * { box-sizing: border-box; }
+
+    :root {
+      color: #111;
+      background: #e9edf0;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body { margin: 0; }
+
+    .screen-header {
+      width: min(100% - 24px, 180mm);
+      margin: 18px auto 12px;
+    }
+
+    .screen-header h1 {
+      margin: 0 0 4px;
+      font-size: 1.15rem;
+    }
+
+    .screen-header p,
+    .status {
+      margin: 0;
+      color: #4c5960;
+      font-size: .84rem;
+      line-height: 1.5;
+    }
+
+    .status {
+      width: min(100% - 24px, 180mm);
+      margin: 0 auto 12px;
+      padding: 10px 12px;
+      border: 1px solid #c8d0d4;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .sheet {
+      width: 180mm;
+      min-height: 267mm;
+      margin: 0 auto 14mm;
+      padding: 0;
+      break-after: page;
+      page-break-after: always;
+      background: #fff;
+      text-align: center;
+      box-shadow: 0 6px 30px rgba(20, 34, 42, .14);
+    }
+
+    .sheet:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+
+    .case-category {
+      margin: 0 0 2mm;
+      color: #59666c;
+      font-size: 9pt;
+      letter-spacing: .04em;
+    }
+
+    .case-title {
+      margin: 0;
+      font-size: 18pt;
+      font-weight: 650;
+    }
+
+    .case-id {
+      margin: 1mm 0 6mm;
+      color: #59666c;
+      font: 8pt ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+
+    .anchor-wrap {
+      display: flex;
+      min-height: 80mm;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 6mm;
+    }
+
+    .anchor-image {
+      display: block;
+      height: auto;
+      max-width: none;
+    }
+
+    .physical-size {
+      margin: 0 0 5mm;
+      font-size: 9pt;
+    }
+
+    .check-line {
+      width: 5cm;
+      margin: 0 auto 2mm;
+      border-top: .35mm solid #111;
+    }
+
+    .check-label {
+      margin: 0 0 8mm;
+      font-size: 8pt;
+    }
+
+    .instruction {
+      width: 150mm;
+      margin: 0 auto;
+      padding: 5mm 6mm;
+      border: .3mm solid #adb7bc;
+      text-align: left;
+      font-size: 9.5pt;
+      line-height: 1.6;
+    }
+
+    .instruction strong { font-weight: 700; }
+
+    @media print {
+      :root { background: #fff; }
+      .no-print { display: none !important; }
+      .sheet {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="screen-header no-print">
+    <h1>FLOW AR · QR / image-anchor sheet</h1>
+    <p>A4・印刷倍率100%で出力します。<code>?case=&lt;caseId&gt;</code>で1 caseだけ表示できます。</p>
+  </header>
+  <p class="status no-print" id="status" role="status">case catalogを読み込み中…</p>
+  <main id="sheet-list"></main>
+
+  <script>
+    const status = document.getElementById("status");
+    const sheetList = document.getElementById("sheet-list");
+    const requestedCase = new URLSearchParams(window.location.search).get("case");
+
+    function collectReferences(catalog) {
+      const references = [];
+      for (const category of catalog.categories || []) {
+        for (const reference of category.case || []) {
+          references.push({ ...reference, categoryLabel: category.label });
+        }
+      }
+      for (const reference of catalog.auxiliary || []) {
+        references.push({ ...reference, categoryLabel: reference.label });
+      }
+      return [...new Map(references.map((reference) => [reference.id, reference])).values()];
+    }
+
+    async function loadCase(reference, catalogUrl) {
+      const manifestUrl = new URL(reference.manifest, catalogUrl);
+      const response = await fetch(manifestUrl, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`Case ${reference.id}: HTTP ${response.status}`);
+      const definition = await response.json();
+      if (definition.schemaVersion !== 1 || definition.id !== reference.id) {
+        throw new Error(`Invalid case manifest: ${reference.id}`);
+      }
+      return { definition, manifestUrl, categoryLabel: reference.categoryLabel };
+    }
+
+    function createSheet(loadedCase) {
+      const { definition, manifestUrl, categoryLabel } = loadedCase;
+      const anchor = definition.anchor;
+      const physicalWidthCm = Number(anchor.physicalWidthCm);
+      if (!anchor.image || !Number.isFinite(physicalWidthCm) || physicalWidthCm <= 0) {
+        throw new Error(`Invalid anchor: ${definition.id}`);
+      }
+
+      const assetRoot = new URL(definition.assetRoot, manifestUrl);
+      const imageUrl = new URL(anchor.image, assetRoot);
+      const sheet = document.createElement("article");
+      sheet.className = "sheet";
+
+      const category = document.createElement("p");
+      category.className = "case-category";
+      category.textContent = categoryLabel;
+
+      const title = document.createElement("h2");
+      title.className = "case-title";
+      title.textContent = definition.label;
+
+      const caseId = document.createElement("p");
+      caseId.className = "case-id";
+      caseId.textContent = `case: ${definition.id}`;
+
+      const anchorWrap = document.createElement("div");
+      anchorWrap.className = "anchor-wrap";
+      const image = document.createElement("img");
+      image.className = "anchor-image";
+      image.src = imageUrl.href;
+      image.alt = anchor.alt || `${definition.label}のQR / image anchor`;
+      image.style.width = `${physicalWidthCm}cm`;
+      anchorWrap.append(image);
+
+      const size = document.createElement("p");
+      size.className = "physical-size";
+      size.textContent = `anchor印刷幅: ${physicalWidthCm} cm`;
+
+      const checkLine = document.createElement("div");
+      checkLine.className = "check-line";
+      checkLine.setAttribute("aria-hidden", "true");
+      const checkLabel = document.createElement("p");
+      checkLabel.className = "check-label";
+      checkLabel.textContent = "50 mm print check";
+
+      const instruction = document.createElement("p");
+      instruction.className = "instruction";
+      instruction.innerHTML = "<strong>印刷倍率100%</strong>。matte紙または艶の少ない面を使い、照明の反射を避けます。認識時はanchor全体がcamera内に入る距離と向きにしてください。";
+
+      sheet.append(category, title, caseId, anchorWrap, size, checkLine, checkLabel, instruction);
+      return sheet;
+    }
+
+    async function initialize() {
+      if (window.location.protocol === "file:") {
+        throw new Error("file://ではcase catalogを読み込めません。startServer.cmdを実行し、HTTP serverのmarker.htmlを開いてください。");
+      }
+
+      const catalogUrl = new URL("./case/catalog.json", document.baseURI);
+      const response = await fetch(catalogUrl, { cache: "no-cache" });
+      if (!response.ok) throw new Error(`Catalog: HTTP ${response.status}`);
+      const catalog = await response.json();
+      if (catalog.schemaVersion !== 1) throw new Error("Unsupported case catalog");
+
+      let references = collectReferences(catalog);
+      if (requestedCase) {
+        references = references.filter((reference) => reference.id === requestedCase);
+        if (!references.length) throw new Error(`catalogにcase「${requestedCase}」がありません。`);
+      }
+
+      const settledCases = await Promise.allSettled(
+        references.map((reference) => loadCase(reference, catalogUrl))
+      );
+      const loadedCases = [];
+      settledCases.forEach((result, index) => {
+        if (result.status === "fulfilled") loadedCases.push(result.value);
+        else console.warn(`Skipped case ${references[index].id}:`, result.reason);
+      });
+      const anchoredCases = loadedCases.filter(({ definition }) =>
+        definition.anchor?.image
+        && definition.modes?.some((mode) => mode.kind === "model" && mode.iosAnchorSrc)
+      );
+      if (!anchoredCases.length) {
+        const scope = requestedCase ? `case「${requestedCase}」` : "catalog内のcase";
+        throw new Error(`${scope}に印刷用anchorが定義されていません。`);
+      }
+
+      sheetList.replaceChildren(...anchoredCases.map(createSheet));
+      status.textContent = `${anchoredCases.length} caseを表示中。browserの印刷設定をA4・倍率100%にしてください。`;
+    }
+
+    initialize().catch((error) => {
+      console.error(error);
+      status.textContent = error.message;
+    });
+  </script>
+</body>
+</html>
