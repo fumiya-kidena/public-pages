@@ -29,7 +29,7 @@
         #071019;
     }
 
-    button, summary { font: inherit; }
+    button, select, summary { font: inherit; }
 
     .app {
       width: min(100%, 920px);
@@ -71,51 +71,38 @@
 
     .mode-select {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 4px;
-      padding: 4px;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 7px 8px 7px 12px;
       border: 1px solid var(--line);
       border-radius: 13px;
       background: rgba(255, 255, 255, .035);
     }
 
-    .mode-select button {
-      min-height: 48px;
-      padding: 5px 4px;
-      border: 0;
-      border-radius: 9px;
-      background: transparent;
+    .mode-select label {
       color: var(--muted);
-      cursor: pointer;
-      line-height: 1.15;
+      font-size: .76rem;
+      white-space: nowrap;
     }
 
-    .mode-select button:focus-visible,
+    .mode-select select {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 38px 0 12px;
+      border: 1px solid rgba(208, 232, 243, .22);
+      border-radius: 9px;
+      background: #102632;
+      color: #edf6fb;
+      cursor: pointer;
+      font-size: max(16px, .88rem);
+    }
+
+    .mode-select select:focus-visible,
     .play-button:focus-visible,
     .ar-button:focus-visible {
       outline: 3px solid var(--accent);
       outline-offset: 2px;
-    }
-
-    .mode-name,
-    .mode-sub {
-      display: block;
-    }
-
-    .mode-name {
-      font-size: .82rem;
-    }
-
-    .mode-sub {
-      margin-top: 2px;
-      font-size: .66rem;
-      opacity: .72;
-    }
-
-    .mode-select button[aria-pressed="true"] {
-      background: #e6f6fc;
-      color: #071019;
-      font-weight: 600;
     }
 
     .visitor-flow {
@@ -169,6 +156,24 @@
       display: block;
       --poster-color: transparent;
       --progress-bar-color: var(--accent);
+    }
+
+    model-viewer[hidden],
+    .stage-video[hidden],
+    .hint[hidden],
+    .play-button[hidden] {
+      display: none;
+    }
+
+    .stage-video {
+      width: 100%;
+      height: 100%;
+      min-height: 390px;
+      max-height: none;
+      margin: 0;
+      border-radius: 0;
+      object-fit: contain;
+      background: #000;
     }
 
     .ar-button {
@@ -266,6 +271,31 @@
       font-size: .94rem;
     }
 
+    .mode-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .mode-heading strong {
+      min-width: 0;
+      margin: 0;
+    }
+
+    .amplitude-badge {
+      flex: 0 0 auto;
+      padding: 4px 8px;
+      border: 1px solid rgba(134, 216, 247, .34);
+      border-radius: 999px;
+      background: rgba(134, 216, 247, .10);
+      color: #c8effd;
+      font-size: .7rem;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
     .summary p {
       margin: 0;
       color: var(--muted);
@@ -342,7 +372,7 @@
 
       header, .mode-select, .visitor-flow { grid-column: 1 / -1; }
       .stage { grid-column: 1; grid-row: 4; min-height: 520px; }
-      model-viewer { min-height: 520px; }
+      model-viewer, .stage-video { min-height: 520px; }
       .info { grid-column: 2; grid-row: 4; align-content: start; }
     }
 
@@ -358,11 +388,24 @@
       <span class="status">DEMONSTRATION</span>
     </header>
 
-    <nav class="mode-select" aria-label="表示方式">
-      <button type="button" data-mode="glass" aria-pressed="true"><span class="mode-name">透明な液滴</span><span class="mode-sub">Glass</span></button>
-      <button type="button" data-mode="contour" aria-pressed="false"><span class="mode-name">赤–青contour</span><span class="mode-sub">Residual</span></button>
-      <button type="button" data-mode="cruller" aria-pressed="false"><span class="mode-name">クルーラー</span><span class="mode-sub">Image-to-3D</span></button>
-    </nav>
+    <div class="mode-select">
+      <label for="mode-picker">表示</label>
+      <select id="mode-picker" aria-label="表示する可視化">
+        <optgroup label="Oscillating droplet">
+          <option value="glass">透明raytrace風 · 全mode</option>
+          <option value="p2">P2 · 振幅そのまま</option>
+          <option value="p3">P3 · noise-level診断</option>
+          <option value="p4">P4 · 振幅拡大</option>
+          <option value="p5">P5 · noise-level診断</option>
+          <option value="p6">P6 · 振幅拡大</option>
+          <option value="residual">P2以外 · residual</option>
+        </optgroup>
+        <optgroup label="Other flow / demonstration">
+          <option value="bag">Bag breakup · CFD動画</option>
+          <option value="cruller">French cruller · Image-to-3D</option>
+        </optgroup>
+      </select>
+    </div>
 
     <ol class="visitor-flow" aria-label="使い方">
       <li><b>1</b><span>表示を選ぶ</span></li>
@@ -390,9 +433,18 @@
         max-camera-orbit="auto auto 0.65m">
         <button class="ar-button" slot="ar-button" type="button">ARで机に置く</button>
       </model-viewer>
+      <video
+        class="stage-video"
+        id="stage-video"
+        muted
+        loop
+        playsinline
+        controls
+        preload="metadata"
+        hidden></video>
       <div class="load-state" id="load-state" role="status">3Dを読み込み中…</div>
       <button class="play-button" id="play-button" type="button" disabled>一時停止</button>
-      <div class="hint" aria-hidden="true">
+      <div class="hint" id="gesture-hint" aria-hidden="true">
         <span>1本指: 回転</span>
         <span>2本指: 拡大</span>
       </div>
@@ -400,7 +452,10 @@
 
     <section class="info" aria-live="polite">
       <div class="summary">
-        <strong id="mode-title">Animated glass · 3D</strong>
+        <div class="mode-heading">
+          <strong id="mode-title">Animated glass · 3D</strong>
+          <span class="amplitude-badge" id="mode-magnification">振幅 ×1</span>
+        </div>
         <p id="mode-description">44 frameの3D形状を7.3秒でloop再生。透明表現は全端末で動くreal-time alpha glassです。</p>
         <p id="mode-scale">solver R = 0.375 → AR表示半径 0.060 m（展示用scale）</p>
         <div class="colour-legend" id="colour-legend" hidden>
@@ -408,7 +463,7 @@
         </div>
       </div>
       <p class="ar-message" id="ar-message">3Dを回してから「机の上に置く」を押してください。</p>
-      <p class="source-note" id="mode-source" hidden>Visual reference: <a id="mode-source-link" target="_blank" rel="noopener"></a></p>
+      <p class="source-note" id="mode-source" hidden><span id="mode-source-prefix">Visual reference:</span> <a id="mode-source-link" target="_blank" rel="noopener"></a></p>
       <details id="reference">
         <summary>元の176 frame動画と比較</summary>
         <video id="reference-video" controls muted loop playsinline preload="metadata">
@@ -421,58 +476,154 @@
 
   <script>
     const viewer = document.getElementById("droplet-viewer");
+    const stageVideo = document.getElementById("stage-video");
+    const gestureHint = document.getElementById("gesture-hint");
+    const modePicker = document.getElementById("mode-picker");
     const modeTitle = document.getElementById("mode-title");
     const modeDescription = document.getElementById("mode-description");
     const modeScale = document.getElementById("mode-scale");
+    const modeMagnification = document.getElementById("mode-magnification");
     const colourLegend = document.getElementById("colour-legend");
     const playButton = document.getElementById("play-button");
     const arMessage = document.getElementById("ar-message");
     const modeSource = document.getElementById("mode-source");
+    const modeSourcePrefix = document.getElementById("mode-source-prefix");
     const modeSourceLink = document.getElementById("mode-source-link");
     const reference = document.getElementById("reference");
-    const video = document.getElementById("reference-video");
-    const source = document.getElementById("reference-source");
+    const referenceVideo = document.getElementById("reference-video");
+    const referenceSource = document.getElementById("reference-source");
     const referenceNote = document.getElementById("reference-note");
     const loadState = document.getElementById("load-state");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const modes = {
       glass: {
-        src: "./asset/dropletGlass.glb?v=animated7",
-        iosSrc: "./asset/dropletGlass.usdz?v=animated7",
+        kind: "model",
+        src: "./asset/dropletGlass.glb?v=animated8",
+        iosSrc: "./asset/dropletGlass.usdz?v=animated8",
         alt: "振動液滴の透明な3Dモデル",
         title: "Animated glass · 3D",
         description: "44 frameの3D形状を7.3秒でloop再生。透明表現は全端末で動くreal-time alpha glassです。",
         scale: "solver R = 0.375 → AR表示半径 0.060 m（展示用scale）",
-        video: "./asset/raytraceReference.mp4",
-        note: "ParaView 6.1 / OSPRay path tracerによる176 frameの透明render。AR内のglassは実時間近似です。",
+        magnification: "振幅 ×1",
+        referenceVideo: "./asset/raytraceReference.mp4",
+        referenceNote: "ParaView 6.1 / OSPRay path tracerによる176 frameの透明render。AR内のglassは実時間近似です。",
         animationName: "oscillation",
         exposure: "1.12",
         cameraOrbit: "35deg 72deg 0.28m"
       },
-      contour: {
-        src: "./asset/modeContour.glb?v=animated7",
-        iosSrc: "./asset/modeContour.usdz?v=animated7",
-        alt: "振動液滴の赤青コンター3Dモデル",
-        title: "Animated residual contour, ℓ > 2",
-        description: "P₂を除いたresidualを固定84倍で立体化し、44 frameをloop再生。iOS ARでも赤青のreference phaseを保持します。",
-        scale: "AR表示の基準半径 0.060 m（変形は展示用に誇張）",
-        video: "./asset/modeContourReference.mp4",
-        note: "同じ固定colour scale・固定84倍で作成した176 frameのreference動画です。iOS ARは色の強いphaseからloopを開始します。",
+      p2: {
+        kind: "model",
+        src: "./asset/modeP2.glb?v=animated8",
+        iosSrc: "./asset/modeP2.usdz?v=animated8",
+        alt: "振動液滴P2 modeの赤青コンター3Dモデル",
+        title: "P2 mode",
+        description: "dominantなP2成分だけを抽出。source振幅を拡大せず44 frameでloop再生します。",
+        scale: "最大source振幅 14.9952%（振幅拡大なし）",
+        magnification: "振幅 ×1",
+        legend: true,
+        animationName: "oscillation",
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      p3: {
+        kind: "model",
+        src: "./asset/modeP3.glb?v=animated8",
+        iosSrc: "./asset/modeP3.usdz?v=animated8",
+        alt: "振動液滴P3 modeの赤青コンター3Dモデル",
+        title: "P3 mode · noise-level",
+        description: "numerical asymmetry / noise-levelのP3成分を診断用に可視化。物理振幅ではありません。",
+        scale: "最大source振幅 0.000831738% → 最大表示振幅 42%",
+        magnification: "振幅 ×50,496.6",
+        legend: true,
+        animationName: "oscillation",
+        initialTime: 42 / 6,
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      p4: {
+        kind: "model",
+        src: "./asset/modeP4.glb?v=animated8",
+        iosSrc: "./asset/modeP4.usdz?v=animated8",
+        alt: "振動液滴P4 modeの赤青コンター3Dモデル",
+        title: "P4 mode",
+        description: "P4成分だけを抽出し、位相と空間分布が見える振幅へ拡大しています。",
+        scale: "最大source振幅 1.33900% → 最大表示振幅 42%",
+        magnification: "振幅 ×31.3667",
+        legend: true,
         animationName: "oscillation",
         initialTime: 8 / 6,
         exposure: "0.95",
         cameraOrbit: "35deg 72deg 0.35m"
       },
+      p5: {
+        kind: "model",
+        src: "./asset/modeP5.glb?v=animated8",
+        iosSrc: "./asset/modeP5.usdz?v=animated8",
+        alt: "振動液滴P5 modeの赤青コンター3Dモデル",
+        title: "P5 mode · noise-level",
+        description: "numerical asymmetry / noise-levelのP5成分を診断用に可視化。物理振幅ではありません。",
+        scale: "最大source振幅 0.000786618% → 最大表示振幅 42%",
+        magnification: "振幅 ×53,393.1",
+        legend: true,
+        animationName: "oscillation",
+        initialTime: 35 / 6,
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      p6: {
+        kind: "model",
+        src: "./asset/modeP6.glb?v=animated8",
+        iosSrc: "./asset/modeP6.usdz?v=animated8",
+        alt: "振動液滴P6 modeの赤青コンター3Dモデル",
+        title: "P6 mode",
+        description: "P6成分だけを抽出し、位相と空間分布が見える振幅へ拡大しています。",
+        scale: "最大source振幅 0.157077% → 最大表示振幅 42%",
+        magnification: "振幅 ×267.385",
+        legend: true,
+        animationName: "oscillation",
+        initialTime: 3 / 6,
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      residual: {
+        kind: "model",
+        src: "./asset/modeContour.glb?v=animated8",
+        iosSrc: "./asset/modeContour.usdz?v=animated8",
+        alt: "振動液滴の赤青コンター3Dモデル",
+        title: "Residual contour · P2以外",
+        description: "P2を除いた全高次modeを合成し、最大表示振幅を42%へ統一して44 frameでloop再生します。",
+        scale: "最大source振幅 1.32887% → 最大表示振幅 42%",
+        magnification: "振幅 ×31.6058",
+        legend: true,
+        referenceVideo: "./asset/modeContourReference.mp4",
+        referenceNote: "同じ固定colour scale・固定倍率で作成した176 frameのreference動画です。iOS ARは色の強いphaseからloopを開始します。",
+        animationName: "oscillation",
+        initialTime: 8 / 6,
+        exposure: "0.95",
+        cameraOrbit: "35deg 72deg 0.35m"
+      },
+      bag: {
+        kind: "video",
+        videoSrc: "./asset/bagBreakup.mp4?v=animated8",
+        poster: "./asset/bagBreakupAfterimage.png?v=animated8",
+        title: "Bag breakup · CFD render",
+        description: "26 frameのCFD renderをloop再生します。真正の3D fieldは未回収のため、現段階はMP4とafterimageによる表示です。",
+        scale: "rendered movie（振幅の変換なし）",
+        magnification: "振幅 —",
+        sourcePrefix: "Render environment:",
+        sourceLabel: "Poly Haven / Sergej Majboroda, Brown Photostudio 02 (CC0)",
+        sourceUrl: "https://polyhaven.com/a/brown_photostudio_02"
+      },
       cruller: {
-        src: "./asset/frenchCruller.glb?v=animated7",
-        iosSrc: "./asset/frenchCruller.usdz?v=animated7",
+        kind: "model",
+        src: "./asset/frenchCruller.glb?v=animated8",
+        iosSrc: "./asset/frenchCruller.usdz?v=animated8",
         alt: "回転するストロベリーフレンチクルーラーの3Dモデル",
         title: "Strawberry French cruller",
         description: "Hunyuan3Dで生成したtwisted ridgeへ粉糖とstrawberry icingを加え、8秒で1回転させています。",
         scale: "外径 0.140 m（image-to-3D demonstration）",
-        video: null,
-        note: "",
+        magnification: "振幅 —",
         sourceLabel: "SGS109 ストロベリーカスタードフレンチ",
         sourceUrl: "https://sgs109.com/n/16765/3/",
         animationName: "spin",
@@ -481,7 +632,9 @@
       }
     };
 
-    const requestedMode = new URLSearchParams(window.location.search).get("mode");
+    const modeAliases = { contour: "residual" };
+    const requestedModeRaw = new URLSearchParams(window.location.search).get("mode");
+    const requestedMode = modeAliases[requestedModeRaw] || requestedModeRaw;
     let selectedMode = modes[requestedMode] ? requestedMode : "glass";
     let isPlaying = !reduceMotion;
 
@@ -500,71 +653,115 @@
 
     function updatePlayButton() {
       playButton.textContent = isPlaying ? "一時停止" : "再生";
-      playButton.setAttribute("aria-label", isPlaying ? "3D animationを一時停止" : "3D animationを再生");
+      const mediaName = modes[selectedMode].kind === "video" ? "動画" : "3D animation";
+      playButton.setAttribute("aria-label", isPlaying ? `${mediaName}を一時停止` : `${mediaName}を再生`);
     }
 
     function updateArAvailability() {
-      const fallback = modes[selectedMode].video
-        ? "3D表示とreference動画を使用できます。"
-        : "3D表示を使用できます。";
+      const mode = modes[selectedMode];
+      if (mode.kind === "video") {
+        arMessage.textContent = "Bag breakupはrendered movie表示です。3D field回収後にARへ拡張します。";
+        return;
+      }
       arMessage.textContent = viewer.canActivateAR
         ? "3Dを回してから「机の上に置く」を押してください。"
-        : `この環境ではARを起動できないため、${fallback}`;
+        : "この環境ではARを起動できないため、3D表示を使用できます。";
     }
 
     function selectMode(name, syncUrl = true) {
       const mode = modes[name];
       if (!mode) return;
       selectedMode = name;
-      setLoading(true);
-      document.querySelectorAll("[data-mode]").forEach((button) => {
-        button.setAttribute("aria-pressed", String(button.dataset.mode === name));
-      });
-      viewer.setAttribute("animation-name", mode.animationName);
-      viewer.setAttribute("src", mode.src);
-      viewer.setAttribute("ios-src", mode.iosSrc);
-      viewer.alt = mode.alt;
-      viewer.setAttribute("exposure", mode.exposure);
-      viewer.setAttribute("camera-orbit", mode.cameraOrbit);
+      modePicker.value = name;
       modeTitle.textContent = mode.title;
       modeDescription.textContent = mode.description;
       modeScale.textContent = mode.scale;
+      modeMagnification.textContent = mode.magnification;
       modeSource.hidden = !mode.sourceUrl;
       if (mode.sourceUrl) {
+        modeSourcePrefix.textContent = mode.sourcePrefix || "Visual reference:";
         modeSourceLink.href = mode.sourceUrl;
         modeSourceLink.textContent = mode.sourceLabel;
       }
-      reference.hidden = !mode.video;
-      if (mode.video) {
-        source.src = mode.video;
-        video.load();
-        referenceNote.textContent = mode.note;
+      reference.hidden = !mode.referenceVideo;
+      if (mode.referenceVideo) {
+        referenceSource.src = mode.referenceVideo;
+        referenceVideo.load();
+        referenceNote.textContent = mode.referenceNote;
       } else {
         reference.open = false;
-        video.pause();
+        referenceVideo.pause();
       }
-      colourLegend.hidden = name !== "contour";
-      updateArAvailability();
+      colourLegend.hidden = !mode.legend;
       isPlaying = !reduceMotion;
+
+      if (mode.kind === "video") {
+        viewer.pause();
+        viewer.hidden = true;
+        gestureHint.hidden = true;
+        stageVideo.hidden = false;
+        stageVideo.poster = mode.poster;
+        if (stageVideo.getAttribute("src") !== mode.videoSrc) {
+          stageVideo.src = mode.videoSrc;
+          stageVideo.load();
+        }
+        setLoading(false);
+        if (isPlaying) {
+          stageVideo.play().catch(() => {
+            isPlaying = false;
+            updatePlayButton();
+          });
+        }
+      } else {
+        stageVideo.pause();
+        stageVideo.hidden = true;
+        viewer.hidden = false;
+        gestureHint.hidden = false;
+        setLoading(true);
+        viewer.setAttribute("animation-name", mode.animationName);
+        viewer.setAttribute("src", mode.src);
+        viewer.setAttribute("ios-src", mode.iosSrc);
+        viewer.alt = mode.alt;
+        viewer.setAttribute("exposure", mode.exposure);
+        viewer.setAttribute("camera-orbit", mode.cameraOrbit);
+      }
+
+      updateArAvailability();
       updatePlayButton();
       if (syncUrl) updateModeUrl(name);
-      if (reference.open && !reduceMotion) video.play().catch(() => {});
+      if (reference.open && !reduceMotion) referenceVideo.play().catch(() => {});
     }
 
-    document.querySelectorAll("[data-mode]").forEach((button) => {
-      button.addEventListener("click", () => selectMode(button.dataset.mode));
-    });
+    modePicker.addEventListener("change", () => selectMode(modePicker.value));
 
     playButton.addEventListener("click", () => {
-      if (isPlaying) viewer.pause();
-      else viewer.play();
+      const activeMedia = modes[selectedMode].kind === "video" ? stageVideo : viewer;
+      if (isPlaying) activeMedia.pause();
+      else activeMedia.play();
       isPlaying = !isPlaying;
       updatePlayButton();
     });
 
     reference.addEventListener("toggle", () => {
-      if (reference.open && !reduceMotion) video.play().catch(() => {});
-      else video.pause();
+      if (reference.open && !reduceMotion) referenceVideo.play().catch(() => {});
+      else referenceVideo.pause();
+    });
+
+    stageVideo.addEventListener("play", () => {
+      if (modes[selectedMode].kind !== "video") return;
+      isPlaying = true;
+      updatePlayButton();
+    });
+
+    stageVideo.addEventListener("pause", () => {
+      if (modes[selectedMode].kind !== "video") return;
+      isPlaying = false;
+      updatePlayButton();
+    });
+
+    stageVideo.addEventListener("error", () => {
+      if (modes[selectedMode].kind !== "video") return;
+      arMessage.textContent = "Bag breakup動画を読み込めませんでした。通信または配信設定を確認してください。";
     });
 
     viewer.addEventListener("progress", (event) => {
@@ -584,11 +781,13 @@
     });
 
     viewer.addEventListener("error", () => {
+      if (modes[selectedMode].kind !== "model") return;
       setLoading(false);
       arMessage.textContent = "3D modelを読み込めませんでした。通信または配信設定を確認してください。";
     });
 
     viewer.addEventListener("load", () => {
+      if (modes[selectedMode].kind !== "model") return;
       setLoading(false);
       updateArAvailability();
       const initialTime = modes[selectedMode].initialTime;
@@ -604,10 +803,12 @@
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         viewer.pause();
-        video.pause();
+        stageVideo.pause();
+        referenceVideo.pause();
       } else if (isPlaying) {
-        viewer.play();
-        if (reference.open && !reduceMotion) video.play().catch(() => {});
+        if (modes[selectedMode].kind === "video") stageVideo.play().catch(() => {});
+        else viewer.play();
+        if (reference.open && !reduceMotion) referenceVideo.play().catch(() => {});
       }
     });
 
