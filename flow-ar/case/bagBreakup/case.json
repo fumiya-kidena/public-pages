@@ -62,6 +62,7 @@
                    "liftMetres":  0.075,
                    "webTracking":  {
                                        "page":  "markerAr.html",
+                                       "fallbackPage":  "imageMarkerAr.html",
                                        "target":  "marker/bagBreakup.mind",
                                        "targetIndex":  0,
                                        "contentOffset":  [
@@ -74,9 +75,30 @@
                                                                    0.0
                                                                ],
                                        "warmupTolerance":  3,
-                                       "missTolerance":  5,
+                                       "missTolerance":  15,
                                        "filterMinCF":  0.001,
-                                       "filterBeta":  1000.0
-                                   }
+                                       "filterBeta":  10.0
+                                   },
+                   "worldTracking":  {
+                                         "engine":  "8thwall",
+                                         "target":  "worldTarget/bagBreakup.json",
+                                         "image":  "worldTarget/bagBreakup_luminance.png",
+                                         "targetName":  "bagBreakup",
+                                         "contentOffsetMetres":  [
+                                                                     0.03448125,
+                                                                     -0.001125
+                                                                 ],
+                                         "correction":  {
+                                                            "sampleCount":  8,
+                                                            "intervalMs":  1500,
+                                                            "blendDurationMs":  600,
+                                                            "positionDeadbandMetres":  0.008,
+                                                            "rotationDeadbandDegree":  1.5,
+                                                            "maxPositionStepMetres":  0.018,
+                                                            "maxRotationStepDegree":  2.0,
+                                                            "stabilityPositionMetres":  0.015,
+                                                            "stabilityRotationDegree":  3.0
+                                                        }
+                                     }
                }
 }

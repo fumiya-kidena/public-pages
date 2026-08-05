@@ -5,16 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#071019">
   <link rel="icon" href="data:,">
-  <title>FLOW AR · World-tracked AR</title>
+  <title>FLOW AR · Image-marker fallback</title>
   <script type="importmap">
   {
     "imports": {
       "three": "./vendor/three/three.module.min.js",
-      "three/addons/": "./vendor/three/addons/"
+      "three/addons/": "./vendor/three/addons/",
+      "mindar-image-three": "./vendor/mindar/mindar-image-three.prod.js"
     }
   }
   </script>
-  <script src="./vendor/8thwall/xr.js" async crossorigin="anonymous" data-preload-chunks="slam"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -26,7 +26,6 @@
       --muted: #abc0cb;
       --accent: #86d8f7;
       --danger: #ff9a89;
-      --warn: #ffd58a;
     }
 
     * { box-sizing: border-box; }
@@ -40,19 +39,11 @@
 
     button, select, a { font: inherit; }
 
-    #ar-stage,
-    #camerafeed {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    #ar-stage { overflow: hidden; }
-
-    #camerafeed {
-      display: block;
-      touch-action: none;
+    #ar-stage {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
     }
 
     .topbar {
@@ -178,26 +169,12 @@
       font-weight: 750;
     }
 
-    .fallback-row {
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 5px 14px;
+    .fallback-link {
+      display: block;
       margin-top: 12px;
-    }
-
-    .fallback-link,
-    .engine-credit {
       color: #bdeaff;
       text-align: center;
-      font-size: .78rem;
-    }
-
-    .engine-credit {
-      display: block;
-      margin-top: 10px;
-      color: #8299a5;
-      line-height: 1.45;
+      font-size: .82rem;
     }
 
     .error {
@@ -224,7 +201,7 @@
     }
 
     .scan-guide::before {
-      content: "最初だけ、色付きposter全体を枠内へ";
+      content: "QRを含む色付きposter全体を枠内へ";
       position: absolute;
       left: 50%;
       bottom: -42px;
@@ -233,7 +210,7 @@
       transform: translateX(-50%);
       padding: 6px 10px;
       border-radius: 999px;
-      background: rgba(0, 0, 0, .62);
+      background: rgba(0, 0, 0, .58);
       color: #fff;
       font-size: .76rem;
       text-align: center;
@@ -246,7 +223,7 @@
       z-index: 6;
       left: 50%;
       bottom: max(12px, env(safe-area-inset-bottom));
-      width: min(calc(100% - 20px), 540px);
+      width: min(calc(100% - 20px), 520px);
       transform: translateX(-50%);
       padding: 9px 12px;
       border: 1px solid var(--line);
@@ -260,12 +237,11 @@
       pointer-events: none;
     }
 
-    .statusbar[data-state="world"] { color: #e9f9ff; }
-    .statusbar[data-state="correcting"] { color: var(--accent); }
-    .statusbar[data-state="limited"] { color: var(--warn); }
+    .statusbar[data-state="found"] { color: #e9f9ff; }
     .statusbar[data-state="error"] { color: var(--danger); }
 
     @media (max-width: 520px) {
+      .topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
       .home { padding-inline: 10px; font-size: .78rem; }
       .control { min-width: 52px; font-size: .78rem; }
     }
@@ -276,9 +252,7 @@
   </style>
 </head>
 <body>
-  <main id="ar-stage" aria-label="初期markerと周囲を使うworld-tracked AR">
-    <canvas id="camerafeed"></canvas>
-
+  <main id="ar-stage" aria-label="QR marker上の3D可視化">
     <header class="topbar">
       <a class="home" id="home-link" href="./">FLOW AR</a>
       <select class="mode-select" id="mode-picker" aria-label="表示する可視化" disabled>
@@ -289,16 +263,12 @@
 
     <section class="intro" id="intro">
       <div class="intro-card">
-        <p class="eyebrow">WORLD-TRACKED AR</p>
+        <p class="eyebrow">IMAGE-MARKER FALLBACK</p>
         <h1 id="intro-title">FLOW AR</h1>
-        <p class="intro-copy" id="intro-copy">最初に色付きQR posterで位置を合わせます。固定後はposterが画角外でも周囲を参照して追跡し、再び映った時だけ緩やかに位置を補正します。</p>
-        <img class="marker-preview" id="marker-preview" alt="初期位置合わせに使う色付きQR poster" hidden>
+        <p class="intro-copy" id="intro-copy">world trackingが使えない端末向けです。開始後、印刷した色付きQR posterを映し続けてください。</p>
+        <img class="marker-preview" id="marker-preview" alt="認識させるQR poster" hidden>
         <button class="start-button" id="start-button" type="button" disabled>準備中…</button>
-        <div class="fallback-row">
-          <a class="fallback-link" id="fallback-link" href="./">通常の3D表示</a>
-          <a class="fallback-link" id="image-fallback-link" href="./imageMarkerAr.html">image-marker版</a>
-        </div>
-        <a class="engine-credit" href="./vendor/8thwall/XR_ENGINE_LICENSE.txt">World tracking: 8th Wall Engine © 2026 Niantic Spatial, Inc. · XR Engine License · AS IS</a>
+        <a class="fallback-link" id="fallback-link" href="./">通常の3D表示を開く</a>
         <p class="error" id="intro-error" role="alert" hidden></p>
       </div>
     </section>
@@ -307,6 +277,6 @@
     <p class="statusbar" id="status" role="status" data-state="loading">caseを読み込み中…</p>
   </main>
 
-  <script type="module" src="./markerAr.js?v=3"></script>
+  <script type="module" src="./imageMarkerAr.js?v=1"></script>
 </body>
 </html>
