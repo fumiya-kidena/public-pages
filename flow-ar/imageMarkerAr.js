@@ -11,6 +11,9 @@ const markerPreview = document.getElementById("marker-preview");
 const startButton = document.getElementById("start-button");
 const modePicker = document.getElementById("mode-picker");
 const playButton = document.getElementById("play-button");
+const transport = document.getElementById("transport");
+const seekSlider = document.getElementById("seek-slider");
+const seekTime = document.getElementById("seek-time");
 const homeLink = document.getElementById("home-link");
 const fallbackLink = document.getElementById("fallback-link");
 const scanGuide = document.getElementById("scan-guide");
@@ -31,6 +34,10 @@ let anchor;
 let contentRoot;
 let activeModel;
 let mixer;
+let activeAction;
+let clipDuration = 0;
+let playbackRate = 1;
+let lastTransportUpdateAt = -Infinity;
 let running = false;
 let playing = true;
 let reloadBeforeRetry = false;
@@ -40,6 +47,57 @@ let lastFrameTime = performance.now();
 function setStatus(message, state = "loading") {
   status.textContent = message;
   status.dataset.state = state;
+}
+
+function isMarkerVisible() {
+  return Boolean(anchor?.group?.visible);
+}
+
+function currentClipTime() {
+  if (!activeAction || clipDuration <= 0) return 0;
+  return ((activeAction.time % clipDuration) + clipDuration) % clipDuration;
+}
+
+function updateTransport(force = false) {
+  if (!activeAction || clipDuration <= 0) {
+    transport.hidden = true;
+    return;
+  }
+
+  const now = performance.now();
+  if (!force && now - lastTransportUpdateAt < 100) return;
+  lastTransportUpdateAt = now;
+  transport.hidden = false;
+  const clipTime = currentClipTime();
+  const sliderValue = Math.round((clipTime / clipDuration) * 1000);
+  seekSlider.value = String(sliderValue);
+  seekTime.textContent = `${playbackRate}× · ${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
+  seekSlider.setAttribute(
+    "aria-valuetext",
+    `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)}秒、${playbackRate}倍速`
+  );
+}
+
+function setPlaying(nextPlaying) {
+  if (!mixer || !activeAction) return;
+  playing = Boolean(nextPlaying);
+  mixer.timeScale = playing ? playbackRate : 0;
+  playButton.textContent = playing ? "一時停止" : "再生";
+  updateTransport(true);
+}
+
+function seekToSliderValue() {
+  if (!mixer || !activeAction || clipDuration <= 0) return;
+  const requestedSliderValue = Number(seekSlider.value);
+  setPlaying(false);
+  const fraction = Math.min(0.999999, Math.max(0, requestedSliderValue / 1000));
+  activeAction.time = clipDuration * fraction;
+  mixer.update(0);
+  updateTransport(true);
+  setStatus(
+    `${selectedMode.label} · 一時停止`,
+    isMarkerVisible() ? "found" : "scanning"
+  );
 }
 
 function versionedUrl(path, root = assetRoot) {
@@ -148,6 +206,10 @@ function updateLinks() {
 function clearModel() {
   mixer?.stopAllAction();
   mixer = null;
+  activeAction = null;
+  clipDuration = 0;
+  lastTransportUpdateAt = -Infinity;
+  transport.hidden = true;
   if (!activeModel) return;
   contentRoot.remove(activeModel);
   activeModel.traverse((node) => {
@@ -180,6 +242,11 @@ async function loadMode(mode) {
   if (!Number.isFinite(physicalScale) || physicalScale <= 0) {
     throw new Error(`${mode.id}: webAr.modelScaleが不正です。`);
   }
+  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? 1);
+  if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
+    throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
+  }
+  playbackRate = requestedPlaybackRate;
   const normalizedScale = physicalScale / webTracking.physicalWidthMetres;
   activeModel.scale.setScalar(normalizedScale);
   const rotation = mode.webAr?.rotationDegree || webTracking.modelRotationDegree || [90, 0, 0];
@@ -195,7 +262,10 @@ async function loadMode(mode) {
     action.setLoop(THREE.LoopRepeat, Infinity);
     action.clampWhenFinished = false;
     action.play();
-    mixer.timeScale = playing ? 1 : 0;
+    activeAction = action;
+    clipDuration = clip.duration;
+    mixer.timeScale = playing ? playbackRate : 0;
+    updateTransport(true);
   }
 
   modePicker.value = mode.id;
@@ -206,10 +276,10 @@ async function loadMode(mode) {
   if (!running) setStatus(`${mode.label}の3Dを準備完了 · cameraを初期化中…`, "loading");
   else {
     setStatus(
-      anchor?.visible
+      isMarkerVisible()
         ? `${mode.label} · ${playing ? "animation再生中" : "一時停止"}`
         : "色付きQR poster全体をcameraへ映してください",
-      anchor?.visible ? "found" : "scanning"
+      isMarkerVisible() ? "found" : "scanning"
     );
   }
 }
@@ -292,6 +362,7 @@ async function startAr() {
       const delta = Math.min(Math.max((time - lastFrameTime) / 1000, 0), 0.1);
       lastFrameTime = time;
       if (playing) mixer?.update(delta);
+      updateTransport();
       mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
     });
     setStatus("色付きQR poster全体をcameraへ映してください", "scanning");
@@ -329,14 +400,15 @@ modePicker.addEventListener("change", async () => {
 });
 
 playButton.addEventListener("click", () => {
-  playing = !playing;
-  if (mixer) mixer.timeScale = playing ? 1 : 0;
-  playButton.textContent = playing ? "一時停止" : "再生";
+  if (!mixer) return;
+  setPlaying(!playing);
   setStatus(
     playing ? `${selectedMode.label} · animation再生中` : `${selectedMode.label} · 一時停止`,
-    anchor?.visible ? "found" : "scanning"
+    isMarkerVisible() ? "found" : "scanning"
   );
 });
+
+seekSlider.addEventListener("input", seekToSliderValue);
 
 document.addEventListener("visibilitychange", () => {
   lastFrameTime = performance.now();

@@ -21,7 +21,8 @@
                       "cameraOrbit":  "38deg 72deg 0.82m",
                       "cameraTarget":  "0m 0m 0m",
                       "webAr":  {
-                                    "modelScale":  0.3
+                                    "modelScale":  1.5,
+                                    "playbackRate":  0.75
                                 },
                       "reference":  {
                                         "video":  "bagBreakupFixed.mp4",
@@ -46,7 +47,8 @@
                       "cameraOrbit":  "38deg 72deg 0.48m",
                       "cameraTarget":  "0m 0m 0m",
                       "webAr":  {
-                                    "modelScale":  0.51
+                                    "modelScale":  2.55,
+                                    "playbackRate":  0.75
                                 },
                       "reference":  {
                                         "video":  "bagBreakupFollow.mp4",
