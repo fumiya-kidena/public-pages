@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071019">
+  <link rel="icon" href="data:,">
+  <title>FLOW AR · Marker AR</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.min.js",
+      "three/addons/": "./vendor/three/addons/",
+      "mindar-image-three": "./vendor/mindar/mindar-image-three.prod.js"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #edf6fb;
+      background: #050a0e;
+      --panel: rgba(7, 16, 25, .86);
+      --line: rgba(208, 232, 243, .22);
+      --muted: #abc0cb;
+      --accent: #86d8f7;
+      --danger: #ff9a89;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    button, select, a { font: inherit; }
+
+    #ar-stage {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    .topbar {
+      position: fixed;
+      z-index: 6;
+      top: max(10px, env(safe-area-inset-top));
+      left: 10px;
+      right: 10px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .topbar > * { pointer-events: auto; }
+
+    .home,
+    .control,
+    .mode-select {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      color: #edf6fb;
+      backdrop-filter: blur(12px);
+    }
+
+    .home {
+      display: grid;
+      place-items: center;
+      padding: 0 12px;
+      text-decoration: none;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .mode-select {
+      width: 100%;
+      min-width: 0;
+      padding: 0 34px 0 11px;
+      font-size: max(16px, .82rem);
+    }
+
+    .control {
+      min-width: 58px;
+      padding: 0 10px;
+      cursor: pointer;
+    }
+
+    .control:disabled,
+    .start-button:disabled {
+      cursor: wait;
+      opacity: .52;
+    }
+
+    .intro {
+      position: fixed;
+      z-index: 10;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: max(18px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+      overflow: auto;
+      background:
+        radial-gradient(circle at 50% 14%, rgba(42, 121, 151, .28), transparent 42%),
+        #071019;
+    }
+
+    .intro[hidden] { display: none; }
+
+    .intro-card {
+      width: min(100%, 460px);
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(9, 22, 32, .94);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .42);
+    }
+
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--accent);
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.3rem, 6vw, 1.8rem);
+      font-weight: 650;
+    }
+
+    .intro-copy {
+      margin: 8px 0 14px;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.65;
+    }
+
+    .marker-preview {
+      display: block;
+      width: 100%;
+      aspect-ratio: 8 / 5;
+      margin: 0 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      object-fit: cover;
+      background: #fff;
+    }
+
+    .marker-preview[hidden] { display: none; }
+
+    .start-button {
+      width: 100%;
+      min-height: 50px;
+      border: 0;
+      border-radius: 999px;
+      background: #edf8fc;
+      color: #071019;
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .fallback-link {
+      display: block;
+      margin-top: 12px;
+      color: #bdeaff;
+      text-align: center;
+      font-size: .82rem;
+    }
+
+    .error {
+      margin: 10px 0 0;
+      color: var(--danger);
+      font-size: .78rem;
+      line-height: 1.5;
+    }
+
+    .error[hidden] { display: none; }
+
+    .scan-guide {
+      position: fixed;
+      z-index: 5;
+      top: 50%;
+      left: 50%;
+      width: min(78vw, 430px);
+      aspect-ratio: 8 / 5;
+      transform: translate(-50%, -50%);
+      border: 2px solid rgba(237, 246, 251, .82);
+      border-radius: 14px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, .22);
+      pointer-events: none;
+    }
+
+    .scan-guide::before {
+      content: "QRを含む色付きposter全体を枠内へ";
+      position: absolute;
+      left: 50%;
+      bottom: -42px;
+      width: max-content;
+      max-width: 88vw;
+      transform: translateX(-50%);
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .58);
+      color: #fff;
+      font-size: .76rem;
+      text-align: center;
+    }
+
+    .scan-guide[hidden] { display: none; }
+
+    .statusbar {
+      position: fixed;
+      z-index: 6;
+      left: 50%;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      width: min(calc(100% - 20px), 520px);
+      transform: translateX(-50%);
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: var(--panel);
+      color: var(--muted);
+      backdrop-filter: blur(12px);
+      font-size: .76rem;
+      line-height: 1.45;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .statusbar[data-state="found"] { color: #e9f9ff; }
+    .statusbar[data-state="error"] { color: var(--danger); }
+
+    @media (max-width: 520px) {
+      .topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .home { padding-inline: 10px; font-size: .78rem; }
+      .control { min-width: 52px; font-size: .78rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main id="ar-stage" aria-label="QR marker上の3D可視化">
+    <header class="topbar">
+      <a class="home" id="home-link" href="./">FLOW AR</a>
+      <select class="mode-select" id="mode-picker" aria-label="表示する可視化" disabled>
+        <option>caseを読み込み中…</option>
+      </select>
+      <button class="control" id="play-button" type="button" disabled>一時停止</button>
+    </header>
+
+    <section class="intro" id="intro">
+      <div class="intro-card">
+        <p class="eyebrow">QR MARKER AR</p>
+        <h1 id="intro-title">FLOW AR</h1>
+        <p class="intro-copy" id="intro-copy">3D dataを準備しています。開始後、cameraの許可を選び、印刷したQR posterを映してください。</p>
+        <img class="marker-preview" id="marker-preview" alt="認識させるQR poster" hidden>
+        <button class="start-button" id="start-button" type="button" disabled>準備中…</button>
+        <a class="fallback-link" id="fallback-link" href="./">通常の3D表示を開く</a>
+        <p class="error" id="intro-error" role="alert" hidden></p>
+      </div>
+    </section>
+
+    <div class="scan-guide" id="scan-guide" hidden aria-hidden="true"></div>
+    <p class="statusbar" id="status" role="status" data-state="loading">caseを読み込み中…</p>
+  </main>
+
+  <script type="module" src="./markerAr.js?v=2"></script>
+</body>
+</html>

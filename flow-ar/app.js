@@ -1,4 +1,6 @@
 const viewer = document.getElementById("droplet-viewer");
+const nativeArButton = document.getElementById("native-ar-button");
+const markerArButton = document.getElementById("marker-ar-button");
 const stageVideo = document.getElementById("stage-video");
 const gestureHint = document.getElementById("gesture-hint");
 const modePicker = document.getElementById("mode-picker");
@@ -76,6 +78,7 @@ function registerCase(caseDefinition, group, showCaseLabel = false) {
     }
     const mode = {
       ...definition,
+      anchor: caseDefinition.anchor,
       assetRoot: caseDefinition.assetRoot,
       caseId: caseDefinition.id,
       key,
@@ -186,9 +189,24 @@ function updatePlayButton() {
 function updateArAvailability() {
   if (!selectedMode) return;
   if (selectedMode.kind === "video") {
+    markerArButton.hidden = true;
+    nativeArButton.hidden = true;
     arMessage.textContent = "このmodeは動画表示です。AR対応3Dがあるcaseはselectorから切り替えられます。";
     return;
   }
+  const webTracking = selectedMode.anchor?.webTracking;
+  if (webTracking?.target) {
+    const markerUrl = new URL(webTracking.page || "./markerAr.html", document.baseURI);
+    markerUrl.searchParams.set("case", selectedMode.caseId);
+    markerUrl.searchParams.set("mode", selectedMode.id);
+    markerArButton.href = markerUrl.href;
+    markerArButton.hidden = false;
+    nativeArButton.hidden = true;
+    arMessage.textContent = "印刷した色付きQR posterを机に置き、「QR marker ARで再生」からcameraを開始してください。";
+    return;
+  }
+  markerArButton.hidden = true;
+  nativeArButton.hidden = false;
   if (selectedMode.iosAnchorSrc && isAppleMobile && viewer.canActivateAR) {
     arMessage.textContent = "「ARで見る」を押し、印刷したQR posterをcameraに入れると、その位置へ固定されます。";
     return;
@@ -230,7 +248,9 @@ function selectMode(key, syncUrl = true) {
   colourLegend.hidden = !mode.legend;
   updateReference(mode);
   updateSource(mode);
-  isPlaying = !reduceMotion;
+  // Scientific result playback is primary content, not decorative motion.
+  // Keep the explicit pause control available, but start the selected result.
+  isPlaying = true;
 
   if (mode.kind === "video") {
     viewer.pause();

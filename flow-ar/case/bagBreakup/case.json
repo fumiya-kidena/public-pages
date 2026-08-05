@@ -20,6 +20,9 @@
                       "exposure":  1.05,
                       "cameraOrbit":  "38deg 72deg 0.82m",
                       "cameraTarget":  "0m 0m 0m",
+                      "webAr":  {
+                                    "modelScale":  0.3
+                                },
                       "reference":  {
                                         "video":  "bagBreakupFixed.mp4",
                                         "poster":  "bagBreakupFixed.png",
@@ -42,6 +45,9 @@
                       "exposure":  1.05,
                       "cameraOrbit":  "38deg 72deg 0.48m",
                       "cameraTarget":  "0m 0m 0m",
+                      "webAr":  {
+                                    "modelScale":  0.51
+                                },
                       "reference":  {
                                         "video":  "bagBreakupFollow.mp4",
                                         "poster":  "bagBreakupFollow.png",
@@ -53,6 +59,24 @@
     "anchor":  {
                    "image":  "marker/bagBreakup.png",
                    "physicalWidthCm":  18.0,
-                   "liftMetres":  0.075
+                   "liftMetres":  0.075,
+                   "webTracking":  {
+                                       "page":  "markerAr.html",
+                                       "target":  "marker/bagBreakup.mind",
+                                       "targetIndex":  0,
+                                       "contentOffset":  [
+                                                             0.275,
+                                                             -0.00625
+                                                         ],
+                                       "modelRotationDegree":  [
+                                                                   90.0,
+                                                                   0.0,
+                                                                   0.0
+                                                               ],
+                                       "warmupTolerance":  3,
+                                       "missTolerance":  5,
+                                       "filterMinCF":  0.001,
+                                       "filterBeta":  1000.0
+                                   }
                }
 }

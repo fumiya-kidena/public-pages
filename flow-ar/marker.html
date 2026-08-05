@@ -136,7 +136,7 @@
 <body>
   <header class="screen-header no-print">
     <h1>FLOW AR · QR / image-anchor sheet</h1>
-    <p>A4・印刷倍率100%で出力します。<code>?case=&lt;caseId&gt;</code>で1 caseだけ表示できます。</p>
+    <p>A4・印刷倍率100%でページ全体を出力します。認識対象はページ内の色付きQR posterです。</p>
   </header>
   <p class="status no-print" id="status" role="status">case catalogを読み込み中…</p>
   <main id="sheet-list"></main>
@@ -217,7 +217,10 @@
 
       const instruction = document.createElement("p");
       instruction.className = "instruction";
-      instruction.innerHTML = "<strong>印刷倍率100%</strong>。matte紙または艶の少ない面を使い、照明の反射を避けます。認識時はanchor全体がcamera内に入る距離と向きにしてください。";
+      const browserTracked = Boolean(anchor.webTracking?.target);
+      instruction.innerHTML = browserTracked
+        ? "<strong>印刷倍率100%</strong>。標準cameraでQRを読み、Safariで「cameraを開始」→同じ色付きposter全体を映します。3D animationはQRの上空へ固定されます。用紙上の見出し・説明は認識対象外です。"
+        : "<strong>印刷倍率100%</strong>。matte紙または艶の少ない面を使い、照明の反射を避けます。認識時は色付きposter全体がcamera内に入る距離と向きにしてください。";
 
       sheet.append(category, title, caseId, anchorWrap, size, checkLine, checkLabel, instruction);
       return sheet;
