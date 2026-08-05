@@ -2,24 +2,57 @@
     "schemaVersion":  1,
     "id":  "bagBreakup",
     "label":  "Bag breakup",
-    "defaultMode":  "bag",
-    "assetRoot":  "../../asset/",
+    "defaultMode":  "bagFixed",
+    "assetRoot":  "../../asset/case/bagBreakup/",
     "modes":  [
                   {
+                      "id":  "bagFixed",
+                      "label":  "固定camera · 全体",
+                      "kind":  "model",
+                      "src":  "bagBreakupFixed.glb",
+                      "iosSrc":  "bagBreakupFixed.usdz#allowsContentScaling=0",
+                      "alt":  "富岳test計算のBag breakupを固定cameraで見た3D界面",
+                      "title":  "Bag breakup · fixed camera",
+                      "description":  "富岳testのVOF界面を21 frameに間引き、0–12.0 msを約2.1秒でloop再生します。全frameで共通のsolver座標を使うため、液滴の移流と変形を同時に確認できます。",
+                      "scale":  "solver座標 [m] → 空間 ×10、全frame共通原点",
+                      "magnification":  "空間 ×10（全体表示）",
+                      "animationName":  "bagBreakupFixed",
+                      "exposure":  1.05,
+                      "cameraOrbit":  "38deg 72deg 0.82m",
+                      "cameraTarget":  "0m 0m 0m",
+                      "reference":  {
+                                        "video":  "bagBreakupFixed.mp4",
+                                        "poster":  "bagBreakupFixed.png",
+                                        "note":  "同じ21 frameを固定cameraでrenderしたfallback動画です。solver座標上の移流を保持しています。"
+                                    },
+                      "iosAnchorSrc":  "bagBreakupFixedAnchor.usdz#allowsContentScaling=0"
+                  },
+                  {
                       "id":  "bag",
-                      "label":  "Bag breakup · CFD動画",
-                      "kind":  "video",
-                      "videoSrc":  "bagBreakup.mp4",
-                      "poster":  "bagBreakupAfterimage.png",
-                      "title":  "Bag breakup · CFD render",
-                      "description":  "26 frameのCFD renderをloop再生します。真正の3D fieldは未回収のため、現段階はMP4とafterimageによる表示です。",
-                      "scale":  "rendered movie（振幅の変換なし）",
-                      "magnification":  "振幅 —",
-                      "source":  {
-                                     "prefix":  "Render environment:",
-                                     "label":  "Poly Haven / Sergej Majboroda, Brown Photostudio 02 (CC0)",
-                                     "url":  "https://polyhaven.com/a/brown_photostudio_02"
-                                 }
+                      "label":  "追従camera · 拡大",
+                      "kind":  "model",
+                      "src":  "bagBreakupFollow.glb",
+                      "iosSrc":  "bagBreakupFollow.usdz#allowsContentScaling=0",
+                      "alt":  "富岳test計算のBag breakupへ追従して拡大した3D界面",
+                      "title":  "Bag breakup · follow camera",
+                      "description":  "同じ21 frameについて各frameの界面中心を追従し、固定cameraより約1.7倍近くから変形・bag破裂・fragmentを表示します。必要なら2本指でさらに拡大できます。trajectoryの比較には固定cameraを使います。",
+                      "scale":  "solver座標 [m] → 空間 ×10、各frameのAABB中心を追従",
+                      "magnification":  "空間 ×10（camera約1.7×寄り）",
+                      "animationName":  "bagBreakupFollow",
+                      "exposure":  1.05,
+                      "cameraOrbit":  "38deg 72deg 0.48m",
+                      "cameraTarget":  "0m 0m 0m",
+                      "reference":  {
+                                        "video":  "bagBreakupFollow.mp4",
+                                        "poster":  "bagBreakupFollow.png",
+                                        "note":  "同じ21 frameへ追従して拡大したfallback動画です。物体scaleと形状振幅は固定cameraと同じです。"
+                                    },
+                      "iosAnchorSrc":  "bagBreakupFollowAnchor.usdz#allowsContentScaling=0"
                   }
-              ]
+              ],
+    "anchor":  {
+                   "image":  "marker/bagBreakup.png",
+                   "physicalWidthCm":  18.0,
+                   "liftMetres":  0.075
+               }
 }

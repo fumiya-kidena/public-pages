@@ -363,6 +363,15 @@
 
     .source-note a { color: #bdeaff; }
 
+    @media (max-width: 699px) {
+      .app { grid-template-rows: auto auto auto auto auto; }
+      .stage {
+        min-height: 0;
+        aspect-ratio: 1;
+      }
+      model-viewer, .stage-video { min-height: 0; }
+    }
+
     @media (min-width: 700px) {
       .app {
         grid-template-columns: minmax(0, 1.55fr) minmax(260px, .7fr);
@@ -418,7 +427,7 @@
         environment-image="neutral"
         camera-orbit="35deg 72deg 0.28m"
         min-camera-orbit="auto auto 0.16m"
-        max-camera-orbit="auto auto 0.65m">
+        max-camera-orbit="auto auto 1.2m">
         <button class="ar-button" slot="ar-button" type="button">ARで見る</button>
       </model-viewer>
       <video
@@ -453,7 +462,7 @@
       <p class="ar-message" id="ar-message">3Dを回してから「ARで見る」を押してください。</p>
       <p class="source-note" id="mode-source" hidden><span id="mode-source-prefix">Visual reference:</span> <a id="mode-source-link" target="_blank" rel="noopener"></a></p>
       <details id="reference">
-        <summary>元の176 frame動画と比較</summary>
+        <summary>reference動画と比較</summary>
         <video id="reference-video" controls muted loop playsinline preload="metadata">
           <source id="reference-source" src="./asset/raytraceReference.mp4" type="video/mp4">
         </video>

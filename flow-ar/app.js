@@ -186,7 +186,7 @@ function updatePlayButton() {
 function updateArAvailability() {
   if (!selectedMode) return;
   if (selectedMode.kind === "video") {
-    arMessage.textContent = "Bag breakupはrendered movie表示です。3D field回収後にARへ拡張します。";
+    arMessage.textContent = "このmodeは動画表示です。AR対応3Dがあるcaseはselectorから切り替えられます。";
     return;
   }
   if (selectedMode.iosAnchorSrc && isAppleMobile && viewer.canActivateAR) {
@@ -262,6 +262,8 @@ function selectMode(key, syncUrl = true) {
     viewer.alt = mode.alt;
     viewer.setAttribute("exposure", String(mode.exposure));
     viewer.setAttribute("camera-orbit", mode.cameraOrbit);
+    if (mode.cameraTarget) viewer.setAttribute("camera-target", mode.cameraTarget);
+    else viewer.removeAttribute("camera-target");
   }
 
   updateArAvailability();
