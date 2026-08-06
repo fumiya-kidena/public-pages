@@ -1,5 +1,11 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import {
+  deviceProfile,
+  isTabletPortrait,
+  requestTabletLandscapeMode,
+  setupTabletLandscapeGate
+} from "./deviceSupport.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -22,6 +28,8 @@ const fallbackLink = document.getElementById("fallback-link");
 const imageFallbackLink = document.getElementById("image-fallback-link");
 const scanGuide = document.getElementById("scan-guide");
 const status = document.getElementById("status");
+const platformNote = document.getElementById("platform-note");
+const orientationGate = document.getElementById("orientation-gate");
 
 const query = new URLSearchParams(window.location.search);
 const requestedCase = query.get("case");
@@ -71,6 +79,10 @@ let lastFrameTime = performance.now();
 let lastCorrectionAt = -Infinity;
 let trackingStatus = "INITIALIZING";
 let trackingReason = "INITIALIZING";
+let allowedDevices;
+let landscapeBlocked = false;
+let resumeAfterLandscape = false;
+let orientationRestoreTimer;
 
 function setStatus(message, state = "loading") {
   if (status.textContent === message && status.dataset.state === state) return;
@@ -108,6 +120,7 @@ function setPlaying(nextPlaying) {
   playing = Boolean(nextPlaying);
   mixer.timeScale = playing ? playbackRate : 0;
   playButton.textContent = playing ? "一時停止" : "再生";
+  playButton.setAttribute("aria-label", playing ? "animationを一時停止" : "animationを再生");
   updateTransport(true);
 }
 
@@ -249,6 +262,13 @@ async function loadDefinition() {
 
   introTitle.textContent = definition.label;
   introCopy.textContent = "最初に色付きQR posterで位置を合わせます。固定後はposterが画角外でも周囲を参照して追跡し、再び映った時だけ緩やかに位置を補正します。";
+  platformNote.textContent = deviceProfile.isAndroid
+    ? deviceProfile.isTablet
+      ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
+      : "Android · Chrome／Firefox／Samsung Internet／Edge"
+    : deviceProfile.isAppleTablet
+      ? "iPad Safari · 横向き"
+      : "iPhone Safari／Androidの対応browser";
   markerPreview.src = versionedUrl(definition.anchor.image);
   markerPreview.hidden = false;
   updateLinks();
@@ -353,6 +373,67 @@ function waitForEngine(timeoutMs = 30000) {
       else reject(new Error("world tracking engineの初期化に失敗しました。"));
     }, { once: true });
   });
+}
+
+function worldArCompatibility(engine) {
+  const deviceConfig = engine.XrConfig?.device?.();
+  const allowed = deviceConfig?.MOBILE_AND_HEADSETS ?? deviceConfig?.MOBILE;
+  const checker = engine.XrDevice?.isDeviceBrowserCompatible;
+  if (!allowed || typeof checker !== "function") return allowed;
+
+  let compatible = true;
+  try {
+    compatible = checker({ allowedDevices: allowed });
+  } catch (error) {
+    console.warn("world AR compatibility check failed; runtime check will continue", error);
+    return allowed;
+  }
+  if (compatible) return allowed;
+
+  let reasons = [];
+  try {
+    reasons = engine.XrDevice.incompatibleReasons?.({ allowedDevices: allowed }) || [];
+  } catch {
+    // The generic fallback below remains actionable when reason lookup is unavailable.
+  }
+  const reasonLabel = {
+    UNSUPPORTED_OS: "OS非対応",
+    UNSUPPORTED_BROWSER: "browser非対応",
+    MISSING_DEVICE_ORIENTATION: "端末姿勢sensorなし",
+    MISSING_USER_MEDIA: "camera APIなし",
+    MISSING_WEB_ASSEMBLY: "WebAssembly非対応"
+  };
+  const reasonEnum = engine.XrDevice.IncompatibilityReasons || {};
+  const details = reasons.map((reason) => {
+    const reasonName = Object.entries(reasonEnum).find(([, value]) => value === reason)?.[0] || reason;
+    return reasonLabel[reasonName] || reasonName;
+  }).join("／");
+  const suffix = details ? `（${details}）` : "";
+  throw new Error(`この端末ではworld trackingを利用できません${suffix}。image-marker版または通常3Dを使ってください。`);
+}
+
+function assertCameraEnvironment() {
+  if (!window.isSecureContext && window.location.hostname !== "localhost") {
+    throw new Error("camera ARにはHTTPSが必要です。公開URLかlocalhostから開いてください。");
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("このbrowserではcamera APIを利用できません。image-marker版または通常3Dを使ってください。");
+  }
+}
+
+function cameraFailureMessage(reason) {
+  if (reason === "DENY_CAMERA") {
+    return "camera権限が拒否されました。browserのsite設定でcameraを許可し、再読み込みしてください。";
+  }
+  if (reason === "NO_CAMERA") {
+    return "背面cameraを利用できません。image-marker版または通常3Dを使ってください。";
+  }
+  return "cameraを開始できません。camera権限を確認するか、image-marker版を使ってください。";
+}
+
+function preferredPixelRatio() {
+  const cap = deviceProfile.isTablet ? 1.5 : 2;
+  return Math.min(window.devicePixelRatio || 1, cap);
 }
 
 async function loadTargetData() {
@@ -471,6 +552,7 @@ function beginCorrection(pose, now) {
 }
 
 function addPoseSample(detail) {
+  if (landscapeBlocked) return;
   const pose = poseFromDetail(detail);
   if (!pose) return;
   poseSample.push(pose);
@@ -489,7 +571,7 @@ function addPoseSample(detail) {
 }
 
 function updateCorrection(now) {
-  if (!correction.active) return;
+  if (landscapeBlocked || !correction.active) return;
   const linear = Math.min(1, Math.max(0, (now - correction.startedAt) / correction.durationMs));
   const eased = linear * linear * (3 - 2 * linear);
   worldAnchorRoot.position.lerpVectors(
@@ -519,6 +601,10 @@ function readableTrackingReason(reason) {
 
 function renderTrackingStatus() {
   if (!running) return;
+  if (landscapeBlocked) {
+    setStatus("tabletは横向きにしてください", "limited");
+    return;
+  }
   if (!poseLocked) {
     setStatus(
       markerVisible ? "posterを検出 · 位置を安定化中…" : "色付きQR poster全体を映してください",
@@ -542,6 +628,7 @@ function renderTrackingStatus() {
 }
 
 function handleImageFound({ detail }) {
+  if (landscapeBlocked) return;
   markerVisible = true;
   poseSample.length = 0;
   addPoseSample(detail);
@@ -549,11 +636,13 @@ function handleImageFound({ detail }) {
 }
 
 function handleImageUpdated({ detail }) {
+  if (landscapeBlocked) return;
   markerVisible = true;
   addPoseSample(detail);
 }
 
 function handleImageLost({ detail }) {
+  if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
   poseSample.length = 0;
@@ -563,6 +652,7 @@ function handleImageLost({ detail }) {
 }
 
 function handleTrackingStatus({ detail }) {
+  if (landscapeBlocked) return;
   trackingStatus = detail?.status || trackingStatus;
   trackingReason = detail?.reason || trackingReason;
   renderTrackingStatus();
@@ -583,13 +673,27 @@ function handleRuntimeError(error) {
   setStatus("world trackingを開始できませんでした", "error");
 }
 
+function handleCameraStatus({ status: cameraStatus, reason }) {
+  if (cameraStatus === "requesting") {
+    setStatus("camera権限を確認中…", "loading");
+    return;
+  }
+  if (cameraStatus === "hasStream") {
+    setStatus("camera映像を初期化中…", "loading");
+    return;
+  }
+  if (cameraStatus !== "failed") return;
+
+  handleRuntimeError(new Error(cameraFailureMessage(reason)));
+}
+
 function createWorldPipelineModule() {
   return {
     name: "flow-ar-world-anchor",
     onStart: () => {
       xrScene = xr8.Threejs.xrScene();
       const { scene, camera, renderer } = xrScene;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(preferredPixelRatio());
       if ("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
       scene.add(worldAnchorRoot);
@@ -616,10 +720,11 @@ function createWorldPipelineModule() {
       const now = performance.now();
       const delta = Math.min(Math.max((now - lastFrameTime) / 1000, 0), 0.1);
       lastFrameTime = now;
-      if (playing) mixer?.update(delta);
+      if (!landscapeBlocked && playing) mixer?.update(delta);
       updateTransport();
       updateCorrection(now);
     },
+    onCameraStatusChange: handleCameraStatus,
     onException: handleRuntimeError,
     listeners: [
       { event: "reality.imagefound", process: handleImageFound },
@@ -631,18 +736,23 @@ function createWorldPipelineModule() {
 }
 
 async function startAr() {
+  if (isTabletPortrait()) {
+    setStatus("tabletは横向きにしてください", "limited");
+    return;
+  }
+
   startButton.disabled = true;
   startButton.textContent = "cameraを起動中…";
   introError.hidden = true;
   setStatus("cameraとworld trackingを起動中…", "loading");
 
   try {
-    if (!window.isSecureContext && window.location.hostname !== "localhost") {
-      throw new Error("camera ARにはHTTPSが必要です。公開URLかlocalhostから開いてください。");
-    }
+    assertCameraEnvironment();
     if (!xr8 || !targetData || !activeModel) {
       throw new Error("world ARの準備が完了していません。");
     }
+
+    await requestTabletLandscapeMode();
 
     markerVisible = false;
     poseLocked = false;
@@ -659,16 +769,19 @@ async function startAr() {
     });
 
     if (!pipelineAdded) {
-      xr8.addCameraPipelineModules([
+      const pipelineModule = [
         xr8.GlTextureRenderer.pipelineModule(),
         xr8.Threejs.pipelineModule(),
         xr8.XrController.pipelineModule(),
         createWorldPipelineModule()
-      ]);
+      ];
+      const fullWindowCanvas = xr8.FullWindowCanvas?.pipelineModule?.();
+      if (fullWindowCanvas) pipelineModule.unshift(fullWindowCanvas);
+      xr8.addCameraPipelineModules(pipelineModule);
       pipelineAdded = true;
     }
 
-    await xr8.run({ canvas });
+    await xr8.run(allowedDevices ? { canvas, allowedDevices } : { canvas });
   } catch (error) {
     handleRuntimeError(error);
   }
@@ -679,12 +792,13 @@ async function prepare() {
     setStatus("caseとworld tracking engineを読み込み中…", "loading");
     const enginePromise = waitForEngine();
     await loadDefinition();
-    const [loadedEngine, loadedTarget] = await Promise.all([
-      enginePromise,
+    assertCameraEnvironment();
+    xr8 = await enginePromise;
+    allowedDevices = worldArCompatibility(xr8);
+    const [loadedTarget] = await Promise.all([
       loadTargetData(),
       loadMode(selectedMode)
     ]);
-    xr8 = loadedEngine;
     targetData = loadedTarget;
     modePicker.disabled = false;
     startButton.disabled = false;
@@ -726,6 +840,29 @@ playButton.addEventListener("click", () => {
 });
 
 seekSlider.addEventListener("input", seekToSliderValue);
+
+setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
+  landscapeBlocked = blocked;
+  window.clearTimeout(orientationRestoreTimer);
+
+  if (blocked) {
+    poseSample.length = 0;
+    correction.active = false;
+    resumeAfterLandscape = Boolean(mixer && activeAction && playing);
+    if (resumeAfterLandscape) setPlaying(false);
+    setStatus("tabletは横向きにしてください", "limited");
+    return;
+  }
+
+  orientationRestoreTimer = window.setTimeout(() => {
+    lastFrameTime = performance.now();
+    poseSample.length = 0;
+    correction.active = false;
+    if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
+    resumeAfterLandscape = false;
+    renderTrackingStatus();
+  }, 200);
+});
 
 window.addEventListener("pagehide", () => {
   try { xr8?.stop?.(); } catch {}

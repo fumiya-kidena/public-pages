@@ -1,3 +1,5 @@
+import { deviceProfile, setupTabletLandscapeGate } from "./deviceSupport.js?v=1";
+
 const viewer = document.getElementById("droplet-viewer");
 const nativeArButton = document.getElementById("native-ar-button");
 const markerArButton = document.getElementById("marker-ar-button");
@@ -19,6 +21,7 @@ const referenceVideo = document.getElementById("reference-video");
 const referenceSource = document.getElementById("reference-source");
 const referenceNote = document.getElementById("reference-note");
 const loadState = document.getElementById("load-state");
+const orientationGate = document.getElementById("orientation-gate");
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -27,6 +30,8 @@ let manifest;
 let selectedMode;
 let isPlaying = !reduceMotion;
 let resumeAfterVisibility = false;
+let resumeAfterLandscape = false;
+let landscapeBlocked = false;
 const modeIndex = new Map();
 const caseIndex = new Map();
 
@@ -191,6 +196,7 @@ function updateArAvailability() {
   if (selectedMode.kind === "video") {
     markerArButton.hidden = true;
     nativeArButton.hidden = true;
+    nativeArButton.classList.remove("secondary-ar-button");
     arMessage.textContent = "このmodeは動画表示です。AR対応3Dがあるcaseはselectorから切り替えられます。";
     return;
   }
@@ -200,15 +206,29 @@ function updateArAvailability() {
     markerUrl.searchParams.set("case", selectedMode.caseId);
     markerUrl.searchParams.set("mode", selectedMode.id);
     markerArButton.href = markerUrl.href;
+    markerArButton.textContent = selectedMode.anchor?.worldTracking?.target
+      ? "camera ARで再生"
+      : "QR marker ARで再生";
     markerArButton.hidden = false;
-    nativeArButton.hidden = true;
-    arMessage.textContent = "印刷した色付きQR posterを机に置き、「QR marker ARで再生」からcameraを開始してください。";
+    const showAndroidNativeFallback = deviceProfile.isAndroid && viewer.canActivateAR;
+    nativeArButton.hidden = !showAndroidNativeFallback;
+    nativeArButton.classList.toggle("secondary-ar-button", showAndroidNativeFallback);
+    nativeArButton.textContent = showAndroidNativeFallback ? "標準AR（簡易）" : "ARで見る";
+    arMessage.textContent = deviceProfile.isAndroid
+      ? "camera ARが本命です。Chrome／Firefox／Samsung Internet／Edgeで開始し、最初だけ色付きQR posterへ位置を合わせます。非対応なら標準AR（簡易）を使えます。"
+      : "印刷した色付きQR posterを机に置き、「camera ARで再生」からcameraを開始してください。";
     return;
   }
   markerArButton.hidden = true;
   nativeArButton.hidden = false;
+  nativeArButton.classList.remove("secondary-ar-button");
+  nativeArButton.textContent = "ARで見る";
   if (selectedMode.iosAnchorSrc && isAppleMobile && viewer.canActivateAR) {
     arMessage.textContent = "「ARで見る」を押し、印刷したQR posterをcameraに入れると、その位置へ固定されます。";
+    return;
+  }
+  if (deviceProfile.isAndroid && viewer.canActivateAR) {
+    arMessage.textContent = "「ARで見る」を押すと、WebXRまたはGoogle Scene Viewerで平らな面へ配置できます。";
     return;
   }
   arMessage.textContent = viewer.canActivateAR
@@ -288,6 +308,11 @@ function selectMode(key, syncUrl = true) {
 
   updateArAvailability();
   updatePlayButton();
+  if (landscapeBlocked && isPlaying) {
+    resumeAfterLandscape = true;
+    if (mode.kind === "video") stageVideo.pause();
+    else viewer.pause();
+  }
   if (syncUrl) updateModeUrl(mode);
   if (reference.open && !reduceMotion) referenceVideo.play().catch(() => {});
 }
@@ -370,6 +395,11 @@ document.addEventListener("visibilitychange", () => {
     return;
   }
   if (!resumeAfterVisibility) return;
+  if (landscapeBlocked) {
+    resumeAfterLandscape = true;
+    resumeAfterVisibility = false;
+    return;
+  }
   isPlaying = true;
   if (selectedMode.kind === "video") stageVideo.play().catch(() => {});
   else viewer.play();
@@ -383,6 +413,25 @@ window.addEventListener("offline", () => {
 });
 
 window.addEventListener("online", updateArAvailability);
+
+setupTabletLandscapeGate(orientationGate, (blocked, previous) => {
+  landscapeBlocked = blocked;
+  if (blocked) {
+    resumeAfterLandscape = Boolean(selectedMode && isPlaying);
+    if (selectedMode?.kind === "video") stageVideo.pause();
+    else if (selectedMode) viewer.pause();
+    return;
+  }
+
+  if (previous && resumeAfterLandscape && selectedMode) {
+    isPlaying = true;
+    if (selectedMode.kind === "video") stageVideo.play().catch(() => {});
+    else viewer.play();
+    updatePlayButton();
+  }
+  resumeAfterLandscape = false;
+  updateArAvailability();
+});
 
 Promise.all([customElements.whenDefined("model-viewer"), loadManifest()])
   .then(() => {

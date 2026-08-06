@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MindARThree } from "mindar-image-three";
+import {
+  deviceProfile,
+  isTabletPortrait,
+  requestTabletLandscapeMode,
+  setupTabletLandscapeGate
+} from "./deviceSupport.js?v=1";
 
 const stage = document.getElementById("ar-stage");
 const intro = document.getElementById("intro");
@@ -18,6 +24,8 @@ const homeLink = document.getElementById("home-link");
 const fallbackLink = document.getElementById("fallback-link");
 const scanGuide = document.getElementById("scan-guide");
 const status = document.getElementById("status");
+const platformNote = document.getElementById("platform-note");
+const orientationGate = document.getElementById("orientation-gate");
 
 const query = new URLSearchParams(window.location.search);
 const requestedCase = query.get("case");
@@ -43,6 +51,9 @@ let playing = true;
 let reloadBeforeRetry = false;
 let loadSerial = 0;
 let lastFrameTime = performance.now();
+let landscapeBlocked = false;
+let resumeAfterLandscape = false;
+let orientationRestoreTimer;
 
 function setStatus(message, state = "loading") {
   status.textContent = message;
@@ -83,6 +94,7 @@ function setPlaying(nextPlaying) {
   playing = Boolean(nextPlaying);
   mixer.timeScale = playing ? playbackRate : 0;
   playButton.textContent = playing ? "一時停止" : "再生";
+  playButton.setAttribute("aria-label", playing ? "animationを一時停止" : "animationを再生");
   updateTransport(true);
 }
 
@@ -185,6 +197,13 @@ async function loadDefinition() {
   modePicker.disabled = false;
   introTitle.textContent = definition.label;
   introCopy.textContent = "world tracking非対応端末向けです。開始後、印刷した色付きQR poster全体を映し続けてください。";
+  platformNote.textContent = deviceProfile.isAndroid
+    ? deviceProfile.isTablet
+      ? "Android tablet · 横向き · posterを映し続けるfallback"
+      : "Android · posterを映し続けるfallback"
+    : deviceProfile.isAppleTablet
+      ? "iPad Safari · 横向き · posterを映し続けるfallback"
+      : "iPhone Safari／Androidの対応browser向けfallback";
   markerPreview.src = versionedUrl(definition.anchor.image);
   markerPreview.hidden = false;
   startButton.disabled = false;
@@ -299,7 +318,7 @@ function createArScene() {
     missTolerance: Number(webTracking.missTolerance ?? 5)
   });
   const { renderer, scene } = mindarThree;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, deviceProfile.isTablet ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   scene.add(new THREE.HemisphereLight(0xe9f7ff, 0x20303a, 2.4));
@@ -318,10 +337,12 @@ function createArScene() {
   anchor.group.add(contentRoot);
 
   anchor.onTargetFound = () => {
+    if (landscapeBlocked) return;
     scanGuide.hidden = true;
     setStatus(`${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`, "found");
   };
   anchor.onTargetLost = () => {
+    if (landscapeBlocked) return;
     scanGuide.hidden = false;
     setStatus("markerを見失いました。色付きposter全体を映してください", "scanning");
   };
@@ -342,6 +363,11 @@ function stopArSession() {
 }
 
 async function startAr() {
+  if (isTabletPortrait()) {
+    setStatus("tabletは横向きにしてください", "scanning");
+    return;
+  }
+
   startButton.disabled = true;
   startButton.textContent = "cameraを準備中…";
   introError.hidden = true;
@@ -350,6 +376,10 @@ async function startAr() {
     if (!window.isSecureContext && window.location.hostname !== "localhost") {
       throw new Error("camera ARにはHTTPSが必要です。公開URLから開いてください。");
     }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("このbrowserではcamera APIを利用できません。通常3Dを使ってください。");
+    }
+    await requestTabletLandscapeMode();
     createArScene();
     await loadMode(selectedMode);
     await mindarThree.start();
@@ -361,7 +391,7 @@ async function startAr() {
     mindarThree.renderer.setAnimationLoop((time) => {
       const delta = Math.min(Math.max((time - lastFrameTime) / 1000, 0), 0.1);
       lastFrameTime = time;
-      if (playing) mixer?.update(delta);
+      if (!landscapeBlocked && playing) mixer?.update(delta);
       updateTransport();
       mindarThree.renderer.render(mindarThree.scene, mindarThree.camera);
     });
@@ -409,6 +439,33 @@ playButton.addEventListener("click", () => {
 });
 
 seekSlider.addEventListener("input", seekToSliderValue);
+
+setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
+  landscapeBlocked = blocked;
+  window.clearTimeout(orientationRestoreTimer);
+
+  if (blocked) {
+    resumeAfterLandscape = Boolean(mixer && activeAction && playing);
+    if (resumeAfterLandscape) setPlaying(false);
+    setStatus("tabletは横向きにしてください", "scanning");
+    return;
+  }
+
+  orientationRestoreTimer = window.setTimeout(() => {
+    lastFrameTime = performance.now();
+    mindarThree?.resize?.();
+    if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
+    resumeAfterLandscape = false;
+    if (running) {
+      setStatus(
+        isMarkerVisible()
+          ? `${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`
+          : "色付きQR poster全体をcameraへ映してください",
+        isMarkerVisible() ? "found" : "scanning"
+      );
+    }
+  }, 200);
+});
 
 document.addEventListener("visibilitychange", () => {
   lastFrameTime = performance.now();
