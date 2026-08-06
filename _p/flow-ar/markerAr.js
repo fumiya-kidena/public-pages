@@ -696,6 +696,7 @@ function createWorldPipelineModule() {
       // pixelRatio here resizes only the drawing buffer after GlTextureRenderer
       // has initialised, which shrinks the camera feed and leaves 3D frame trails
       // on high-DPI iPhone displays.
+      // Keep any DPR tuning on the independent MindAR renderer, not this one.
       if ("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
       scene.add(worldAnchorRoot);
