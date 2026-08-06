@@ -51,10 +51,10 @@
 
 <script>
   var REPO = 'fumiya-kidena/public-pages', BRANCH = 'gh-pages';
-  var KNOWN = ['cfd-gallery','cfd-seminar','flow-ar']; // API制限時のフォールバック
+  var KNOWN = ['cfd-gallery','cfd-seminar']; // API制限時のフォールバック
   // 一覧に載せないもの：'_' 始まり（ユーティリティ/非公開の規約）＋明示リスト
   // （KaTeX は /_katex/ へ改名済＝'_' 規約で自動非表示。明示リストは予備）。
-  var HIDDEN = [];
+  var HIDDEN = ['flow-ar'];
   function visible(name){ return name.charAt(0)!=='.' && name.charAt(0)!=='_' && HIDDEN.indexOf(name)===-1; }
   function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
