@@ -437,6 +437,9 @@ Promise.all([customElements.whenDefined("model-viewer"), loadManifest()])
   .then(() => {
     const requestedCase = new URLSearchParams(window.location.search).get("case");
     const rawMode = new URLSearchParams(window.location.search).get("mode");
+    if (requestedCase && !caseIndex.has(requestedCase)) {
+      throw new Error(`指定case「${requestedCase}」は配信catalogにありません。`);
+    }
     const requestedMode = manifest.aliases?.[rawMode] || rawMode;
     const requestedKey = requestedMode ? findModeKey(requestedMode, requestedCase) : null;
     const caseDefault = caseIndex.get(requestedCase)?.defaultMode;

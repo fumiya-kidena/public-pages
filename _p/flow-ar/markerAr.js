@@ -225,9 +225,12 @@ async function loadDefinition() {
   if (catalog.schemaVersion !== 1) throw new Error("未対応のcase catalogです。");
 
   const references = collectCaseReferences(catalog);
-  const reference = references.find((item) => item.id === requestedCase)
-    || references.find((item) => item.id === "bagBreakup")
-    || references[0];
+  const reference = requestedCase
+    ? references.find((item) => item.id === requestedCase)
+    : references.find((item) => item.id === "bagBreakup") || references[0];
+  if (requestedCase && !reference) {
+    throw new Error(`指定case「${requestedCase}」は配信catalogにありません。`);
+  }
   if (!reference?.manifest) throw new Error("表示できるcaseがありません。");
 
   manifestUrl = new URL(reference.manifest, catalogUrl);

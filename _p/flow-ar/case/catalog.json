@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "assetVersion": "case-afeb12c2a469",
+  "assetVersion": "case-e587071370c9",
   "defaultMode": "glass",
   "aliases": {
     "contour": "residual"
@@ -23,6 +23,16 @@
         {
           "id": "bagBreakup",
           "manifest": "./bagBreakup/case.json"
+        }
+      ]
+    },
+    {
+      "id": "simulation",
+      "label": "Simulation",
+      "case": [
+        {
+          "id": "myAnimation",
+          "manifest": "./myAnimation/case.json"
         }
       ]
     }
