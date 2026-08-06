@@ -35,7 +35,7 @@
                    "physicalWidthCm":  18.0,
                    "liftMetres":  0.05,
                    "webTracking":  {
-                                       "page":  "markerAr.html",
+                                       "page":  "imageMarkerAr.html",
                                        "target":  "marker/myAnimation.mind",
                                        "targetIndex":  0,
                                        "contentOffset":  [
