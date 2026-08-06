@@ -225,10 +225,11 @@ async function loadDefinition() {
   if (catalog.schemaVersion !== 1) throw new Error("未対応のcase catalogです。");
 
   const references = collectCaseReferences(catalog);
-  const reference = requestedCase
-    ? references.find((item) => item.id === requestedCase)
-    : references.find((item) => item.id === "bagBreakup") || references[0];
-  if (requestedCase && !reference) {
+  if (!requestedCase) {
+    throw new Error("QR URLにcase parameterがありません。印刷用posterのQRから開き直してください。");
+  }
+  const reference = references.find((item) => item.id === requestedCase);
+  if (!reference) {
     throw new Error(`指定case「${requestedCase}」は配信catalogにありません。`);
   }
   if (!reference?.manifest) throw new Error("表示できるcaseがありません。");
@@ -432,11 +433,6 @@ function cameraFailureMessage(reason) {
     return "背面cameraを利用できません。image-marker版または通常3Dを使ってください。";
   }
   return "cameraを開始できません。camera権限を確認するか、image-marker版を使ってください。";
-}
-
-function preferredPixelRatio() {
-  const cap = deviceProfile.isTablet ? 1.5 : 2;
-  return Math.min(window.devicePixelRatio || 1, cap);
 }
 
 async function loadTargetData() {
@@ -696,7 +692,10 @@ function createWorldPipelineModule() {
     onStart: () => {
       xrScene = xr8.Threejs.xrScene();
       const { scene, camera, renderer } = xrScene;
-      renderer.setPixelRatio(preferredPixelRatio());
+      // XR8 owns the shared camera/WebGL canvas and its viewport sizing. Changing
+      // pixelRatio here resizes only the drawing buffer after GlTextureRenderer
+      // has initialised, which shrinks the camera feed and leaves 3D frame trails
+      // on high-DPI iPhone displays.
       if ("outputColorSpace" in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
       scene.add(worldAnchorRoot);
