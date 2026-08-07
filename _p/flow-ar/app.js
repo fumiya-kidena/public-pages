@@ -1,4 +1,10 @@
 import { deviceProfile, setupTabletLandscapeGate } from "./deviceSupport.js?v=1";
+import {
+  assetObjectUrl,
+  carryUnlockFragment,
+  fetchAssetJson,
+  usesEncryptedAssets
+} from "./secureAsset.js?v=1";
 
 const viewer = document.getElementById("droplet-viewer");
 const nativeArButton = document.getElementById("native-ar-button");
@@ -32,6 +38,7 @@ let isPlaying = !reduceMotion;
 let resumeAfterVisibility = false;
 let resumeAfterLandscape = false;
 let landscapeBlocked = false;
+let selectionSerial = 0;
 const modeIndex = new Map();
 const caseIndex = new Map();
 
@@ -57,9 +64,13 @@ function appendVersion(path, version) {
   return url.href;
 }
 
-function assetUrl(mode, path) {
+function assetSourceUrl(mode, path) {
   const root = new URL(mode.assetRoot, mode.manifestUrl);
   return appendVersion(new URL(path, root).href, manifest.assetVersion);
+}
+
+function assetUrl(mode, path) {
+  return assetObjectUrl(assetSourceUrl(mode, path));
 }
 
 function registerCase(caseDefinition, group, showCaseLabel = false) {
@@ -123,18 +134,14 @@ function buildModePicker() {
 
 async function loadManifest() {
   const catalogUrl = new URL("./case/catalog.json", document.baseURI);
-  const response = await fetch(catalogUrl, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`Catalog HTTP ${response.status}`);
-  manifest = await response.json();
+  manifest = await fetchAssetJson(catalogUrl);
   if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.categories)) {
     throw new Error("Unsupported case catalog");
   }
 
   async function loadCase(reference) {
     const caseUrl = new URL(reference.manifest, catalogUrl);
-    const caseResponse = await fetch(caseUrl, { cache: "no-cache" });
-    if (!caseResponse.ok) throw new Error(`Case ${reference.id} HTTP ${caseResponse.status}`);
-    const caseDefinition = await caseResponse.json();
+    const caseDefinition = await fetchAssetJson(caseUrl);
     if (
       caseDefinition.schemaVersion !== 1 ||
       caseDefinition.id !== reference.id ||
@@ -205,12 +212,14 @@ function updateArAvailability() {
     const markerUrl = new URL(webTracking.page || "./markerAr.html", document.baseURI);
     markerUrl.searchParams.set("case", selectedMode.caseId);
     markerUrl.searchParams.set("mode", selectedMode.id);
-    markerArButton.href = markerUrl.href;
+    markerArButton.href = carryUnlockFragment(markerUrl).href;
     markerArButton.textContent = selectedMode.anchor?.worldTracking?.target
       ? "camera ARで再生"
       : "QR marker ARで再生";
     markerArButton.hidden = false;
-    const showAndroidNativeFallback = deviceProfile.isAndroid && viewer.canActivateAR;
+    const showAndroidNativeFallback = deviceProfile.isAndroid
+      && !usesEncryptedAssets()
+      && viewer.canActivateAR;
     nativeArButton.hidden = !showAndroidNativeFallback;
     nativeArButton.classList.toggle("secondary-ar-button", showAndroidNativeFallback);
     nativeArButton.textContent = showAndroidNativeFallback ? "標準AR（簡易）" : "ARで見る";
@@ -220,6 +229,12 @@ function updateArAvailability() {
     return;
   }
   markerArButton.hidden = true;
+  if (usesEncryptedAssets()) {
+    nativeArButton.hidden = true;
+    nativeArButton.classList.remove("secondary-ar-button");
+    arMessage.textContent = "暗号化caseではbrowser内3Dを使用します。marker tracking付きcaseはcamera ARを利用できます。";
+    return;
+  }
   nativeArButton.hidden = false;
   nativeArButton.classList.remove("secondary-ar-button");
   nativeArButton.textContent = "ARで見る";
@@ -236,14 +251,14 @@ function updateArAvailability() {
     : "この環境ではARを起動できないため、3D表示を使用できます。";
 }
 
-function updateReference(mode) {
+function updateReference(mode, referenceUrl = null) {
   reference.hidden = !mode.reference;
   if (!mode.reference) {
     reference.open = false;
     referenceVideo.pause();
     return;
   }
-  referenceSource.src = assetUrl(mode, mode.reference.video);
+  referenceSource.src = referenceUrl;
   referenceVideo.load();
   referenceNote.textContent = mode.reference.note;
 }
@@ -256,9 +271,10 @@ function updateSource(mode) {
   modeSourceLink.textContent = mode.source.label;
 }
 
-function selectMode(key, syncUrl = true) {
+async function selectMode(key, syncUrl = true) {
   const mode = modeIndex.get(key);
   if (!mode) return;
+  const serial = ++selectionSerial;
   selectedMode = mode;
   modePicker.value = key;
   modeTitle.textContent = mode.title;
@@ -266,19 +282,42 @@ function selectMode(key, syncUrl = true) {
   modeScale.textContent = mode.scale;
   modeMagnification.textContent = mode.magnification;
   colourLegend.hidden = !mode.legend;
-  updateReference(mode);
   updateSource(mode);
   // Scientific result playback is primary content, not decorative motion.
   // Keep the explicit pause control available, but start the selected result.
   isPlaying = true;
+
+  setLoading(true, usesEncryptedAssets() ? "暗号assetを復号中…" : "3Dを読み込み中…");
+  const referenceUrlPromise = mode.reference
+    ? assetUrl(mode, mode.reference.video)
+    : Promise.resolve(null);
+  let prepared;
+  if (mode.kind === "video") {
+    const [poster, video, referenceUrl] = await Promise.all([
+      assetUrl(mode, mode.poster),
+      assetUrl(mode, mode.videoSrc),
+      referenceUrlPromise
+    ]);
+    prepared = { poster, video, referenceUrl };
+  } else {
+    const iosPath = usesEncryptedAssets() ? null : (mode.iosAnchorSrc || mode.iosSrc);
+    const [model, iosModel, referenceUrl] = await Promise.all([
+      assetUrl(mode, mode.src),
+      iosPath ? assetUrl(mode, iosPath) : Promise.resolve(null),
+      referenceUrlPromise
+    ]);
+    prepared = { model, iosModel, referenceUrl };
+  }
+  if (serial !== selectionSerial) return;
+  updateReference(mode, prepared.referenceUrl);
 
   if (mode.kind === "video") {
     viewer.pause();
     viewer.hidden = true;
     gestureHint.hidden = true;
     stageVideo.hidden = false;
-    stageVideo.poster = assetUrl(mode, mode.poster);
-    const videoSrc = assetUrl(mode, mode.videoSrc);
+    stageVideo.poster = prepared.poster;
+    const videoSrc = prepared.video;
     if (stageVideo.src !== videoSrc) {
       stageVideo.src = videoSrc;
       stageVideo.load();
@@ -297,8 +336,9 @@ function selectMode(key, syncUrl = true) {
     gestureHint.hidden = false;
     setLoading(true);
     viewer.setAttribute("animation-name", mode.animationName);
-    viewer.setAttribute("src", assetUrl(mode, mode.src));
-    viewer.setAttribute("ios-src", assetUrl(mode, mode.iosAnchorSrc || mode.iosSrc));
+    viewer.setAttribute("src", prepared.model);
+    if (prepared.iosModel) viewer.setAttribute("ios-src", prepared.iosModel);
+    else viewer.removeAttribute("ios-src");
     viewer.alt = mode.alt;
     viewer.setAttribute("exposure", String(mode.exposure));
     viewer.setAttribute("camera-orbit", mode.cameraOrbit);
@@ -317,7 +357,13 @@ function selectMode(key, syncUrl = true) {
   if (reference.open && !reduceMotion) referenceVideo.play().catch(() => {});
 }
 
-modePicker.addEventListener("change", () => selectMode(modePicker.value));
+modePicker.addEventListener("change", () => {
+  selectMode(modePicker.value).catch((error) => {
+    console.error(error);
+    setLoading(false);
+    arMessage.textContent = error.message;
+  });
+});
 
 playButton.addEventListener("click", () => {
   const activeMedia = selectedMode.kind === "video" ? stageVideo : viewer;
@@ -434,7 +480,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, previous) => {
 });
 
 Promise.all([customElements.whenDefined("model-viewer"), loadManifest()])
-  .then(() => {
+  .then(async () => {
     const requestedCase = new URLSearchParams(window.location.search).get("case");
     const rawMode = new URLSearchParams(window.location.search).get("mode");
     if (requestedCase && !caseIndex.has(requestedCase)) {
@@ -447,7 +493,7 @@ Promise.all([customElements.whenDefined("model-viewer"), loadManifest()])
       || (caseDefault ? findModeKey(caseDefault, requestedCase) : null)
       || findModeKey(manifest.defaultMode)
       || modeIndex.keys().next().value;
-    selectMode(initialKey, true);
+    await selectMode(initialKey, true);
   })
   .catch((error) => {
     console.error(error);

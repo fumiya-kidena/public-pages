@@ -6,6 +6,11 @@ import {
   requestTabletLandscapeMode,
   setupTabletLandscapeGate
 } from "./deviceSupport.js?v=1";
+import {
+  assetObjectUrl,
+  carryUnlockFragment,
+  fetchAssetJson
+} from "./secureAsset.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -145,7 +150,7 @@ function modeUrl(page, mode = selectedMode) {
   const url = new URL(page, document.baseURI);
   if (definition?.id) url.searchParams.set("case", definition.id);
   if (mode?.id) url.searchParams.set("mode", mode.id);
-  return url.href;
+  return carryUnlockFragment(url).href;
 }
 
 function collectCaseReferences(source) {
@@ -219,9 +224,7 @@ function validateWorldTracking(caseDefinition) {
 
 async function loadDefinition() {
   const catalogUrl = new URL("./case/catalog.json", document.baseURI);
-  const response = await fetch(catalogUrl, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`case catalog: HTTP ${response.status}`);
-  catalog = await response.json();
+  catalog = await fetchAssetJson(catalogUrl);
   if (catalog.schemaVersion !== 1) throw new Error("未対応のcase catalogです。");
 
   const references = collectCaseReferences(catalog);
@@ -235,9 +238,7 @@ async function loadDefinition() {
   if (!reference?.manifest) throw new Error("表示できるcaseがありません。");
 
   manifestUrl = new URL(reference.manifest, catalogUrl);
-  const manifestResponse = await fetch(manifestUrl, { cache: "no-cache" });
-  if (!manifestResponse.ok) throw new Error(`case manifest: HTTP ${manifestResponse.status}`);
-  definition = await manifestResponse.json();
+  definition = await fetchAssetJson(manifestUrl);
   if (definition.schemaVersion !== 1 || !Array.isArray(definition.modes)) {
     throw new Error("case manifestが不正です。");
   }
@@ -273,7 +274,10 @@ async function loadDefinition() {
     : deviceProfile.isAppleTablet
       ? "iPad Safari · 横向き"
       : "iPhone Safari／Androidの対応browser";
-  markerPreview.src = versionedUrl(definition.anchor.image);
+  markerPreview.src = await assetObjectUrl(
+    versionedUrl(definition.anchor.image),
+    "image/png"
+  );
   markerPreview.hidden = false;
   updateLinks();
 }
@@ -314,7 +318,8 @@ async function loadMode(mode) {
   playButton.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
 
-  const gltf = await new GLTFLoader().loadAsync(versionedUrl(mode.src));
+  const modelUrl = await assetObjectUrl(versionedUrl(mode.src), "model/gltf-binary");
+  const gltf = await new GLTFLoader().loadAsync(modelUrl);
   if (serial !== loadSerial) return;
   const clip = mode.animationName
     ? THREE.AnimationClip.findByName(gltf.animations, mode.animationName)
@@ -436,13 +441,14 @@ function cameraFailureMessage(reason) {
 }
 
 async function loadTargetData() {
-  const response = await fetch(versionedUrl(worldTracking.target), { cache: "no-cache" });
-  if (!response.ok) throw new Error(`world target: HTTP ${response.status}`);
-  const data = await response.json();
+  const data = await fetchAssetJson(versionedUrl(worldTracking.target));
   if (!data?.properties || data.name !== worldTracking.targetName) {
     throw new Error("world target dataがmanifestと一致しません。");
   }
-  data.imagePath = versionedUrl(worldTracking.image);
+  data.imagePath = await assetObjectUrl(
+    versionedUrl(worldTracking.image),
+    "image/jpeg"
+  );
   return data;
 }
 

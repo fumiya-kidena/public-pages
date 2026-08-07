@@ -7,6 +7,11 @@ import {
   requestTabletLandscapeMode,
   setupTabletLandscapeGate
 } from "./deviceSupport.js?v=1";
+import {
+  assetObjectUrl,
+  carryUnlockFragment,
+  fetchAssetJson
+} from "./secureAsset.js?v=1";
 
 const stage = document.getElementById("ar-stage");
 const intro = document.getElementById("intro");
@@ -122,7 +127,7 @@ function modeUrl(page, mode = selectedMode) {
   const url = new URL(page, document.baseURI);
   if (definition?.id) url.searchParams.set("case", definition.id);
   if (mode?.id) url.searchParams.set("mode", mode.id);
-  return url.href;
+  return carryUnlockFragment(url).href;
 }
 
 function collectCaseReferences(source) {
@@ -160,9 +165,7 @@ function validateTracking(caseDefinition) {
 
 async function loadDefinition() {
   const catalogUrl = new URL("./case/catalog.json", document.baseURI);
-  const response = await fetch(catalogUrl, { cache: "no-cache" });
-  if (!response.ok) throw new Error(`case catalog: HTTP ${response.status}`);
-  catalog = await response.json();
+  catalog = await fetchAssetJson(catalogUrl);
   if (catalog.schemaVersion !== 1) throw new Error("未対応のcase catalogです。");
 
   const references = collectCaseReferences(catalog);
@@ -176,14 +179,16 @@ async function loadDefinition() {
   if (!reference?.manifest) throw new Error("表示できるcaseがありません。");
 
   manifestUrl = new URL(reference.manifest, catalogUrl);
-  const manifestResponse = await fetch(manifestUrl, { cache: "no-cache" });
-  if (!manifestResponse.ok) throw new Error(`case manifest: HTTP ${manifestResponse.status}`);
-  definition = await manifestResponse.json();
+  definition = await fetchAssetJson(manifestUrl);
   if (definition.schemaVersion !== 1 || !Array.isArray(definition.modes)) {
     throw new Error("case manifestが不正です。");
   }
   webTracking = validateTracking(definition);
   assetRoot = new URL(definition.assetRoot, manifestUrl);
+  webTracking.targetObjectUrl = await assetObjectUrl(
+    versionedUrl(webTracking.target),
+    "application/octet-stream"
+  );
 
   const modes = definition.modes.filter((mode) => mode.kind === "model" && mode.src);
   if (!modes.length) throw new Error("marker ARで表示できる3D modeがありません。");
@@ -208,7 +213,10 @@ async function loadDefinition() {
     : deviceProfile.isAppleTablet
       ? "iPad Safari · 横向き · posterを映し続けるfallback"
       : "iPhone Safari／Androidの対応browser向けfallback";
-  markerPreview.src = versionedUrl(definition.anchor.image);
+  markerPreview.src = await assetObjectUrl(
+    versionedUrl(definition.anchor.image),
+    "image/png"
+  );
   markerPreview.hidden = false;
   startButton.disabled = false;
   startButton.textContent = "cameraを開始";
@@ -249,7 +257,8 @@ async function loadMode(mode) {
   modePicker.disabled = true;
   playButton.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
-  const gltf = await new GLTFLoader().loadAsync(versionedUrl(mode.src));
+  const modelUrl = await assetObjectUrl(versionedUrl(mode.src), "model/gltf-binary");
+  const gltf = await new GLTFLoader().loadAsync(modelUrl);
   if (serial !== loadSerial) return;
   const clip = mode.animationName
     ? THREE.AnimationClip.findByName(gltf.animations, mode.animationName)
@@ -308,10 +317,9 @@ async function loadMode(mode) {
 }
 
 function createArScene() {
-  const targetUrl = versionedUrl(webTracking.target);
   mindarThree = new MindARThree({
     container: stage,
-    imageTargetSrc: targetUrl,
+    imageTargetSrc: webTracking.targetObjectUrl,
     maxTrack: 1,
     uiLoading: "no",
     uiScanning: "no",
