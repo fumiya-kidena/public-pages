@@ -24,6 +24,7 @@ const modePicker = document.getElementById("mode-picker");
 const playButton = document.getElementById("play-button");
 const transport = document.getElementById("transport");
 const seekSlider = document.getElementById("seek-slider");
+const ratePicker = document.getElementById("rate-picker");
 const seekTime = document.getElementById("seek-time");
 const homeLink = document.getElementById("home-link");
 const fallbackLink = document.getElementById("fallback-link");
@@ -46,6 +47,7 @@ let mindarThree;
 let anchor;
 let contentRoot;
 let activeModel;
+let referencePlane;
 let mixer;
 let activeAction;
 let clipDuration = 0;
@@ -77,6 +79,7 @@ function currentClipTime() {
 function updateTransport(force = false) {
   if (!activeAction || clipDuration <= 0) {
     transport.hidden = true;
+    ratePicker.disabled = true;
     return;
   }
 
@@ -87,11 +90,39 @@ function updateTransport(force = false) {
   const clipTime = currentClipTime();
   const sliderValue = Math.round((clipTime / clipDuration) * 1000);
   seekSlider.value = String(sliderValue);
-  seekTime.textContent = `${playbackRate}× · ${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
+  seekTime.textContent = `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
   seekSlider.setAttribute(
     "aria-valuetext",
     `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)}秒、${playbackRate}倍速`
   );
+}
+
+function selectPlaybackRateOption(rate) {
+  const matchingOption = [...ratePicker.options].find(
+    (option) => Math.abs(Number(option.value) - rate) < 1e-9
+  );
+  if (matchingOption) {
+    ratePicker.value = matchingOption.value;
+    return;
+  }
+
+  const option = document.createElement("option");
+  option.value = String(rate);
+  option.textContent = `${rate}×`;
+  const nextOption = [...ratePicker.options].find(
+    (candidate) => Number(candidate.value) > rate
+  );
+  ratePicker.insertBefore(option, nextOption || null);
+  ratePicker.value = option.value;
+}
+
+function setPlaybackRate(nextRate) {
+  const rate = Number(nextRate);
+  if (!Number.isFinite(rate) || rate <= 0) return;
+  playbackRate = rate;
+  selectPlaybackRateOption(rate);
+  if (mixer) mixer.timeScale = playing ? playbackRate : 0;
+  updateTransport(true);
 }
 
 function setPlaying(nextPlaying) {
@@ -234,13 +265,74 @@ function updateLinks() {
   window.history.replaceState(null, "", url);
 }
 
+function clearReferencePlane() {
+  if (!referencePlane) return;
+  referencePlane.removeFromParent();
+  referencePlane.geometry?.dispose();
+  referencePlane.material?.dispose();
+  referencePlane = null;
+}
+
+function boundsRelativeTo(root, object) {
+  root.updateWorldMatrix(true, false);
+  object.updateWorldMatrix(true, true);
+  const worldToRoot = root.matrixWorld.clone().invert();
+  const bounds = new THREE.Box3();
+  object.traverse((node) => {
+    if (!node.isMesh || !node.geometry) return;
+    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+    if (!node.geometry.boundingBox) return;
+    const localToRoot = worldToRoot.clone().multiply(node.matrixWorld);
+    bounds.union(node.geometry.boundingBox.clone().applyMatrix4(localToRoot));
+  });
+  return bounds;
+}
+
+function createReferencePlane(mode) {
+  const config = mode.webAr?.referencePlane;
+  if (!config?.enabled) return;
+
+  const paddingMetres = Number(config.paddingMetres ?? 0);
+  const opacity = Number(config.opacity ?? 0.28);
+  if (!Number.isFinite(paddingMetres) || paddingMetres < 0) {
+    throw new Error(`${mode.id}: webAr.referencePlane.paddingMetresが不正です。`);
+  }
+  if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+    throw new Error(`${mode.id}: webAr.referencePlane.opacityが不正です。`);
+  }
+
+  const bounds = boundsRelativeTo(anchor.group, activeModel);
+  if (bounds.isEmpty()) return;
+  const size = bounds.getSize(new THREE.Vector3());
+  const centre = bounds.getCenter(new THREE.Vector3());
+  const padding = paddingMetres / webTracking.physicalWidthMetres;
+  const width = size.x + 2 * padding;
+  const height = size.y + 2 * padding;
+  if (!(width > 0 && height > 0)) return;
+
+  const material = new THREE.MeshBasicMaterial({
+    color: config.colour ?? "#75cbed",
+    opacity,
+    transparent: opacity < 1,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  referencePlane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  referencePlane.name = "referencePlane";
+  referencePlane.position.set(centre.x, centre.y, 0);
+  referencePlane.renderOrder = -10;
+  anchor.group.add(referencePlane);
+}
+
 function clearModel() {
+  clearReferencePlane();
   mixer?.stopAllAction();
   mixer = null;
   activeAction = null;
   clipDuration = 0;
   lastTransportUpdateAt = -Infinity;
   transport.hidden = true;
+  ratePicker.disabled = true;
   if (!activeModel) return;
   contentRoot.remove(activeModel);
   activeModel.traverse((node) => {
@@ -256,6 +348,7 @@ async function loadMode(mode) {
   const serial = ++loadSerial;
   modePicker.disabled = true;
   playButton.disabled = true;
+  ratePicker.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
   const modelUrl = await assetObjectUrl(versionedUrl(mode.src), "model/gltf-binary");
   const gltf = await new GLTFLoader().loadAsync(modelUrl);
@@ -274,11 +367,12 @@ async function loadMode(mode) {
   if (!Number.isFinite(physicalScale) || physicalScale <= 0) {
     throw new Error(`${mode.id}: webAr.modelScaleが不正です。`);
   }
-  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? 1);
+  const defaultPlaybackRate = definition.id?.toLowerCase() === "windwave" ? 0.2 : 1;
+  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? defaultPlaybackRate);
   if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
     throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
   }
-  playbackRate = requestedPlaybackRate;
+  setPlaybackRate(requestedPlaybackRate);
   const normalizedScale = physicalScale / webTracking.physicalWidthMetres;
   activeModel.scale.setScalar(normalizedScale);
   const rotation = mode.webAr?.rotationDegree || webTracking.modelRotationDegree || [90, 0, 0];
@@ -287,6 +381,7 @@ async function loadMode(mode) {
   }
   activeModel.rotation.set(...rotation.map(THREE.MathUtils.degToRad));
   contentRoot.add(activeModel);
+  createReferencePlane(mode);
 
   if (clip) {
     mixer = new THREE.AnimationMixer(activeModel);
@@ -297,6 +392,7 @@ async function loadMode(mode) {
     activeAction = action;
     clipDuration = clip.duration;
     mixer.timeScale = playing ? playbackRate : 0;
+    ratePicker.disabled = false;
     updateTransport(true);
   }
 
@@ -451,6 +547,14 @@ playButton.addEventListener("click", () => {
 });
 
 seekSlider.addEventListener("input", seekToSliderValue);
+
+ratePicker.addEventListener("change", () => {
+  setPlaybackRate(ratePicker.value);
+  setStatus(
+    `${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`,
+    isMarkerVisible() ? "found" : "scanning"
+  );
+});
 
 setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   landscapeBlocked = blocked;

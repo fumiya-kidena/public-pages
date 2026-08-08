@@ -27,6 +27,7 @@ const modePicker = document.getElementById("mode-picker");
 const playButton = document.getElementById("play-button");
 const transport = document.getElementById("transport");
 const seekSlider = document.getElementById("seek-slider");
+const ratePicker = document.getElementById("rate-picker");
 const seekTime = document.getElementById("seek-time");
 const homeLink = document.getElementById("home-link");
 const fallbackLink = document.getElementById("fallback-link");
@@ -48,15 +49,6 @@ worldAnchorRoot.add(contentRoot);
 worldAnchorRoot.visible = false;
 
 const poseSample = [];
-const correction = {
-  active: false,
-  startedAt: 0,
-  durationMs: 0,
-  fromPosition: new THREE.Vector3(),
-  toPosition: new THREE.Vector3(),
-  fromQuaternion: new THREE.Quaternion(),
-  toQuaternion: new THREE.Quaternion()
-};
 
 let catalog;
 let definition;
@@ -68,6 +60,7 @@ let targetData;
 let xr8;
 let xrScene;
 let activeModel;
+let referencePlane;
 let mixer;
 let activeAction;
 let clipDuration = 0;
@@ -81,7 +74,6 @@ let pipelineAdded = false;
 let reloadBeforeRetry = false;
 let loadSerial = 0;
 let lastFrameTime = performance.now();
-let lastCorrectionAt = -Infinity;
 let trackingStatus = "INITIALIZING";
 let trackingReason = "INITIALIZING";
 let allowedDevices;
@@ -103,6 +95,7 @@ function currentClipTime() {
 function updateTransport(force = false) {
   if (!activeAction || clipDuration <= 0) {
     transport.hidden = true;
+    ratePicker.disabled = true;
     return;
   }
 
@@ -113,11 +106,39 @@ function updateTransport(force = false) {
   const clipTime = currentClipTime();
   const sliderValue = Math.round((clipTime / clipDuration) * 1000);
   seekSlider.value = String(sliderValue);
-  seekTime.textContent = `${playbackRate}× · ${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
+  seekTime.textContent = `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
   seekSlider.setAttribute(
     "aria-valuetext",
     `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)}秒、${playbackRate}倍速`
   );
+}
+
+function selectPlaybackRateOption(rate) {
+  const matchingOption = [...ratePicker.options].find(
+    (option) => Math.abs(Number(option.value) - rate) < 1e-9
+  );
+  if (matchingOption) {
+    ratePicker.value = matchingOption.value;
+    return;
+  }
+
+  const option = document.createElement("option");
+  option.value = String(rate);
+  option.textContent = `${rate}×`;
+  const nextOption = [...ratePicker.options].find(
+    (candidate) => Number(candidate.value) > rate
+  );
+  ratePicker.insertBefore(option, nextOption || null);
+  ratePicker.value = option.value;
+}
+
+function setPlaybackRate(nextRate) {
+  const rate = Number(nextRate);
+  if (!Number.isFinite(rate) || rate <= 0) return;
+  playbackRate = rate;
+  selectPlaybackRateOption(rate);
+  if (mixer) mixer.timeScale = playing ? playbackRate : 0;
+  updateTransport(true);
 }
 
 function setPlaying(nextPlaying) {
@@ -192,7 +213,7 @@ function validateWorldTracking(caseDefinition) {
     throw new Error("world target上の表示位置が不正です。");
   }
 
-  const correctionConfig = tracking.correction || {};
+  const initialPoseConfig = tracking.initialPose || tracking.correction || {};
   const modelRotationDegree = tracking.modelRotationDegree
     || markerTracking?.modelRotationDegree
     || [90, 0, 0];
@@ -208,16 +229,10 @@ function validateWorldTracking(caseDefinition) {
     contentOffsetMetres: contentOffset,
     liftMetres,
     modelRotationDegree,
-    correction: {
-      sampleCount: Math.max(4, Math.round(positiveNumber(correctionConfig.sampleCount, 8))),
-      intervalMs: positiveNumber(correctionConfig.intervalMs, 1500),
-      blendDurationMs: positiveNumber(correctionConfig.blendDurationMs, 600),
-      positionDeadbandMetres: positiveNumber(correctionConfig.positionDeadbandMetres, 0.008),
-      rotationDeadbandDegree: positiveNumber(correctionConfig.rotationDeadbandDegree, 1.5),
-      maxPositionStepMetres: positiveNumber(correctionConfig.maxPositionStepMetres, 0.018),
-      maxRotationStepDegree: positiveNumber(correctionConfig.maxRotationStepDegree, 2),
-      stabilityPositionMetres: positiveNumber(correctionConfig.stabilityPositionMetres, 0.015),
-      stabilityRotationDegree: positiveNumber(correctionConfig.stabilityRotationDegree, 3)
+    initialPose: {
+      sampleCount: Math.max(4, Math.round(positiveNumber(initialPoseConfig.sampleCount, 8))),
+      stabilityPositionMetres: positiveNumber(initialPoseConfig.stabilityPositionMetres, 0.015),
+      stabilityRotationDegree: positiveNumber(initialPoseConfig.stabilityRotationDegree, 3)
     }
   };
 }
@@ -266,7 +281,7 @@ async function loadDefinition() {
   }));
 
   introTitle.textContent = definition.label;
-  introCopy.textContent = "最初に色付きQR posterで位置を合わせます。固定後はposterが画角外でも周囲を参照して追跡し、再び映った時だけ緩やかに位置を補正します。";
+  introCopy.textContent = "最初に色付きQR posterで位置を合わせます。安定した初期位置を確定した後はposterを参照せず、周囲だけで追跡します。";
   platformNote.textContent = deviceProfile.isAndroid
     ? deviceProfile.isTablet
       ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
@@ -294,13 +309,73 @@ function updateLinks() {
   window.history.replaceState(null, "", url);
 }
 
+function clearReferencePlane() {
+  if (!referencePlane) return;
+  referencePlane.removeFromParent();
+  referencePlane.geometry?.dispose();
+  referencePlane.material?.dispose();
+  referencePlane = null;
+}
+
+function boundsRelativeTo(root, object) {
+  root.updateWorldMatrix(true, false);
+  object.updateWorldMatrix(true, true);
+  const worldToRoot = root.matrixWorld.clone().invert();
+  const bounds = new THREE.Box3();
+  object.traverse((node) => {
+    if (!node.isMesh || !node.geometry) return;
+    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+    if (!node.geometry.boundingBox) return;
+    const localToRoot = worldToRoot.clone().multiply(node.matrixWorld);
+    bounds.union(node.geometry.boundingBox.clone().applyMatrix4(localToRoot));
+  });
+  return bounds;
+}
+
+function createReferencePlane(mode) {
+  const config = mode.webAr?.referencePlane;
+  if (!config?.enabled) return;
+
+  const paddingMetres = Number(config.paddingMetres ?? 0);
+  const opacity = Number(config.opacity ?? 0.28);
+  if (!Number.isFinite(paddingMetres) || paddingMetres < 0) {
+    throw new Error(`${mode.id}: webAr.referencePlane.paddingMetresが不正です。`);
+  }
+  if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+    throw new Error(`${mode.id}: webAr.referencePlane.opacityが不正です。`);
+  }
+
+  const bounds = boundsRelativeTo(worldAnchorRoot, activeModel);
+  if (bounds.isEmpty()) return;
+  const size = bounds.getSize(new THREE.Vector3());
+  const centre = bounds.getCenter(new THREE.Vector3());
+  const width = size.x + 2 * paddingMetres;
+  const height = size.y + 2 * paddingMetres;
+  if (!(width > 0 && height > 0)) return;
+
+  const material = new THREE.MeshBasicMaterial({
+    color: config.colour ?? "#75cbed",
+    opacity,
+    transparent: opacity < 1,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  referencePlane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), material);
+  referencePlane.name = "referencePlane";
+  referencePlane.position.set(centre.x, centre.y, 0);
+  referencePlane.renderOrder = -10;
+  worldAnchorRoot.add(referencePlane);
+}
+
 function clearModel() {
+  clearReferencePlane();
   mixer?.stopAllAction();
   mixer = null;
   activeAction = null;
   clipDuration = 0;
   lastTransportUpdateAt = -Infinity;
   transport.hidden = true;
+  ratePicker.disabled = true;
   if (!activeModel) return;
   contentRoot.remove(activeModel);
   activeModel.traverse((node) => {
@@ -316,6 +391,7 @@ async function loadMode(mode) {
   const serial = ++loadSerial;
   modePicker.disabled = true;
   playButton.disabled = true;
+  ratePicker.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
 
   const modelUrl = await assetObjectUrl(versionedUrl(mode.src), "model/gltf-binary");
@@ -332,20 +408,22 @@ async function loadMode(mode) {
   if (!Number.isFinite(physicalScale) || physicalScale <= 0) {
     throw new Error(`${mode.id}: webAr.modelScaleが不正です。`);
   }
-  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? 1);
+  const defaultPlaybackRate = definition.id?.toLowerCase() === "windwave" ? 0.2 : 1;
+  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? defaultPlaybackRate);
   if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
     throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
   }
 
   clearModel();
   selectedMode = mode;
-  playbackRate = requestedPlaybackRate;
+  setPlaybackRate(requestedPlaybackRate);
   activeModel = gltf.scene;
   activeModel.scale.setScalar(physicalScale);
   activeModel.rotation.set(
     ...worldTracking.modelRotationDegree.map(THREE.MathUtils.degToRad)
   );
   contentRoot.add(activeModel);
+  createReferencePlane(mode);
 
   if (clip) {
     mixer = new THREE.AnimationMixer(activeModel);
@@ -356,6 +434,7 @@ async function loadMode(mode) {
     activeAction = action;
     clipDuration = clip.duration;
     mixer.timeScale = playing ? playbackRate : 0;
+    ratePicker.disabled = false;
     updateTransport(true);
   }
 
@@ -479,7 +558,7 @@ function poseFromDetail(detail) {
 }
 
 function averagedStablePose(samples) {
-  if (samples.length < worldTracking.correction.sampleCount) return null;
+  if (samples.length < worldTracking.initialPose.sampleCount) return null;
 
   const position = new THREE.Vector3();
   for (const sample of samples) position.add(sample.position);
@@ -502,9 +581,9 @@ function averagedStablePose(samples) {
   const maxRotationSpread = Math.max(
     ...samples.map((sample) => quaternionAngle(sample.quaternion, quaternion))
   );
-  if (maxPositionSpread > worldTracking.correction.stabilityPositionMetres) return null;
+  if (maxPositionSpread > worldTracking.initialPose.stabilityPositionMetres) return null;
   if (maxRotationSpread > THREE.MathUtils.degToRad(
-    worldTracking.correction.stabilityRotationDegree
+    worldTracking.initialPose.stabilityRotationDegree
   )) return null;
   return { position, quaternion };
 }
@@ -516,82 +595,19 @@ function applyInitialPose(pose) {
   worldAnchorRoot.visible = true;
   poseLocked = true;
   scanGuide.hidden = true;
-  lastCorrectionAt = performance.now();
-  renderTrackingStatus();
-}
-
-function beginCorrection(pose, now) {
-  const positionDistance = worldAnchorRoot.position.distanceTo(pose.position);
-  const rotationDistance = quaternionAngle(worldAnchorRoot.quaternion, pose.quaternion);
-  const positionDeadband = worldTracking.correction.positionDeadbandMetres;
-  const rotationDeadband = THREE.MathUtils.degToRad(
-    worldTracking.correction.rotationDeadbandDegree
-  );
-
-  lastCorrectionAt = now;
-  if (positionDistance <= positionDeadband && rotationDistance <= rotationDeadband) return;
-
-  correction.fromPosition.copy(worldAnchorRoot.position);
-  correction.fromQuaternion.copy(worldAnchorRoot.quaternion);
-
-  const positionFraction = positionDistance > 0
-    ? Math.min(1, worldTracking.correction.maxPositionStepMetres / positionDistance)
-    : 1;
-  correction.toPosition.copy(worldAnchorRoot.position).lerp(pose.position, positionFraction);
-
-  const maxRotationStep = THREE.MathUtils.degToRad(
-    worldTracking.correction.maxRotationStepDegree
-  );
-  const rotationFraction = rotationDistance > 0
-    ? Math.min(1, maxRotationStep / rotationDistance)
-    : 1;
-  correction.toQuaternion.copy(worldAnchorRoot.quaternion).slerp(
-    pose.quaternion,
-    rotationFraction
-  );
-
-  correction.startedAt = now;
-  correction.durationMs = worldTracking.correction.blendDurationMs;
-  correction.active = true;
   renderTrackingStatus();
 }
 
 function addPoseSample(detail) {
-  if (landscapeBlocked) return;
+  if (landscapeBlocked || poseLocked) return;
   const pose = poseFromDetail(detail);
   if (!pose) return;
   poseSample.push(pose);
-  while (poseSample.length > worldTracking.correction.sampleCount) poseSample.shift();
+  while (poseSample.length > worldTracking.initialPose.sampleCount) poseSample.shift();
 
   const stablePose = averagedStablePose(poseSample);
   if (!stablePose) return;
-  if (!poseLocked) {
-    applyInitialPose(stablePose);
-    return;
-  }
-
-  const now = performance.now();
-  if (correction.active || now - lastCorrectionAt < worldTracking.correction.intervalMs) return;
-  beginCorrection(stablePose, now);
-}
-
-function updateCorrection(now) {
-  if (landscapeBlocked || !correction.active) return;
-  const linear = Math.min(1, Math.max(0, (now - correction.startedAt) / correction.durationMs));
-  const eased = linear * linear * (3 - 2 * linear);
-  worldAnchorRoot.position.lerpVectors(
-    correction.fromPosition,
-    correction.toPosition,
-    eased
-  );
-  worldAnchorRoot.quaternion.copy(correction.fromQuaternion).slerp(
-    correction.toQuaternion,
-    eased
-  );
-  if (linear >= 1) {
-    correction.active = false;
-    renderTrackingStatus();
-  }
+  applyInitialPose(stablePose);
 }
 
 function readableTrackingReason(reason) {
@@ -612,30 +628,24 @@ function renderTrackingStatus() {
   }
   if (!poseLocked) {
     setStatus(
-      markerVisible ? "posterを検出 · 位置を安定化中…" : "色付きQR poster全体を映してください",
+      markerVisible
+        ? "posterを検出 · 周囲trackingと初期位置を安定化中…"
+        : "色付きQR poster全体を映してください",
       "scanning"
     );
-    return;
-  }
-  if (correction.active) {
-    setStatus("world tracking継続中 · poster基準へ緩やかに補正中", "correcting");
     return;
   }
   if (trackingStatus === "LIMITED" || trackingStatus === "NOT_AVAILABLE") {
     setStatus(readableTrackingReason(trackingReason), "limited");
     return;
   }
-  if (markerVisible) {
-    setStatus("world tracking中 · posterは低頻度の補正参照", "world");
-  } else {
-    setStatus("world tracking継続中 · posterは画角外でもOK", "world");
-  }
+  setStatus("周囲tracking中 · posterは初期位置合わせ後は参照しません", "world");
 }
 
 function handleImageFound({ detail }) {
   if (landscapeBlocked) return;
   markerVisible = true;
-  poseSample.length = 0;
+  if (!poseLocked) poseSample.length = 0;
   addPoseSample(detail);
   renderTrackingStatus();
 }
@@ -650,7 +660,7 @@ function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
-  poseSample.length = 0;
+  if (!poseLocked) poseSample.length = 0;
   // worldAnchorRoot deliberately remains visible and unchanged. XR8's SLAM
   // camera continues moving in the same world coordinate frame.
   renderTrackingStatus();
@@ -731,7 +741,6 @@ function createWorldPipelineModule() {
       lastFrameTime = now;
       if (!landscapeBlocked && playing) mixer?.update(delta);
       updateTransport();
-      updateCorrection(now);
     },
     onCameraStatusChange: handleCameraStatus,
     onException: handleRuntimeError,
@@ -766,7 +775,6 @@ async function startAr() {
     markerVisible = false;
     poseLocked = false;
     poseSample.length = 0;
-    correction.active = false;
     worldAnchorRoot.visible = false;
     trackingStatus = "INITIALIZING";
     trackingReason = "INITIALIZING";
@@ -850,13 +858,17 @@ playButton.addEventListener("click", () => {
 
 seekSlider.addEventListener("input", seekToSliderValue);
 
+ratePicker.addEventListener("change", () => {
+  setPlaybackRate(ratePicker.value);
+  renderTrackingStatus();
+});
+
 setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   landscapeBlocked = blocked;
   window.clearTimeout(orientationRestoreTimer);
 
   if (blocked) {
-    poseSample.length = 0;
-    correction.active = false;
+    if (!poseLocked) poseSample.length = 0;
     resumeAfterLandscape = Boolean(mixer && activeAction && playing);
     if (resumeAfterLandscape) setPlaying(false);
     setStatus("tabletは横向きにしてください", "limited");
@@ -865,8 +877,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 
   orientationRestoreTimer = window.setTimeout(() => {
     lastFrameTime = performance.now();
-    poseSample.length = 0;
-    correction.active = false;
+    if (!poseLocked) poseSample.length = 0;
     if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
     resumeAfterLandscape = false;
     renderTrackingStatus();

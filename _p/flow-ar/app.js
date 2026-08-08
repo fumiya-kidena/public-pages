@@ -17,7 +17,11 @@ const modeDescription = document.getElementById("mode-description");
 const modeScale = document.getElementById("mode-scale");
 const modeMagnification = document.getElementById("mode-magnification");
 const colourLegend = document.getElementById("colour-legend");
+const playbackControls = document.getElementById("playback-controls");
 const playButton = document.getElementById("play-button");
+const playbackSeek = document.getElementById("playback-seek");
+const playbackTime = document.getElementById("playback-time");
+const playbackSpeed = document.getElementById("playback-speed");
 const arMessage = document.getElementById("ar-message");
 const modeSource = document.getElementById("mode-source");
 const modeSourcePrefix = document.getElementById("mode-source-prefix");
@@ -39,9 +43,13 @@ let resumeAfterVisibility = false;
 let resumeAfterLandscape = false;
 let landscapeBlocked = false;
 let selectionSerial = 0;
+let mediaLoading = true;
+let isSeeking = false;
+let resumeAfterSeek = false;
+let playbackRate = 1;
+let playbackAnimationFrame = null;
 const modeIndex = new Map();
 const caseIndex = new Map();
-
 function modeKey(caseId, modeId) {
   return `${caseId}:${modeId}`;
 }
@@ -71,6 +79,96 @@ function assetSourceUrl(mode, path) {
 
 function assetUrl(mode, path) {
   return assetObjectUrl(assetSourceUrl(mode, path));
+}
+
+function activeMedia() {
+  if (!selectedMode) return null;
+  return selectedMode.kind === "video" ? stageVideo : viewer;
+}
+
+function activeDuration() {
+  const duration = Number(activeMedia()?.duration);
+  return Number.isFinite(duration) && duration > 0.001 ? duration : 0;
+}
+
+function formatPlaybackTime(seconds) {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  return safeSeconds < 100 ? safeSeconds.toFixed(1) : String(Math.round(safeSeconds));
+}
+
+function modePlaybackRate(mode) {
+  const requested = Number(mode?.webAr?.playbackRate ?? mode?.playbackRate);
+  const fallback = mode?.caseId?.toLowerCase() === "windwave" ? 0.2 : 1;
+  return Number.isFinite(requested) && requested > 0 ? requested : fallback;
+}
+
+function applyPlaybackRate() {
+  stageVideo.playbackRate = playbackRate;
+  viewer.timeScale = playbackRate;
+  if (![...playbackSpeed.options].some((option) => Number(option.value) === playbackRate)) {
+    const option = document.createElement("option");
+    option.value = String(playbackRate);
+    option.textContent = `${playbackRate}×`;
+    playbackSpeed.append(option);
+  }
+  playbackSpeed.value = String(playbackRate);
+}
+
+function refreshPlaybackControls() {
+  const duration = activeDuration();
+  const available = Boolean(selectedMode && duration && !mediaLoading);
+  playbackControls.hidden = !available;
+  playButton.disabled = mediaLoading || !available;
+  playbackSeek.disabled = mediaLoading || !available;
+  playbackSpeed.disabled = mediaLoading || !available;
+  if (!available) {
+    playbackSeek.value = "0";
+    playbackTime.value = "0.0 / 0.0 s";
+    playbackTime.textContent = playbackTime.value;
+    return;
+  }
+
+  const currentTime = Math.min(duration, Math.max(0, Number(activeMedia().currentTime) || 0));
+  if (!isSeeking) playbackSeek.value = String(Math.round((currentTime / duration) * 1000));
+  playbackTime.value = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)} s`;
+  playbackTime.textContent = playbackTime.value;
+}
+
+function playbackAnimationTick() {
+  playbackAnimationFrame = null;
+  refreshPlaybackControls();
+  if (isPlaying && !isSeeking && !document.hidden && !playbackControls.hidden) {
+    playbackAnimationFrame = window.requestAnimationFrame(playbackAnimationTick);
+  }
+}
+
+function schedulePlaybackRefresh() {
+  if (playbackAnimationFrame === null) {
+    playbackAnimationFrame = window.requestAnimationFrame(playbackAnimationTick);
+  }
+}
+
+function pauseActiveMedia() {
+  activeMedia()?.pause();
+  isPlaying = false;
+  updatePlayButton();
+  refreshPlaybackControls();
+}
+
+function playActiveMedia() {
+  const media = activeMedia();
+  if (!media) return;
+  const playResult = media.play();
+  isPlaying = true;
+  updatePlayButton();
+  schedulePlaybackRefresh();
+  if (playResult?.catch) {
+    playResult.catch(() => {
+      isPlaying = false;
+      updatePlayButton();
+      refreshPlaybackControls();
+    });
+  }
 }
 
 function registerCase(caseDefinition, group, showCaseLabel = false) {
@@ -186,10 +284,12 @@ function updateModeUrl(mode) {
 }
 
 function setLoading(isLoading, message = "3Dを読み込み中…") {
+  mediaLoading = isLoading;
   viewer.setAttribute("aria-busy", String(isLoading));
   loadState.hidden = !isLoading;
   loadState.textContent = message;
-  playButton.disabled = isLoading;
+  if (isLoading) playbackControls.hidden = true;
+  refreshPlaybackControls();
 }
 
 function updatePlayButton() {
@@ -286,6 +386,10 @@ async function selectMode(key, syncUrl = true) {
   // Scientific result playback is primary content, not decorative motion.
   // Keep the explicit pause control available, but start the selected result.
   isPlaying = true;
+  isSeeking = false;
+  resumeAfterSeek = false;
+  playbackRate = modePlaybackRate(mode);
+  applyPlaybackRate();
 
   setLoading(true, usesEncryptedAssets() ? "暗号assetを復号中…" : "3Dを読み込み中…");
   const referenceUrlPromise = mode.reference
@@ -322,12 +426,10 @@ async function selectMode(key, syncUrl = true) {
       stageVideo.src = videoSrc;
       stageVideo.load();
     }
+    applyPlaybackRate();
     setLoading(false);
     if (isPlaying) {
-      stageVideo.play().catch(() => {
-        isPlaying = false;
-        updatePlayButton();
-      });
+      playActiveMedia();
     }
   } else {
     stageVideo.pause();
@@ -366,11 +468,47 @@ modePicker.addEventListener("change", () => {
 });
 
 playButton.addEventListener("click", () => {
-  const activeMedia = selectedMode.kind === "video" ? stageVideo : viewer;
-  if (isPlaying) activeMedia.pause();
-  else activeMedia.play();
-  isPlaying = !isPlaying;
-  updatePlayButton();
+  if (isPlaying) pauseActiveMedia();
+  else playActiveMedia();
+});
+
+playbackSeek.addEventListener("input", () => {
+  const duration = activeDuration();
+  if (!duration) return;
+  if (!isSeeking) {
+    isSeeking = true;
+    resumeAfterSeek = isPlaying;
+    activeMedia().pause();
+    isPlaying = false;
+    updatePlayButton();
+  }
+  activeMedia().currentTime = (Number(playbackSeek.value) / 1000) * duration;
+  const currentTime = Number(activeMedia().currentTime) || 0;
+  playbackTime.value = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)} s`;
+  playbackTime.textContent = playbackTime.value;
+});
+
+function finishSeeking() {
+  if (!isSeeking) return;
+  isSeeking = false;
+  const shouldResume = resumeAfterSeek
+    && !landscapeBlocked
+    && !document.hidden;
+  resumeAfterSeek = false;
+  if (shouldResume) playActiveMedia();
+  else {
+    updatePlayButton();
+    refreshPlaybackControls();
+  }
+}
+
+playbackSeek.addEventListener("change", finishSeeking);
+playbackSeek.addEventListener("pointercancel", finishSeeking);
+
+playbackSpeed.addEventListener("change", () => {
+  playbackRate = Number(playbackSpeed.value);
+  applyPlaybackRate();
+  refreshPlaybackControls();
 });
 
 reference.addEventListener("toggle", () => {
@@ -382,12 +520,29 @@ stageVideo.addEventListener("play", () => {
   if (selectedMode?.kind !== "video") return;
   isPlaying = true;
   updatePlayButton();
+  schedulePlaybackRefresh();
 });
 
 stageVideo.addEventListener("pause", () => {
   if (selectedMode?.kind !== "video") return;
   isPlaying = false;
   updatePlayButton();
+  refreshPlaybackControls();
+});
+
+stageVideo.addEventListener("loadedmetadata", () => {
+  if (selectedMode?.kind !== "video") return;
+  applyPlaybackRate();
+  refreshPlaybackControls();
+  if (isPlaying) schedulePlaybackRefresh();
+});
+
+stageVideo.addEventListener("durationchange", () => {
+  if (selectedMode?.kind === "video") refreshPlaybackControls();
+});
+
+stageVideo.addEventListener("timeupdate", () => {
+  if (selectedMode?.kind === "video" && !isSeeking) refreshPlaybackControls();
 });
 
 stageVideo.addEventListener("error", () => {
@@ -426,9 +581,11 @@ viewer.addEventListener("load", () => {
   if (selectedMode?.kind !== "model") return;
   setLoading(false);
   updateArAvailability();
+  applyPlaybackRate();
   const initialTime = selectedMode.initialTime;
   if (Number.isFinite(initialTime)) viewer.currentTime = initialTime;
-  if (isPlaying) viewer.play();
+  refreshPlaybackControls();
+  if (isPlaying) playActiveMedia();
   else viewer.pause();
 });
 

@@ -38,6 +38,8 @@ function encryptedPayloadUrl(entry, logicalAssetPath) {
     : "";
   if (
     url.origin !== assetPackRoot.origin
+    || url.username
+    || url.password
     || url.search
     || url.hash
     || !/^[0-9a-f]{32}\.enc$/i.test(relative)
