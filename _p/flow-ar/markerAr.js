@@ -11,6 +11,12 @@ import {
   carryUnlockFragment,
   fetchAssetJson
 } from "./secureAsset.js?v=1";
+import {
+  calibratedWorldScale,
+  maySampleInitialPose,
+  stableMeanScale,
+  targetPhysicalSize
+} from "./markerPoseCore.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -57,6 +63,7 @@ let assetRoot;
 let worldTracking;
 let selectedMode;
 let targetData;
+let targetSize;
 let xr8;
 let xrScene;
 let activeModel;
@@ -71,7 +78,10 @@ let playing = true;
 let markerVisible = false;
 let poseLocked = false;
 let pipelineAdded = false;
-let reloadBeforeRetry = false;
+let startPromise;
+let runtimeNeedsStop = false;
+let autoStartPending = false;
+let automaticStartInFlight = false;
 let loadSerial = 0;
 let lastFrameTime = performance.now();
 let trackingStatus = "INITIALIZING";
@@ -85,6 +95,10 @@ function setStatus(message, state = "loading") {
   if (status.textContent === message && status.dataset.state === state) return;
   status.textContent = message;
   status.dataset.state = state;
+}
+
+function syncWorldAnchorVisibility() {
+  worldAnchorRoot.visible = poseLocked && Boolean(activeModel);
 }
 
 function currentClipTime() {
@@ -345,7 +359,8 @@ function validateWorldTracking(caseDefinition) {
     initialPose: {
       sampleCount: Math.max(4, Math.round(positiveNumber(initialPoseConfig.sampleCount, 8))),
       stabilityPositionMetres: positiveNumber(initialPoseConfig.stabilityPositionMetres, 0.015),
-      stabilityRotationDegree: positiveNumber(initialPoseConfig.stabilityRotationDegree, 3)
+      stabilityRotationDegree: positiveNumber(initialPoseConfig.stabilityRotationDegree, 3),
+      stabilityScaleFraction: positiveNumber(initialPoseConfig.stabilityScaleFraction, 0.04)
     }
   };
 }
@@ -402,11 +417,6 @@ async function loadDefinition() {
     : deviceProfile.isAppleTablet
       ? "iPad Safari · 横向き"
       : "iPhone Safari／Androidの対応browser";
-  markerPreview.src = await assetObjectUrl(
-    versionedUrl(definition.anchor.image),
-    "image/png"
-  );
-  markerPreview.hidden = false;
   updateLinks();
 }
 
@@ -498,6 +508,7 @@ function clearModel() {
     for (const material of materials) material?.dispose();
   });
   activeModel = null;
+  syncWorldAnchorVisibility();
 }
 
 async function loadMode(mode) {
@@ -537,6 +548,7 @@ async function loadMode(mode) {
     ...worldTracking.modelRotationDegree.map(THREE.MathUtils.degToRad)
   );
   contentRoot.add(activeModel);
+  syncWorldAnchorVisibility();
   createReferencePlane(mode);
 
   if (clip) {
@@ -668,7 +680,14 @@ function poseFromDetail(detail) {
     return null;
   }
   quaternion.normalize();
-  return { position, quaternion, capturedAt: performance.now() };
+  const calibratedScale = calibratedWorldScale(detail, targetSize);
+  return {
+    position,
+    quaternion,
+    scale: calibratedScale ?? 1,
+    scaleCalibrated: calibratedScale !== null,
+    capturedAt: performance.now()
+  };
 }
 
 function averagedStablePose(samples) {
@@ -695,25 +714,33 @@ function averagedStablePose(samples) {
   const maxRotationSpread = Math.max(
     ...samples.map((sample) => quaternionAngle(sample.quaternion, quaternion))
   );
+  const scale = stableMeanScale(
+    samples,
+    worldTracking.initialPose.stabilityScaleFraction
+  );
   if (maxPositionSpread > worldTracking.initialPose.stabilityPositionMetres) return null;
   if (maxRotationSpread > THREE.MathUtils.degToRad(
     worldTracking.initialPose.stabilityRotationDegree
   )) return null;
-  return { position, quaternion };
+  if (scale === null) return null;
+  return { position, quaternion, scale };
 }
 
 function applyInitialPose(pose) {
   worldAnchorRoot.position.copy(pose.position);
   worldAnchorRoot.quaternion.copy(pose.quaternion);
-  worldAnchorRoot.scale.set(1, 1, 1);
-  worldAnchorRoot.visible = true;
+  worldAnchorRoot.scale.setScalar(pose.scale);
   poseLocked = true;
+  syncWorldAnchorVisibility();
   scanGuide.hidden = true;
   renderTrackingStatus();
 }
 
 function addPoseSample(detail) {
-  if (landscapeBlocked || poseLocked) return;
+  if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
+    if (!poseLocked) poseSample.length = 0;
+    return;
+  }
   const pose = poseFromDetail(detail);
   if (!pose) return;
   poseSample.push(pose);
@@ -740,6 +767,10 @@ function renderTrackingStatus() {
     setStatus("tabletは横向きにしてください", "limited");
     return;
   }
+  if (!activeModel) {
+    setStatus("camera起動済み · 3D modelを読み込み中…", "loading");
+    return;
+  }
   if (!poseLocked) {
     setStatus(
       markerVisible
@@ -753,10 +784,11 @@ function renderTrackingStatus() {
     setStatus(readableTrackingReason(trackingReason), "limited");
     return;
   }
-  setStatus("周囲tracking中 · posterは初期位置合わせ後は参照しません", "world");
+  setStatus("world座標に固定 · posterは初期位置合わせ後は参照しません", "world");
 }
 
 function handleImageFound({ detail }) {
+  if (poseLocked) return;
   if (landscapeBlocked) return;
   markerVisible = true;
   if (!poseLocked) poseSample.length = 0;
@@ -765,12 +797,14 @@ function handleImageFound({ detail }) {
 }
 
 function handleImageUpdated({ detail }) {
+  if (poseLocked) return;
   if (landscapeBlocked) return;
   markerVisible = true;
   addPoseSample(detail);
 }
 
 function handleImageLost({ detail }) {
+  if (poseLocked) return;
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
@@ -781,25 +815,46 @@ function handleImageLost({ detail }) {
 }
 
 function handleTrackingStatus({ detail }) {
-  if (landscapeBlocked) return;
   trackingStatus = detail?.status || trackingStatus;
   trackingReason = detail?.reason || trackingReason;
+  if (!poseLocked && trackingStatus !== "NORMAL") poseSample.length = 0;
+  if (landscapeBlocked) return;
   renderTrackingStatus();
 }
 
-function handleRuntimeError(error) {
+function showStartFallback(error, { retry = false } = {}) {
   console.error(error);
   running = false;
-  reloadBeforeRetry = true;
+  runtimeNeedsStop = pipelineAdded;
   intro.hidden = false;
+  markerPreview.hidden = true;
+  introCopy.textContent = retry
+    ? "cameraを自動起動できませんでした。下のbuttonを1回押してください。"
+    : "この端末ではcamera ARを開始できません。fallback表示を使ってください。";
   const message = error?.message || "";
   introError.textContent = /No valid session manager/i.test(message)
     ? "このbrowser／端末ではworld trackingを開始できません。iPhoneまたはAndroidの対応browserで開くか、image-marker版を使ってください。"
     : message || "world trackingを開始できませんでした。image-marker版を試してください。";
   introError.hidden = false;
-  startButton.disabled = false;
-  startButton.textContent = "再読み込みして試す";
+  startButton.hidden = !retry;
+  startButton.disabled = !retry;
+  startButton.textContent = retry ? "cameraを開始" : "cameraを開始できません";
   setStatus("world trackingを開始できませんでした", "error");
+}
+
+function mayNeedUserActivation(error) {
+  const name = String(error?.name || "");
+  const code = String(error?.code || "");
+  const message = String(error?.message || "");
+  return name === "NotAllowedError"
+    || code === "DENY_CAMERA"
+    || /user\s*(gesture|activation)|not\s*allowed|permission|権限/i.test(message);
+}
+
+function handleRuntimeError(error) {
+  showStartFallback(error, {
+    retry: automaticStartInFlight && mayNeedUserActivation(error)
+  });
 }
 
 function handleCameraStatus({ status: cameraStatus, reason }) {
@@ -813,7 +868,9 @@ function handleCameraStatus({ status: cameraStatus, reason }) {
   }
   if (cameraStatus !== "failed") return;
 
-  handleRuntimeError(new Error(cameraFailureMessage(reason)));
+  const error = new Error(cameraFailureMessage(reason));
+  error.code = reason;
+  handleRuntimeError(error);
 }
 
 function createWorldPipelineModule() {
@@ -867,29 +924,38 @@ function createWorldPipelineModule() {
   };
 }
 
-async function startAr() {
+async function runArAttempt({ automatic = false } = {}) {
   if (isTabletPortrait()) {
+    autoStartPending = true;
     setStatus("tabletは横向きにしてください", "limited");
     return;
   }
 
+  autoStartPending = false;
+  intro.hidden = true;
   startButton.disabled = true;
   startButton.textContent = "cameraを起動中…";
   introError.hidden = true;
   setStatus("cameraとworld trackingを起動中…", "loading");
+  automaticStartInFlight = automatic;
 
   try {
     assertCameraEnvironment();
-    if (!xr8 || !targetData || !activeModel) {
+    if (!xr8 || !targetData) {
       throw new Error("world ARの準備が完了していません。");
     }
 
+    if (runtimeNeedsStop) {
+      try { await xr8.stop?.(); } catch {}
+      runtimeNeedsStop = false;
+    }
     await requestTabletLandscapeMode();
 
     markerVisible = false;
     poseLocked = false;
     poseSample.length = 0;
     worldAnchorRoot.visible = false;
+    worldAnchorRoot.scale.set(1, 1, 1);
     trackingStatus = "INITIALIZING";
     trackingReason = "INITIALIZING";
 
@@ -915,6 +981,20 @@ async function startAr() {
     await xr8.run(allowedDevices ? { canvas, allowedDevices } : { canvas });
   } catch (error) {
     handleRuntimeError(error);
+  } finally {
+    automaticStartInFlight = false;
+  }
+}
+
+async function startAr(options = {}) {
+  if (running) return;
+  if (startPromise) return startPromise;
+
+  startPromise = runArAttempt(options);
+  try {
+    await startPromise;
+  } finally {
+    startPromise = undefined;
   }
 }
 
@@ -924,41 +1004,48 @@ async function prepare() {
     const enginePromise = waitForEngine();
     await loadDefinition();
     assertCameraEnvironment();
-    xr8 = await enginePromise;
+    const targetPromise = loadTargetData();
+    const [engine, loadedTarget] = await Promise.all([enginePromise, targetPromise]);
+    xr8 = engine;
     allowedDevices = worldArCompatibility(xr8);
-    const [loadedTarget] = await Promise.all([
-      loadTargetData(),
-      loadMode(selectedMode)
-    ]);
     targetData = loadedTarget;
-    modePicker.disabled = false;
+    targetSize = targetPhysicalSize(
+      targetData.properties,
+      definition.anchor.physicalWidthCm
+    );
     startButton.disabled = false;
     startButton.textContent = "cameraを開始";
-    setStatus("準備完了 · 最初だけposterで位置を合わせます", "ready");
+    setStatus("cameraを自動起動中…", "ready");
+    void startAr({ automatic: true });
+  } catch (error) {
+    showStartFallback(
+      error?.message ? error : new Error("world ARを準備できませんでした。"),
+      { retry: false }
+    );
+    return;
+  }
+
+  try {
+    await loadMode(selectedMode);
   } catch (error) {
     console.error(error);
-    introError.textContent = error?.message || "world ARを準備できませんでした。";
-    introError.hidden = false;
-    startButton.disabled = true;
-    setStatus("world ARを準備できませんでした", "error");
+    modePicker.disabled = false;
+    setStatus(error?.message || "3D modelを読み込めませんでした", "error");
   }
 }
 
-startButton.addEventListener("click", () => {
-  if (reloadBeforeRetry) {
-    window.location.reload();
-    return;
-  }
-  startAr();
+startButton.addEventListener("click", async () => {
+  await startAr();
 });
 
 modePicker.addEventListener("change", async () => {
   const next = definition.modes.find((mode) => mode.id === modePicker.value);
-  if (!next || next === selectedMode) return;
+  if (!next || (next === selectedMode && activeModel)) return;
   try {
     await loadMode(next);
   } catch (error) {
     console.error(error);
+    if (selectedMode) modePicker.value = selectedMode.id;
     setStatus(error?.message || "3D modeを切り替えられませんでした", "error");
     modePicker.disabled = false;
   }
@@ -994,6 +1081,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
     if (!poseLocked) poseSample.length = 0;
     if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
     resumeAfterLandscape = false;
+    if (autoStartPending && !running) void startAr({ automatic: true });
     renderTrackingStatus();
   }, 200);
 });
