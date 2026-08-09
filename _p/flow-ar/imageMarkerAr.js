@@ -76,6 +76,120 @@ function currentClipTime() {
   return ((activeAction.time % clipDuration) + clipDuration) % clipDuration;
 }
 
+function positiveTimingNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function nonNegativeTimingNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function modeTiming(mode, duration = 0) {
+  const timing = mode?.timing || {};
+  const sourceDurationSecond = positiveTimingNumber(timing.sourceDurationSecond);
+  const storedFrameCount = positiveTimingNumber(timing.storedFrameCount);
+  const sourceFrameCount = positiveTimingNumber(timing.sourceFrameCount);
+  const explicitKeyframeFps = nonNegativeTimingNumber(timing.baseKeyframeFps);
+  const defaultPlaybackRate = positiveTimingNumber(timing.defaultPlaybackRate);
+  const clipSecond = positiveTimingNumber(duration);
+  const basis = timing.basis === "physical" && sourceDurationSecond
+    ? "physical"
+    : "display";
+  const basisDuration = basis === "physical" ? sourceDurationSecond : clipSecond;
+  const intervalCount = basis === "physical" && storedFrameCount > 1
+    ? storedFrameCount - 1
+    : storedFrameCount;
+  const baseKeyframeFps = explicitKeyframeFps !== null
+    ? explicitKeyframeFps
+    : storedFrameCount === 1
+      ? 0
+      : (intervalCount && basisDuration ? intervalCount / basisDuration : null);
+  return {
+    basis,
+    sourceDurationSecond,
+    sourceFrameCount,
+    storedFrameCount,
+    baseKeyframeFps,
+    defaultPlaybackRate
+  };
+}
+
+function formatTimingPair(elapsedSecond, totalSecond) {
+  const safeElapsed = Number.isFinite(elapsedSecond) ? Math.max(0, elapsedSecond) : 0;
+  const safeTotal = Number.isFinite(totalSecond) ? Math.max(0, totalSecond) : 0;
+  const useMillisecond = safeTotal < 0.1;
+  const multiplier = useMillisecond ? 1000 : 1;
+  const scaledTotal = safeTotal * multiplier;
+  const digits = useMillisecond ? 3 : scaledTotal < 1 ? 3 : scaledTotal < 10 ? 2 : scaledTotal < 100 ? 1 : 0;
+  return `${(safeElapsed * multiplier).toFixed(digits)} / ${scaledTotal.toFixed(digits)} ${useMillisecond ? "ms" : "s"}`;
+}
+
+function formatTimingRate(rate) {
+  return Number(rate.toPrecision(3)).toString();
+}
+
+function playbackBasisLabel(mode = selectedMode) {
+  return modeTiming(mode).basis === "physical" ? "real time" : "display time";
+}
+
+function updatePlaybackRateLabels() {
+  const basisLabel = playbackBasisLabel();
+  for (const option of ratePicker.options) {
+    const rate = Number(option.value);
+    if (Number.isFinite(rate) && rate > 0) {
+      option.textContent = `${formatTimingRate(rate)}× ${basisLabel}`;
+    }
+  }
+  ratePicker.setAttribute("aria-label", `animation再生速度（${basisLabel}）`);
+}
+
+function configurePlaybackRateOptions(mode, defaultRate) {
+  const physical = modeTiming(mode).basis === "physical";
+  const rates = physical
+    ? [0.5, 1, 2, 4].map((factor) => defaultRate * factor)
+    : [0.25, 0.5, 1, 2];
+  const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
+    .filter((rate) => Number.isFinite(rate) && rate > 0)
+    .sort((left, right) => left - right);
+  ratePicker.replaceChildren(...uniqueRates.map((rate) => {
+    const option = document.createElement("option");
+    option.value = String(rate);
+    return option;
+  }));
+  updatePlaybackRateLabels();
+}
+
+function playbackTimingText(clipTime) {
+  const duration = positiveTimingNumber(clipDuration);
+  if (!duration) return "timing unavailable";
+  const timing = modeTiming(selectedMode, duration);
+  const fraction = Math.min(1, Math.max(0, clipTime / duration));
+  const viewingTotal = timing.basis === "physical"
+    ? timing.sourceDurationSecond / playbackRate
+    : duration / playbackRate;
+  const viewingElapsed = fraction * viewingTotal;
+  const viewing = `viewing ${formatTimingPair(viewingElapsed, viewingTotal)}`;
+  const simulation = timing.basis === "physical"
+    ? `simulation ${formatTimingPair(fraction * timing.sourceDurationSecond, timing.sourceDurationSecond)}`
+    : "simulation time unknown";
+  const effectiveFps = timing.baseKeyframeFps
+    ? ` · ≈${formatTimingRate(timing.baseKeyframeFps * playbackRate)} keyframe/s`
+    : "";
+  const frameCount = timing.storedFrameCount
+    ? ` · ${Math.round(timing.storedFrameCount)}${timing.sourceFrameCount ? `/${Math.round(timing.sourceFrameCount)}` : ""} frame`
+    : "";
+  return `${simulation} · ${viewing}${effectiveFps}${frameCount}`;
+}
+
+function enginePlaybackRate() {
+  const timing = modeTiming(selectedMode, clipDuration);
+  return timing.basis === "physical" && clipDuration > 0
+    ? playbackRate * clipDuration / timing.sourceDurationSecond
+    : playbackRate;
+}
+
 function updateTransport(force = false) {
   if (!activeAction || clipDuration <= 0) {
     transport.hidden = true;
@@ -90,16 +204,14 @@ function updateTransport(force = false) {
   const clipTime = currentClipTime();
   const sliderValue = Math.round((clipTime / clipDuration) * 1000);
   seekSlider.value = String(sliderValue);
-  seekTime.textContent = `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)} s`;
-  seekSlider.setAttribute(
-    "aria-valuetext",
-    `${clipTime.toFixed(1)} / ${clipDuration.toFixed(1)}秒、${playbackRate}倍速`
-  );
+  seekTime.textContent = playbackTimingText(clipTime);
+  seekSlider.setAttribute("aria-valuetext", seekTime.textContent);
 }
 
 function selectPlaybackRateOption(rate) {
   const matchingOption = [...ratePicker.options].find(
-    (option) => Math.abs(Number(option.value) - rate) < 1e-9
+    (option) => Math.abs(Number(option.value) - rate)
+      <= Math.max(1e-12, Math.abs(rate)) * 1e-10
   );
   if (matchingOption) {
     ratePicker.value = matchingOption.value;
@@ -108,11 +220,11 @@ function selectPlaybackRateOption(rate) {
 
   const option = document.createElement("option");
   option.value = String(rate);
-  option.textContent = `${rate}×`;
   const nextOption = [...ratePicker.options].find(
     (candidate) => Number(candidate.value) > rate
   );
   ratePicker.insertBefore(option, nextOption || null);
+  updatePlaybackRateLabels();
   ratePicker.value = option.value;
 }
 
@@ -121,14 +233,15 @@ function setPlaybackRate(nextRate) {
   if (!Number.isFinite(rate) || rate <= 0) return;
   playbackRate = rate;
   selectPlaybackRateOption(rate);
-  if (mixer) mixer.timeScale = playing ? playbackRate : 0;
+  updatePlaybackRateLabels();
+  if (mixer) mixer.timeScale = playing ? enginePlaybackRate() : 0;
   updateTransport(true);
 }
 
 function setPlaying(nextPlaying) {
   if (!mixer || !activeAction) return;
   playing = Boolean(nextPlaying);
-  mixer.timeScale = playing ? playbackRate : 0;
+  mixer.timeScale = playing ? enginePlaybackRate() : 0;
   playButton.textContent = playing ? "一時停止" : "再生";
   playButton.setAttribute("aria-label", playing ? "animationを一時停止" : "animationを再生");
   updateTransport(true);
@@ -372,6 +485,7 @@ async function loadMode(mode) {
   if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
     throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
   }
+  configurePlaybackRateOptions(mode, requestedPlaybackRate);
   setPlaybackRate(requestedPlaybackRate);
   const normalizedScale = physicalScale / webTracking.physicalWidthMetres;
   activeModel.scale.setScalar(normalizedScale);
@@ -391,7 +505,7 @@ async function loadMode(mode) {
     action.play();
     activeAction = action;
     clipDuration = clip.duration;
-    mixer.timeScale = playing ? playbackRate : 0;
+    mixer.timeScale = playing ? enginePlaybackRate() : 0;
     ratePicker.disabled = false;
     updateTransport(true);
   }

@@ -91,9 +91,111 @@ function activeDuration() {
   return Number.isFinite(duration) && duration > 0.001 ? duration : 0;
 }
 
-function formatPlaybackTime(seconds) {
-  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-  return safeSeconds < 100 ? safeSeconds.toFixed(1) : String(Math.round(safeSeconds));
+function positiveTimingNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function nonNegativeTimingNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function modeTiming(mode, clipDuration = 0) {
+  const timing = mode?.timing || {};
+  const sourceDurationSecond = positiveTimingNumber(timing.sourceDurationSecond);
+  const storedFrameCount = positiveTimingNumber(timing.storedFrameCount);
+  const sourceFrameCount = positiveTimingNumber(timing.sourceFrameCount);
+  const explicitKeyframeFps = nonNegativeTimingNumber(timing.baseKeyframeFps);
+  const defaultPlaybackRate = positiveTimingNumber(timing.defaultPlaybackRate);
+  const duration = positiveTimingNumber(clipDuration);
+  const basis = timing.basis === "physical" && sourceDurationSecond
+    ? "physical"
+    : "display";
+  const basisDuration = basis === "physical" ? sourceDurationSecond : duration;
+  const intervalCount = basis === "physical" && storedFrameCount > 1
+    ? storedFrameCount - 1
+    : storedFrameCount;
+  const baseKeyframeFps = explicitKeyframeFps !== null
+    ? explicitKeyframeFps
+    : storedFrameCount === 1
+      ? 0
+      : (intervalCount && basisDuration ? intervalCount / basisDuration : null);
+  return {
+    basis,
+    sourceDurationSecond,
+    sourceFrameCount,
+    storedFrameCount,
+    baseKeyframeFps,
+    defaultPlaybackRate
+  };
+}
+
+function formatTimingPair(elapsedSecond, totalSecond) {
+  const safeElapsed = Number.isFinite(elapsedSecond) ? Math.max(0, elapsedSecond) : 0;
+  const safeTotal = Number.isFinite(totalSecond) ? Math.max(0, totalSecond) : 0;
+  const useMillisecond = safeTotal < 0.1;
+  const multiplier = useMillisecond ? 1000 : 1;
+  const scaledTotal = safeTotal * multiplier;
+  const digits = useMillisecond ? 3 : scaledTotal < 1 ? 3 : scaledTotal < 10 ? 2 : scaledTotal < 100 ? 1 : 0;
+  return `${(safeElapsed * multiplier).toFixed(digits)} / ${scaledTotal.toFixed(digits)} ${useMillisecond ? "ms" : "s"}`;
+}
+
+function formatTimingRate(rate) {
+  return Number(rate.toPrecision(3)).toString();
+}
+
+function playbackBasisLabel(mode = selectedMode) {
+  return modeTiming(mode).basis === "physical" ? "real time" : "display time";
+}
+
+function updatePlaybackRateLabels() {
+  const basisLabel = playbackBasisLabel();
+  for (const option of playbackSpeed.options) {
+    const rate = Number(option.value);
+    if (Number.isFinite(rate) && rate > 0) {
+      option.textContent = `${formatTimingRate(rate)}× ${basisLabel}`;
+    }
+  }
+  playbackSpeed.setAttribute("aria-label", `再生速度（${basisLabel}）`);
+}
+
+function configurePlaybackRateOptions(mode, defaultRate) {
+  const physical = modeTiming(mode).basis === "physical";
+  const rates = physical
+    ? [0.5, 1, 2, 4].map((factor) => defaultRate * factor)
+    : [0.25, 0.5, 1, 2];
+  const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
+    .filter((rate) => Number.isFinite(rate) && rate > 0)
+    .sort((left, right) => left - right);
+  playbackSpeed.replaceChildren(...uniqueRates.map((rate) => {
+    const option = document.createElement("option");
+    option.value = String(rate);
+    return option;
+  }));
+  updatePlaybackRateLabels();
+}
+
+function playbackTimingText(currentTime, clipDuration) {
+  const duration = positiveTimingNumber(clipDuration);
+  if (!duration) return "timing unavailable";
+  const timing = modeTiming(selectedMode, duration);
+  const fraction = Math.min(1, Math.max(0, currentTime / duration));
+  const viewingTotal = timing.basis === "physical"
+    ? timing.sourceDurationSecond / playbackRate
+    : duration / playbackRate;
+  const viewingElapsed = fraction * viewingTotal;
+  const viewing = `viewing ${formatTimingPair(viewingElapsed, viewingTotal)}`;
+  const simulation = timing.basis === "physical"
+    ? `simulation ${formatTimingPair(fraction * timing.sourceDurationSecond, timing.sourceDurationSecond)}`
+    : "simulation time unknown";
+  const effectiveFps = timing.baseKeyframeFps
+    ? ` · ≈${formatTimingRate(timing.baseKeyframeFps * playbackRate)} keyframe/s`
+    : "";
+  const frameCount = timing.storedFrameCount
+    ? ` · ${Math.round(timing.storedFrameCount)}${timing.sourceFrameCount ? `/${Math.round(timing.sourceFrameCount)}` : ""} frame`
+    : "";
+  return `${simulation} · ${viewing}${effectiveFps}${frameCount}`;
 }
 
 function modePlaybackRate(mode) {
@@ -102,16 +204,34 @@ function modePlaybackRate(mode) {
   return Number.isFinite(requested) && requested > 0 ? requested : fallback;
 }
 
+function enginePlaybackRate() {
+  const duration = activeDuration();
+  const timing = modeTiming(selectedMode, duration);
+  if (timing.basis !== "physical" || !duration) return playbackRate;
+  if (selectedMode?.kind === "video") {
+    const encodedRate = timing.defaultPlaybackRate || modePlaybackRate(selectedMode);
+    return playbackRate / encodedRate;
+  }
+  return playbackRate * duration / timing.sourceDurationSecond;
+}
+
 function applyPlaybackRate() {
-  stageVideo.playbackRate = playbackRate;
-  viewer.timeScale = playbackRate;
-  if (![...playbackSpeed.options].some((option) => Number(option.value) === playbackRate)) {
+  const mediaRate = enginePlaybackRate();
+  if (selectedMode?.kind === "video") stageVideo.playbackRate = mediaRate;
+  else viewer.timeScale = mediaRate;
+  let matchingOption = [...playbackSpeed.options].find((option) => (
+    Math.abs(Number(option.value) - playbackRate)
+      <= Math.max(1, Math.abs(playbackRate)) * 1e-10
+  ));
+  if (!matchingOption) {
     const option = document.createElement("option");
     option.value = String(playbackRate);
     option.textContent = `${playbackRate}×`;
     playbackSpeed.append(option);
+    matchingOption = option;
   }
-  playbackSpeed.value = String(playbackRate);
+  updatePlaybackRateLabels();
+  playbackSpeed.value = matchingOption.value;
 }
 
 function refreshPlaybackControls() {
@@ -123,14 +243,14 @@ function refreshPlaybackControls() {
   playbackSpeed.disabled = mediaLoading || !available;
   if (!available) {
     playbackSeek.value = "0";
-    playbackTime.value = "0.0 / 0.0 s";
+    playbackTime.value = "timing unavailable";
     playbackTime.textContent = playbackTime.value;
     return;
   }
 
   const currentTime = Math.min(duration, Math.max(0, Number(activeMedia().currentTime) || 0));
   if (!isSeeking) playbackSeek.value = String(Math.round((currentTime / duration) * 1000));
-  playbackTime.value = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)} s`;
+  playbackTime.value = playbackTimingText(currentTime, duration);
   playbackTime.textContent = playbackTime.value;
 }
 
@@ -389,6 +509,7 @@ async function selectMode(key, syncUrl = true) {
   isSeeking = false;
   resumeAfterSeek = false;
   playbackRate = modePlaybackRate(mode);
+  configurePlaybackRateOptions(mode, playbackRate);
   applyPlaybackRate();
 
   setLoading(true, usesEncryptedAssets() ? "暗号assetを復号中…" : "3Dを読み込み中…");
@@ -484,7 +605,7 @@ playbackSeek.addEventListener("input", () => {
   }
   activeMedia().currentTime = (Number(playbackSeek.value) / 1000) * duration;
   const currentTime = Number(activeMedia().currentTime) || 0;
-  playbackTime.value = `${formatPlaybackTime(currentTime)} / ${formatPlaybackTime(duration)} s`;
+  playbackTime.value = playbackTimingText(currentTime, duration);
   playbackTime.textContent = playbackTime.value;
 });
 
