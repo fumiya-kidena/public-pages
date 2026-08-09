@@ -43,6 +43,11 @@ const status = document.getElementById("status");
 const platformNote = document.getElementById("platform-note");
 const orientationGate = document.getElementById("orientation-gate");
 
+// The QR route is camera-first. Keep the explanatory card out of the normal
+// loading path; showStartFallback() exposes it only when startup needs help.
+intro.hidden = true;
+startButton.hidden = true;
+
 const query = new URLSearchParams(window.location.search);
 const requestedCase = query.get("case");
 const requestedMode = query.get("mode");
