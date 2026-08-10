@@ -22,12 +22,14 @@ import {
   stableMeanScale,
   targetPhysicalSize
 } from "./markerPoseCore.js?v=4";
+import { installArUiOverlayGuard } from "./arUiOverlayCore.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
 window.THREE = THREE;
 
 const canvas = document.getElementById("camerafeed");
+const arUi = document.getElementById("ar-ui");
 const intro = document.getElementById("intro");
 const introTitle = document.getElementById("intro-title");
 const introCopy = document.getElementById("intro-copy");
@@ -47,6 +49,11 @@ const scanGuide = document.getElementById("scan-guide");
 const status = document.getElementById("status");
 const platformNote = document.getElementById("platform-note");
 const orientationGate = document.getElementById("orientation-gate");
+const arUiOverlayGuard = installArUiOverlayGuard({
+  overlay: arUi,
+  canvas,
+  orientationGate
+});
 
 // The QR route is camera-first. Keep the explanatory card out of the normal
 // loading path; showStartFallback() exposes it only when startup needs help.
@@ -1142,6 +1149,7 @@ function createWorldPipelineModule() {
   return {
     name: "flow-ar-world-anchor",
     onStart: () => {
+      arUiOverlayGuard.enforce();
       xrScene = xr8.Threejs.xrScene();
       const { scene, camera, renderer } = xrScene;
       // XR8 owns the shared camera/WebGL canvas and its viewport sizing. Changing
@@ -1260,6 +1268,7 @@ async function runArAttempt({ automatic = false } = {}) {
     }
 
     await xr8.run(allowedDevices ? { canvas, allowedDevices } : { canvas });
+    arUiOverlayGuard.enforce();
     return true;
   } catch (error) {
     handleRuntimeError(error);
@@ -1399,6 +1408,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 });
 
 window.addEventListener("pagehide", () => {
+  arUiOverlayGuard.disconnect();
   clearMarkerHandoffTimer();
   try { xr8?.stop?.(); } catch {}
   running = false;
