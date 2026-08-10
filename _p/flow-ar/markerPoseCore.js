@@ -102,6 +102,121 @@ export function sceneDistanceMetres(sceneDistance, worldUnitsPerMetre) {
   return distance / scale;
 }
 
+/**
+ * Stability-first poster tracking for low-end devices.
+ *
+ * Image-target events can arrive faster than a low-end tablet can render and
+ * their small pose innovations are mostly detector noise. Limit pose work to
+ * about 10 Hz, hold innovations inside a perceptual deadband, then shorten the
+ * EMA time constant only when the camera is moving deliberately. A hard step
+ * cap prevents a single bad detection from throwing the model across the
+ * screen.
+ */
+export const stablePosterPoseProfile = Object.freeze({
+  minimumIntervalMs: 100,
+  maximumElapsedMs: 300,
+  acquisitionSampleCount: 3,
+  acquisitionDurationMs: 180,
+  position: Object.freeze({
+    deadband: 0.0015,
+    activeRange: 0.03,
+    quietTimeConstantMs: 1100,
+    activeTimeConstantMs: 400,
+    maximumStep: 0.005
+  }),
+  rotation: Object.freeze({
+    deadband: 0.2 * Math.PI / 180,
+    activeRange: 8 * Math.PI / 180,
+    quietTimeConstantMs: 1000,
+    activeTimeConstantMs: 350,
+    maximumStep: 0.25 * Math.PI / 180
+  }),
+  scale: Object.freeze({
+    deadband: 0.005,
+    activeRange: 0.05,
+    quietTimeConstantMs: 1400,
+    activeTimeConstantMs: 500,
+    maximumStep: 0.004
+  })
+});
+
+function adaptiveInnovationStep(distance, elapsedMs, axis) {
+  if (!Number.isFinite(distance) || distance < 0) return null;
+  const deadband = Number(axis?.deadband);
+  const activeRange = Number(axis?.activeRange);
+  const quietTau = Number(axis?.quietTimeConstantMs);
+  const activeTau = Number(axis?.activeTimeConstantMs);
+  const maximumStep = Number(axis?.maximumStep);
+  if (![deadband, activeRange, quietTau, activeTau, maximumStep].every(Number.isFinite)
+    || deadband < 0 || activeRange <= deadband || quietTau <= 0
+    || activeTau <= 0 || maximumStep <= 0) return null;
+  if (distance <= deadband) return 0;
+
+  const activity = Math.min(1, Math.max(
+    0,
+    (distance - deadband) / (activeRange - deadband)
+  ));
+  // Geometric interpolation avoids an abrupt response change near the
+  // deadband while still reaching the active time constant for real motion.
+  const timeConstantMs = quietTau * ((activeTau / quietTau) ** activity);
+  const alpha = 1 - Math.exp(-elapsedMs / timeConstantMs);
+  return Math.min(maximumStep, (distance - deadband) * alpha);
+}
+
+export function stablePosterPoseStep({
+  elapsedMs,
+  positionDistanceMetres,
+  rotationDistanceRadians,
+  scaleDifferenceFraction,
+  profile = stablePosterPoseProfile
+}) {
+  const elapsed = Number(elapsedMs);
+  const minimumIntervalMs = Number(profile?.minimumIntervalMs);
+  const maximumElapsedMs = Number(profile?.maximumElapsedMs);
+  if (![elapsed, minimumIntervalMs, maximumElapsedMs].every(Number.isFinite)
+    || elapsed < minimumIntervalMs || minimumIntervalMs < 0
+    || maximumElapsedMs < minimumIntervalMs) {
+    return {
+      accepted: false,
+      positionStepMetres: 0,
+      rotationStepRadians: 0,
+      scaleStepFraction: 0
+    };
+  }
+
+  const boundedElapsed = Math.min(elapsed, maximumElapsedMs);
+  const positionStepMetres = adaptiveInnovationStep(
+    Number(positionDistanceMetres),
+    boundedElapsed,
+    profile.position
+  );
+  const rotationStepRadians = adaptiveInnovationStep(
+    Number(rotationDistanceRadians),
+    boundedElapsed,
+    profile.rotation
+  );
+  const scaleStepFraction = adaptiveInnovationStep(
+    Number(scaleDifferenceFraction),
+    boundedElapsed,
+    profile.scale
+  );
+  if ([positionStepMetres, rotationStepRadians, scaleStepFraction]
+    .some((value) => value === null)) {
+    return {
+      accepted: false,
+      positionStepMetres: 0,
+      rotationStepRadians: 0,
+      scaleStepFraction: 0
+    };
+  }
+  return {
+    accepted: true,
+    positionStepMetres,
+    rotationStepRadians,
+    scaleStepFraction
+  };
+}
+
 export function mayAcceptTimedPoseSample({
   now,
   previousSampleAt,

@@ -19,15 +19,26 @@ import {
   maySampleInitialPose,
   poseWindowReady,
   sceneDistanceMetres,
+  stablePosterPoseProfile,
+  stablePosterPoseStep,
   stableMeanScale,
   targetPhysicalSize
-} from "./markerPoseCore.js?v=4";
+} from "./markerPoseCore.js?v=5";
+import {
+  arPerformanceProfileForDevice,
+  constrainCameraFrameRate,
+  timedWorkDue,
+  timelineDeltaSeconds
+} from "./arPerformanceCore.js?v=1";
 import { installArUiOverlayGuard } from "./arUiOverlayCore.js?v=1";
 import { hasPlayableTimeline } from "./playbackModeCore.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
 window.THREE = THREE;
+
+const arPerformanceProfile = arPerformanceProfileForDevice(deviceProfile);
+const stablePosterPoseFilterEnabled = deviceProfile.isAndroid && deviceProfile.isTablet;
 
 const canvas = document.getElementById("camerafeed");
 const arUi = document.getElementById("ar-ui");
@@ -77,6 +88,7 @@ contentRoot.add(modelPlacementRoot);
 worldAnchorRoot.visible = false;
 
 const poseSample = [];
+const posterAcquisitionSample = [];
 let flipbookNode = [];
 
 let catalog;
@@ -102,6 +114,7 @@ let markerVisible = false;
 let markerPosePreview = false;
 let markerPreviewUpdatedAt = null;
 let markerPreviewCalibrated = false;
+let lastPosterAcquisitionAt = Number.NEGATIVE_INFINITY;
 let markerHandoffTimer;
 let poseLocked = false;
 let posterLockedFallback = false;
@@ -120,6 +133,7 @@ let trackingStatus = "INITIALIZING";
 let trackingReason = "INITIALIZING";
 let trackingNormalSince = null;
 let lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+let constrainedCameraTrack;
 let allowedDevices;
 let landscapeBlocked = false;
 let resumeAfterLandscape = false;
@@ -539,9 +553,7 @@ async function loadDefinition() {
   }));
 
   introTitle.textContent = definition.label;
-  introCopy.textContent = deviceProfile.isAndroid && deviceProfile.isTablet
-    ? "色付きQR posterを基準に安定表示します。表示中はposter全体をcameraに映してください。"
-    : "最初に色付きQR posterで位置を合わせます。安定した初期位置を確定した後はposterを参照せず、周囲だけで追跡します。";
+  introCopy.textContent = "最初に色付きQR posterで位置を合わせます。安定した初期位置を確定した後はposterを参照せず、周囲だけで追跡します。";
   platformNote.textContent = deviceProfile.isAndroid
     ? deviceProfile.isTablet
       ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
@@ -555,9 +567,7 @@ async function loadDefinition() {
     guideStyle.id = "tracking-guide-copy";
     document.head.append(guideStyle);
   }
-  guideStyle.textContent = deviceProfile.isAndroid && deviceProfile.isTablet
-    ? '.scan-guide::after { content: "色付きposter全体を枠内へ" !important; }'
-    : "";
+  guideStyle.textContent = "";
   updateLinks();
 }
 
@@ -878,6 +888,66 @@ function poseFromDetail(detail) {
   };
 }
 
+function medianNumber(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function posterAcquisitionPose(samples) {
+  if (!poseWindowReady(
+    samples,
+    stablePosterPoseProfile.acquisitionSampleCount,
+    stablePosterPoseProfile.acquisitionDurationMs
+  )) return null;
+  if (targetSize && samples.some((sample) => !sample.scaleCalibrated)) return null;
+
+  const position = new THREE.Vector3(
+    medianNumber(samples.map((sample) => sample.position.x)),
+    medianNumber(samples.map((sample) => sample.position.y)),
+    medianNumber(samples.map((sample) => sample.position.z))
+  );
+  // Use the quaternion medoid. Unlike an arithmetic mean it cannot be pulled
+  // halfway towards one bad first detection on a low-resolution camera.
+  let quaternion = samples[0].quaternion;
+  let minimumDistance = Number.POSITIVE_INFINITY;
+  for (const candidate of samples) {
+    const distance = samples.reduce(
+      (sum, sample) => sum + quaternionAngle(candidate.quaternion, sample.quaternion),
+      0
+    );
+    if (distance < minimumDistance) {
+      minimumDistance = distance;
+      quaternion = candidate.quaternion;
+    }
+  }
+  return {
+    position,
+    quaternion: quaternion.clone(),
+    scale: medianNumber(samples.map((sample) => sample.scale)),
+    scaleCalibrated: samples.every((sample) => sample.scaleCalibrated),
+    capturedAt: samples[samples.length - 1].capturedAt
+  };
+}
+
+function resetPosterPoseFilter() {
+  posterAcquisitionSample.length = 0;
+  lastPosterAcquisitionAt = Number.NEGATIVE_INFINITY;
+}
+
+function collectPosterAcquisitionPose(pose) {
+  const elapsedMs = pose.capturedAt - lastPosterAcquisitionAt;
+  if (posterAcquisitionSample.length
+    && elapsedMs > stablePosterPoseProfile.maximumElapsedMs) {
+    posterAcquisitionSample.length = 0;
+  }
+  if (elapsedMs < stablePosterPoseProfile.minimumIntervalMs) return null;
+  lastPosterAcquisitionAt = pose.capturedAt;
+  posterAcquisitionSample.push(pose);
+  while (posterAcquisitionSample.length
+    > stablePosterPoseProfile.acquisitionSampleCount) posterAcquisitionSample.shift();
+  return posterAcquisitionPose(posterAcquisitionSample);
+}
+
 function applyMarkerPreviewPose(pose) {
   if (poseLocked) return;
   const firstPreview = !markerPosePreview;
@@ -886,6 +956,41 @@ function applyMarkerPreviewPose(pose) {
     worldAnchorRoot.position.copy(pose.position);
     worldAnchorRoot.quaternion.copy(pose.quaternion);
     worldAnchorRoot.scale.setScalar(pose.scale);
+  } else if (stablePosterPoseFilterEnabled) {
+    const currentScale = worldAnchorRoot.scale.x;
+    const positionDistanceScene = worldAnchorRoot.position.distanceTo(pose.position);
+    const positionDistanceMetres = sceneDistanceMetres(positionDistanceScene, currentScale);
+    const rotationDistanceRadians = worldAnchorRoot.quaternion.angleTo(pose.quaternion);
+    const scaleDifferenceFraction = Math.abs(pose.scale / currentScale - 1);
+    const step = stablePosterPoseStep({
+      elapsedMs: pose.capturedAt - markerPreviewUpdatedAt,
+      positionDistanceMetres,
+      rotationDistanceRadians,
+      scaleDifferenceFraction
+    });
+    if (!step.accepted) return false;
+
+    if (positionDistanceScene > 0 && step.positionStepMetres > 0) {
+      const positionStep = pose.position.clone().sub(worldAnchorRoot.position);
+      positionStep.setLength(Math.min(
+        positionDistanceScene,
+        step.positionStepMetres * currentScale
+      ));
+      worldAnchorRoot.position.add(positionStep);
+    }
+    if (rotationDistanceRadians > 0 && step.rotationStepRadians > 0) {
+      worldAnchorRoot.quaternion.slerp(
+        pose.quaternion,
+        Math.min(1, step.rotationStepRadians / rotationDistanceRadians)
+      );
+    }
+    if (scaleDifferenceFraction > 0 && step.scaleStepFraction > 0) {
+      const direction = pose.scale >= currentScale ? 1 : -1;
+      const nextScale = currentScale * (1 + direction * step.scaleStepFraction);
+      worldAnchorRoot.scale.setScalar(
+        direction > 0 ? Math.min(nextScale, pose.scale) : Math.max(nextScale, pose.scale)
+      );
+    }
   } else {
     const elapsedMs = Math.max(0, pose.capturedAt - markerPreviewUpdatedAt);
     const alpha = Math.min(0.18, Math.max(0.03, 1 - Math.exp(-elapsedMs / 450)));
@@ -915,6 +1020,7 @@ function applyMarkerPreviewPose(pose) {
   if (!posterLockedFallback && (firstPreview || !markerHandoffTimer)) {
     scheduleMarkerHandoffDeadline();
   }
+  return true;
 }
 
 function scheduleMarkerHandoffDeadline(delayMs = 1800) {
@@ -1015,12 +1121,23 @@ function addPoseSample(detail) {
   if (poseLocked || landscapeBlocked) return;
   const pose = poseFromDetail(detail);
   if (!pose) return;
-  // The marker is the immediate authority. This gives feedback as soon as the
-  // poster is found while the world tracker earns a stable hand-off window.
-  applyMarkerPreviewPose(pose);
-  if (posterLockedFallback) {
-    resetInitialPoseSamples();
-    return;
+  if (stablePosterPoseFilterEnabled) {
+    if (!markerPosePreview) {
+      const acquisitionPose = collectPosterAcquisitionPose(pose);
+      if (!acquisitionPose) return;
+      applyMarkerPreviewPose(acquisitionPose);
+      resetPosterPoseFilter();
+    } else {
+      applyMarkerPreviewPose(pose);
+    }
+    if (posterLockedFallback) {
+      resetInitialPoseSamples();
+      return;
+    }
+  } else {
+    // The marker is the immediate authority. This gives feedback as soon as the
+    // poster is found while the world tracker earns a stable hand-off window.
+    applyMarkerPreviewPose(pose);
   }
   if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
     if (!poseLocked) resetInitialPoseSamples();
@@ -1115,6 +1232,9 @@ function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
+  // A reacquired poster starts a fresh robust seed. Mixing samples captured
+  // before and after target loss can create a false median pose on slow cameras.
+  resetPosterPoseFilter();
   if (!poseLocked) {
     resetInitialPoseSamples();
     if (posterLockedFallback) {
@@ -1191,12 +1311,28 @@ function handleRuntimeError(error) {
   automaticStartInFlight = false;
 }
 
-function handleCameraStatus({ status: cameraStatus, reason }) {
+function configureCameraPerformance(stream) {
+  const track = stream?.getVideoTracks?.()[0];
+  if (!track || track === constrainedCameraTrack) return;
+  constrainedCameraTrack = track;
+  void constrainCameraFrameRate(stream, arPerformanceProfile).then((result) => {
+    if (result.applied) {
+      const { width, height, frameRate } = result.settings;
+      const resolution = width && height ? `${width}x${height}` : "native resolution";
+      console.info(`FLOW AR camera: ${resolution} @ ${frameRate || "device"} fps`);
+    } else if (result.attempted) {
+      console.warn(`FLOW AR camera FPS constraint was not applied: ${result.reason}`);
+    }
+  });
+}
+
+function handleCameraStatus({ status: cameraStatus, reason, stream }) {
   if (cameraStatus === "requesting") {
     setStatus("camera権限を確認中…", "loading");
     return;
   }
   if (cameraStatus === "hasStream") {
+    configureCameraPerformance(stream);
     setStatus("camera映像を初期化中…", "loading");
     return;
   }
@@ -1244,7 +1380,14 @@ function createWorldPipelineModule() {
     },
     onUpdate: () => {
       const now = performance.now();
-      const delta = Math.min(Math.max((now - lastFrameTime) / 1000, 0), 0.1);
+      if (!timedWorkDue(now, lastFrameTime, arPerformanceProfile.timelineIntervalMs)) return;
+      // Preserve physical playback speed at the reduced cadence. Only a long
+      // browser stall is capped; ordinary 10--15 Hz updates keep their full dt.
+      const delta = timelineDeltaSeconds(
+        now,
+        lastFrameTime,
+        arPerformanceProfile.maximumTimelineDeltaSeconds
+      );
       lastFrameTime = now;
       if (!landscapeBlocked && playing && (poseLocked || markerPosePreview)) {
         mixer?.update(delta);
@@ -1294,13 +1437,13 @@ async function runArAttempt({ automatic = false } = {}) {
     markerPosePreview = false;
     markerPreviewUpdatedAt = null;
     markerPreviewCalibrated = false;
+    resetPosterPoseFilter();
     clearMarkerHandoffTimer();
     poseLocked = false;
-    // This device class is known to reconverge its SLAM origin after marker
-    // placement even when tracking briefly reports NORMAL. Keep the smoothed
-    // poster pose authoritative from the first detection. iPad/iPhone and
-    // Android phones retain the established world-handoff path.
-    posterLockedFallback = deviceProfile.isAndroid && deviceProfile.isTablet;
+    // The coloured poster determines only the initial pose. All supported
+    // devices, including Android tablets, then hand off to the world frame.
+    // The image-marker page remains an explicit poster-locked fallback.
+    posterLockedFallback = false;
     resetInitialPoseSamples();
     trackingNormalSince = null;
     worldAnchorRoot.matrixAutoUpdate = true;
@@ -1314,7 +1457,9 @@ async function runArAttempt({ automatic = false } = {}) {
     resetCameraPipelineReady();
 
     xr8.XrController.configure({
-      disableWorldTracking: false,
+      // The standard route always hands the initial poster pose to SLAM.
+      // Poster-locked tracking remains available on imageMarkerAr.html.
+      disableWorldTracking: arPerformanceProfile.disableWorldTracking,
       // Responsive tracking avoids late floor-scale reconvergence. The known
       // printed target size calibrates world-unit/metre in poseFromDetail().
       scale: "responsive",
@@ -1334,7 +1479,11 @@ async function runArAttempt({ automatic = false } = {}) {
       pipelineAdded = true;
     }
 
-    await xr8.run(allowedDevices ? { canvas, allowedDevices } : { canvas });
+    const runOptions = allowedDevices ? { canvas, allowedDevices } : { canvas };
+    if (arPerformanceProfile.glContextConfig) {
+      runOptions.glContextConfig = { ...arPerformanceProfile.glContextConfig };
+    }
+    await xr8.run(runOptions);
     arUiOverlayGuard.enforce();
     return true;
   } catch (error) {
