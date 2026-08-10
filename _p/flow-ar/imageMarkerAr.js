@@ -12,6 +12,10 @@ import {
   carryUnlockFragment,
   fetchAssetJson
 } from "./secureAsset.js?v=1";
+import {
+  hasPlayableTimeline,
+  playbackStatusText
+} from "./playbackModeCore.js?v=1";
 
 const stage = document.getElementById("ar-stage");
 const intro = document.getElementById("intro");
@@ -61,6 +65,7 @@ let lastFrameTime = performance.now();
 let landscapeBlocked = false;
 let resumeAfterLandscape = false;
 let orientationRestoreTimer;
+let modeLoading = false;
 
 function setStatus(message, state = "loading") {
   status.textContent = message;
@@ -191,7 +196,13 @@ function enginePlaybackRate() {
 }
 
 function updateTransport(force = false) {
-  if (!activeAction || clipDuration <= 0) {
+  const available = hasPlayableTimeline(
+    selectedMode,
+    !modeLoading && activeAction && clipDuration > 0
+  );
+  playButton.hidden = !available;
+  playButton.disabled = !available;
+  if (!available) {
     transport.hidden = true;
     ratePicker.disabled = true;
     return;
@@ -445,6 +456,7 @@ function clearModel() {
   clipDuration = 0;
   lastTransportUpdateAt = -Infinity;
   transport.hidden = true;
+  playButton.hidden = true;
   ratePicker.disabled = true;
   if (!activeModel) return;
   contentRoot.remove(activeModel);
@@ -459,7 +471,9 @@ function clearModel() {
 
 async function loadMode(mode) {
   const serial = ++loadSerial;
+  modeLoading = true;
   modePicker.disabled = true;
+  playButton.hidden = true;
   playButton.disabled = true;
   ratePicker.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
@@ -497,7 +511,7 @@ async function loadMode(mode) {
   contentRoot.add(activeModel);
   createReferencePlane(mode);
 
-  if (clip) {
+  if (hasPlayableTimeline(mode, clip && clip.duration > 0)) {
     mixer = new THREE.AnimationMixer(activeModel);
     const action = mixer.clipAction(clip);
     action.setLoop(THREE.LoopRepeat, Infinity);
@@ -512,14 +526,15 @@ async function loadMode(mode) {
 
   modePicker.value = mode.id;
   modePicker.disabled = false;
-  playButton.disabled = !mixer;
+  modeLoading = false;
+  updateTransport(true);
   updateLinks();
   document.title = `FLOW AR · ${definition.label}`;
   if (!running) setStatus(`${mode.label}の3Dを準備完了 · cameraを初期化中…`, "loading");
   else {
     setStatus(
       isMarkerVisible()
-        ? `${mode.label} · ${playing ? "animation再生中" : "一時停止"}`
+        ? playbackStatusText(mode, playing)
         : "色付きQR poster全体をcameraへ映してください",
       isMarkerVisible() ? "found" : "scanning"
     );
@@ -561,7 +576,7 @@ function createArScene() {
   anchor.onTargetFound = () => {
     if (landscapeBlocked) return;
     scanGuide.hidden = true;
-    setStatus(`${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`, "found");
+    setStatus(playbackStatusText(selectedMode, playing), "found");
   };
   anchor.onTargetLost = () => {
     if (landscapeBlocked) return;
@@ -608,7 +623,7 @@ async function startAr() {
     running = true;
     intro.hidden = true;
     scanGuide.hidden = false;
-    playButton.disabled = !mixer;
+    updateTransport(true);
     lastFrameTime = performance.now();
     mindarThree.renderer.setAnimationLoop((time) => {
       const delta = Math.min(Math.max((time - lastFrameTime) / 1000, 0), 0.1);
@@ -620,6 +635,8 @@ async function startAr() {
     setStatus("色付きQR poster全体をcameraへ映してください", "scanning");
   } catch (error) {
     console.error(error);
+    modeLoading = false;
+    updateTransport(true);
     stopArSession();
     reloadBeforeRetry = true;
     intro.hidden = false;
@@ -646,6 +663,8 @@ modePicker.addEventListener("change", async () => {
     await loadMode(next);
   } catch (error) {
     console.error(error);
+    modeLoading = false;
+    updateTransport(true);
     modePicker.disabled = false;
     setStatus("3D modeを切り替えられませんでした", "error");
   }
@@ -655,7 +674,7 @@ playButton.addEventListener("click", () => {
   if (!mixer) return;
   setPlaying(!playing);
   setStatus(
-    playing ? `${selectedMode.label} · animation再生中` : `${selectedMode.label} · 一時停止`,
+    playbackStatusText(selectedMode, playing),
     isMarkerVisible() ? "found" : "scanning"
   );
 });
@@ -665,7 +684,7 @@ seekSlider.addEventListener("input", seekToSliderValue);
 ratePicker.addEventListener("change", () => {
   setPlaybackRate(ratePicker.value);
   setStatus(
-    `${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`,
+    playbackStatusText(selectedMode, playing),
     isMarkerVisible() ? "found" : "scanning"
   );
 });
@@ -689,7 +708,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
     if (running) {
       setStatus(
         isMarkerVisible()
-          ? `${selectedMode.label} · ${playing ? "animation再生中" : "一時停止"}`
+          ? playbackStatusText(selectedMode, playing)
           : "色付きQR poster全体をcameraへ映してください",
         isMarkerVisible() ? "found" : "scanning"
       );

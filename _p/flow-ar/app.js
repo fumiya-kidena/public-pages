@@ -5,6 +5,10 @@ import {
   fetchAssetJson,
   usesEncryptedAssets
 } from "./secureAsset.js?v=1";
+import {
+  hasPlayableTimeline,
+  isStaticMode
+} from "./playbackModeCore.js?v=1";
 
 const viewer = document.getElementById("droplet-viewer");
 const nativeArButton = document.getElementById("native-ar-button");
@@ -87,6 +91,7 @@ function activeMedia() {
 }
 
 function activeDuration() {
+  if (isStaticMode(selectedMode)) return 0;
   const duration = Number(activeMedia()?.duration);
   return Number.isFinite(duration) && duration > 0.001 ? duration : 0;
 }
@@ -236,7 +241,10 @@ function applyPlaybackRate() {
 
 function refreshPlaybackControls() {
   const duration = activeDuration();
-  const available = Boolean(selectedMode && duration && !mediaLoading);
+  const available = hasPlayableTimeline(
+    selectedMode,
+    selectedMode && duration && !mediaLoading
+  );
   playbackControls.hidden = !available;
   playButton.disabled = mediaLoading || !available;
   playbackSeek.disabled = mediaLoading || !available;
@@ -276,6 +284,7 @@ function pauseActiveMedia() {
 }
 
 function playActiveMedia() {
+  if (isStaticMode(selectedMode)) return;
   const media = activeMedia();
   if (!media) return;
   const playResult = media.play();
@@ -503,9 +512,9 @@ async function selectMode(key, syncUrl = true) {
   modeMagnification.textContent = mode.magnification;
   colourLegend.hidden = !mode.legend;
   updateSource(mode);
-  // Scientific result playback is primary content, not decorative motion.
-  // Keep the explicit pause control available, but start the selected result.
-  isPlaying = true;
+  // Animated scientific results start immediately. A one-frame result has no
+  // meaningful timeline, so its transport stays absent while mode switching remains.
+  isPlaying = !isStaticMode(mode);
   isSeeking = false;
   resumeAfterSeek = false;
   playbackRate = modePlaybackRate(mode);
@@ -549,7 +558,7 @@ async function selectMode(key, syncUrl = true) {
     }
     applyPlaybackRate();
     setLoading(false);
-    if (isPlaying) {
+    if (isPlaying && !isStaticMode(mode)) {
       playActiveMedia();
     }
   } else {
@@ -558,7 +567,11 @@ async function selectMode(key, syncUrl = true) {
     viewer.hidden = false;
     gestureHint.hidden = false;
     setLoading(true);
-    viewer.setAttribute("animation-name", mode.animationName);
+    if (!isStaticMode(mode) && mode.animationName) {
+      viewer.setAttribute("animation-name", mode.animationName);
+    } else {
+      viewer.removeAttribute("animation-name");
+    }
     viewer.setAttribute("src", prepared.model);
     if (prepared.iosModel) viewer.setAttribute("ios-src", prepared.iosModel);
     else viewer.removeAttribute("ios-src");
@@ -639,6 +652,10 @@ reference.addEventListener("toggle", () => {
 
 stageVideo.addEventListener("play", () => {
   if (selectedMode?.kind !== "video") return;
+  if (isStaticMode(selectedMode)) {
+    stageVideo.pause();
+    return;
+  }
   isPlaying = true;
   updatePlayButton();
   schedulePlaybackRefresh();
@@ -706,7 +723,7 @@ viewer.addEventListener("load", () => {
   const initialTime = selectedMode.initialTime;
   if (Number.isFinite(initialTime)) viewer.currentTime = initialTime;
   refreshPlaybackControls();
-  if (isPlaying) playActiveMedia();
+  if (isPlaying && !isStaticMode(selectedMode)) playActiveMedia();
   else viewer.pause();
 });
 
@@ -718,7 +735,7 @@ document.addEventListener("visibilitychange", () => {
     referenceVideo.pause();
     return;
   }
-  if (!resumeAfterVisibility) return;
+  if (!resumeAfterVisibility || isStaticMode(selectedMode)) return;
   if (landscapeBlocked) {
     resumeAfterLandscape = true;
     resumeAfterVisibility = false;
@@ -741,13 +758,13 @@ window.addEventListener("online", updateArAvailability);
 setupTabletLandscapeGate(orientationGate, (blocked, previous) => {
   landscapeBlocked = blocked;
   if (blocked) {
-    resumeAfterLandscape = Boolean(selectedMode && isPlaying);
+    resumeAfterLandscape = Boolean(selectedMode && isPlaying && !isStaticMode(selectedMode));
     if (selectedMode?.kind === "video") stageVideo.pause();
     else if (selectedMode) viewer.pause();
     return;
   }
 
-  if (previous && resumeAfterLandscape && selectedMode) {
+  if (previous && resumeAfterLandscape && selectedMode && !isStaticMode(selectedMode)) {
     isPlaying = true;
     if (selectedMode.kind === "video") stageVideo.play().catch(() => {});
     else viewer.play();

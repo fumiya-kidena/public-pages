@@ -23,6 +23,7 @@ import {
   targetPhysicalSize
 } from "./markerPoseCore.js?v=4";
 import { installArUiOverlayGuard } from "./arUiOverlayCore.js?v=1";
+import { hasPlayableTimeline } from "./playbackModeCore.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -43,6 +44,7 @@ const seekSlider = document.getElementById("seek-slider");
 const ratePicker = document.getElementById("rate-picker");
 const seekTime = document.getElementById("seek-time");
 const homeLink = document.getElementById("home-link");
+const posterLockLink = document.getElementById("poster-lock-link");
 const fallbackLink = document.getElementById("fallback-link");
 const imageFallbackLink = document.getElementById("image-fallback-link");
 const scanGuide = document.getElementById("scan-guide");
@@ -102,6 +104,7 @@ let markerPreviewUpdatedAt = null;
 let markerPreviewCalibrated = false;
 let markerHandoffTimer;
 let poseLocked = false;
+let posterLockedFallback = false;
 let pipelineAdded = false;
 let startPromise;
 let runtimeNeedsStop = false;
@@ -110,6 +113,7 @@ let automaticStartInFlight = false;
 let cameraPipelineReadyPromise;
 let cameraPipelineReadyResolve;
 let modelStartupPromise;
+let modeLoading = false;
 let loadSerial = 0;
 let lastFrameTime = performance.now();
 let trackingStatus = "INITIALIZING";
@@ -174,7 +178,14 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 
 function syncWorldAnchorVisibility() {
-  worldAnchorRoot.visible = (poseLocked || markerPosePreview) && Boolean(activeModel);
+  // In Android-tablet poster-lock fallback, an unlocked preview is trustworthy
+  // only while the poster is visible. Holding its last matrix after target loss
+  // merely exposes SLAM drift as a wildly moving model. Other devices retain
+  // the established world-handoff behaviour.
+  const poseVisible = posterLockedFallback
+    ? markerPosePreview && markerVisible
+    : poseLocked || markerPosePreview;
+  worldAnchorRoot.visible = poseVisible && Boolean(activeModel);
 }
 
 function syncFlipbookVisibility() {
@@ -314,7 +325,13 @@ function enginePlaybackRate() {
 }
 
 function updateTransport(force = false) {
-  if (!activeAction || clipDuration <= 0) {
+  const available = hasPlayableTimeline(
+    selectedMode,
+    !modeLoading && activeAction && clipDuration > 0
+  );
+  playButton.hidden = !available;
+  playButton.disabled = !available;
+  if (!available) {
     transport.hidden = true;
     ratePicker.disabled = true;
     return;
@@ -522,7 +539,9 @@ async function loadDefinition() {
   }));
 
   introTitle.textContent = definition.label;
-  introCopy.textContent = "最初に色付きQR posterで位置を合わせます。安定した初期位置を確定した後はposterを参照せず、周囲だけで追跡します。";
+  introCopy.textContent = deviceProfile.isAndroid && deviceProfile.isTablet
+    ? "色付きQR posterを基準に安定表示します。表示中はposter全体をcameraに映してください。"
+    : "最初に色付きQR posterで位置を合わせます。安定した初期位置を確定した後はposterを参照せず、周囲だけで追跡します。";
   platformNote.textContent = deviceProfile.isAndroid
     ? deviceProfile.isTablet
       ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
@@ -530,14 +549,26 @@ async function loadDefinition() {
     : deviceProfile.isAppleTablet
       ? "iPad Safari · 横向き"
       : "iPhone Safari／Androidの対応browser";
+  let guideStyle = document.getElementById("tracking-guide-copy");
+  if (!guideStyle) {
+    guideStyle = document.createElement("style");
+    guideStyle.id = "tracking-guide-copy";
+    document.head.append(guideStyle);
+  }
+  guideStyle.textContent = deviceProfile.isAndroid && deviceProfile.isTablet
+    ? '.scan-guide::after { content: "色付きposter全体を枠内へ" !important; }'
+    : "";
   updateLinks();
 }
 
 function updateLinks() {
   const normalPage = modeUrl("./index.html");
+  const posterPage = modeUrl("./imageMarkerAr.html");
   fallbackLink.href = normalPage;
   homeLink.href = normalPage;
-  imageFallbackLink.href = modeUrl("./imageMarkerAr.html");
+  imageFallbackLink.href = posterPage;
+  posterLockLink.href = posterPage;
+  posterLockLink.hidden = !(deviceProfile.isAndroid && deviceProfile.isTablet);
 
   const url = new URL(window.location.href);
   if (definition?.id) url.searchParams.set("case", definition.id);
@@ -627,6 +658,7 @@ function clearModel() {
   clipDuration = 0;
   lastTransportUpdateAt = -Infinity;
   transport.hidden = true;
+  playButton.hidden = true;
   ratePicker.disabled = true;
   if (!activeModel) return;
   modelPlacementRoot.remove(activeModel);
@@ -640,7 +672,9 @@ function clearModel() {
 
 async function loadMode(mode) {
   const serial = ++loadSerial;
+  modeLoading = true;
   modePicker.disabled = true;
+  playButton.hidden = true;
   playButton.disabled = true;
   ratePicker.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
@@ -697,7 +731,7 @@ async function loadMode(mode) {
   syncWorldAnchorVisibility();
   createReferencePlane(mode);
 
-  if (clip) {
+  if (hasPlayableTimeline(mode, clip && clip.duration > 0)) {
     mixer = new THREE.AnimationMixer(activeModel);
     const action = mixer.clipAction(clip);
     action.setLoop(THREE.LoopRepeat, Infinity);
@@ -714,12 +748,18 @@ async function loadMode(mode) {
 
   modePicker.value = mode.id;
   modePicker.disabled = false;
-  playButton.disabled = !mixer;
+  modeLoading = false;
+  updateTransport(true);
   document.title = `FLOW AR · ${definition.label}`;
   updateLinks();
   if (running) renderTrackingStatus();
   else if (xr8 && targetData) {
-    setStatus("準備完了 · 最初だけposterで位置を合わせます", "ready");
+    setStatus(
+      deviceProfile.isAndroid && deviceProfile.isTablet
+        ? "準備完了 · poster全体を映してください"
+        : "準備完了 · 最初だけposterで位置を合わせます",
+      "ready",
+    );
   }
 }
 
@@ -872,7 +912,9 @@ function applyMarkerPreviewPose(pose) {
   markerPreviewUpdatedAt = pose.capturedAt;
   worldAnchorRoot.updateMatrix();
   syncWorldAnchorVisibility();
-  if (firstPreview || !markerHandoffTimer) scheduleMarkerHandoffDeadline();
+  if (!posterLockedFallback && (firstPreview || !markerHandoffTimer)) {
+    scheduleMarkerHandoffDeadline();
+  }
 }
 
 function scheduleMarkerHandoffDeadline(delayMs = 1800) {
@@ -976,6 +1018,10 @@ function addPoseSample(detail) {
   // The marker is the immediate authority. This gives feedback as soon as the
   // poster is found while the world tracker earns a stable hand-off window.
   applyMarkerPreviewPose(pose);
+  if (posterLockedFallback) {
+    resetInitialPoseSamples();
+    return;
+  }
   if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
     if (!poseLocked) resetInitialPoseSamples();
     return;
@@ -1020,6 +1066,15 @@ function renderTrackingStatus() {
     return;
   }
   if (!poseLocked) {
+    if (posterLockedFallback) {
+      setStatus(
+        markerVisible
+          ? "poster固定モード · 安定表示にはposterを映し続けてください"
+          : "poster固定モード · 色付きQR poster全体を映してください",
+        markerVisible ? "found" : "scanning"
+      );
+      return;
+    }
     setStatus(
       markerPosePreview
         ? (markerVisible
@@ -1062,6 +1117,12 @@ function handleImageLost({ detail }) {
   markerVisible = false;
   if (!poseLocked) {
     resetInitialPoseSamples();
+    if (posterLockedFallback) {
+      // Do not leave an old poster pose visible in a drifting world frame.
+      markerPosePreview = false;
+      markerPreviewUpdatedAt = null;
+      markerPreviewCalibrated = false;
+    }
     // Losing the target is not proof of pose quality. Keep the last provisional
     // pose and its bounded hand-off deadline. Reacquisition may still satisfy
     // the strict gate, otherwise the deadline freezes this calibrated pose.
@@ -1083,6 +1144,7 @@ function handleTrackingStatus({ detail }) {
     trackingNormalSince = null;
     if (!poseLocked) resetInitialPoseSamples();
   }
+  syncWorldAnchorVisibility();
   if (landscapeBlocked) return;
   renderTrackingStatus();
 }
@@ -1176,7 +1238,7 @@ function createWorldPipelineModule() {
       markCameraPipelineReady();
       intro.hidden = true;
       scanGuide.hidden = false;
-      playButton.disabled = !mixer;
+      updateTransport(true);
       lastFrameTime = performance.now();
       renderTrackingStatus();
     },
@@ -1234,6 +1296,11 @@ async function runArAttempt({ automatic = false } = {}) {
     markerPreviewCalibrated = false;
     clearMarkerHandoffTimer();
     poseLocked = false;
+    // This device class is known to reconverge its SLAM origin after marker
+    // placement even when tracking briefly reports NORMAL. Keep the smoothed
+    // poster pose authoritative from the first detection. iPad/iPhone and
+    // Android phones retain the established world-handoff path.
+    posterLockedFallback = deviceProfile.isAndroid && deviceProfile.isTablet;
     resetInitialPoseSamples();
     trackingNormalSince = null;
     worldAnchorRoot.matrixAutoUpdate = true;
@@ -1355,6 +1422,8 @@ modePicker.addEventListener("change", async () => {
     await loadMode(next);
   } catch (error) {
     console.error(error);
+    modeLoading = false;
+    updateTransport(true);
     if (selectedMode) modePicker.value = selectedMode.id;
     setStatus(error?.message || "3D modeを切り替えられませんでした", "error");
     modePicker.disabled = false;
