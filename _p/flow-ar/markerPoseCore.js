@@ -60,9 +60,9 @@ export function calibratedWorldScale(detail, targetSize) {
   if (axisDisagreement > 0.08) return null;
   const result = Math.sqrt(widthRatio * heightRatio);
 
-  // A correctly printed target in absolute-scale tracking should be near one.
-  // Keep the legacy SI scale instead of applying a plausible-but-wrong factor.
-  return result >= 0.5 && result <= 2 ? result : null;
+  // In responsive world tracking this is intentionally not expected to be
+  // near one: it is the conversion from SI-authored metres to scene units.
+  return Number.isFinite(result) && result > 0 ? result : null;
 }
 
 export function stableMeanScale(samples, maximumRelativeSpread) {
@@ -82,4 +82,42 @@ export function stableMeanScale(samples, maximumRelativeSpread) {
 
 export function maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked) {
   return trackingStatus === "NORMAL" && !poseLocked && !landscapeBlocked;
+}
+
+export function sceneDistanceMetres(sceneDistance, worldUnitsPerMetre) {
+  const distance = Number(sceneDistance);
+  const scale = finitePositive(worldUnitsPerMetre);
+  if (!Number.isFinite(distance) || distance < 0 || !scale) return null;
+  return distance / scale;
+}
+
+export function mayAcceptTimedPoseSample({
+  now,
+  previousSampleAt,
+  trackingNormalSince,
+  minimumSampleIntervalMs,
+  trackingWarmupMs
+}) {
+  if (trackingNormalSince === null || trackingNormalSince === undefined) return false;
+  const currentTime = Number(now);
+  const previousTime = Number(previousSampleAt);
+  const normalSince = Number(trackingNormalSince);
+  const sampleInterval = Number(minimumSampleIntervalMs);
+  const warmup = Number(trackingWarmupMs);
+  if (![currentTime, normalSince, sampleInterval, warmup].every(Number.isFinite)
+    || sampleInterval < 0 || warmup < 0) return false;
+  if (currentTime - normalSince < warmup) return false;
+  return !Number.isFinite(previousTime) || currentTime - previousTime >= sampleInterval;
+}
+
+export function poseWindowReady(samples, minimumCount, minimumDurationMs) {
+  if (!Array.isArray(samples)) return false;
+  const count = Math.max(1, Math.round(Number(minimumCount)));
+  const duration = Number(minimumDurationMs);
+  if (!Number.isFinite(count) || !Number.isFinite(duration) || duration < 0) return false;
+  if (samples.length < count) return false;
+  const first = Number(samples[samples.length - count]?.capturedAt);
+  const last = Number(samples[samples.length - 1]?.capturedAt);
+  return Number.isFinite(first) && Number.isFinite(last)
+    && last >= first && last - first >= duration;
 }

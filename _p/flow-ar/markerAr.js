@@ -13,10 +13,13 @@ import {
 } from "./secureAsset.js?v=1";
 import {
   calibratedWorldScale,
+  mayAcceptTimedPoseSample,
   maySampleInitialPose,
+  poseWindowReady,
+  sceneDistanceMetres,
   stableMeanScale,
   targetPhysicalSize
-} from "./markerPoseCore.js?v=1";
+} from "./markerPoseCore.js?v=3";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -54,9 +57,12 @@ const requestedMode = query.get("mode");
 
 const worldAnchorRoot = new THREE.Group();
 const contentRoot = new THREE.Group();
+const modelPlacementRoot = new THREE.Group();
 worldAnchorRoot.name = "worldAnchorRoot";
 contentRoot.name = "contentRoot";
+modelPlacementRoot.name = "modelPlacementRoot";
 worldAnchorRoot.add(contentRoot);
+contentRoot.add(modelPlacementRoot);
 worldAnchorRoot.visible = false;
 
 const poseSample = [];
@@ -91,10 +97,13 @@ let loadSerial = 0;
 let lastFrameTime = performance.now();
 let trackingStatus = "INITIALIZING";
 let trackingReason = "INITIALIZING";
+let trackingNormalSince = null;
+let lastPoseSampleAt = Number.NEGATIVE_INFINITY;
 let allowedDevices;
 let landscapeBlocked = false;
 let resumeAfterLandscape = false;
 let orientationRestoreTimer;
+
 
 function setStatus(message, state = "loading") {
   if (status.textContent === message && status.dataset.state === state) return;
@@ -346,6 +355,19 @@ function validateWorldTracking(caseDefinition) {
   }
 
   const initialPoseConfig = tracking.initialPose || tracking.correction || {};
+  const minimumSampleIntervalMs = Math.max(100, positiveNumber(
+    initialPoseConfig.minimumSampleIntervalMs,
+    100
+  ));
+  const minimumDurationMs = Math.max(
+    1100,
+    positiveNumber(initialPoseConfig.minimumDurationMs, 1100)
+  );
+  const configuredSampleCount = Math.max(
+    12,
+    Math.round(positiveNumber(initialPoseConfig.sampleCount, 12))
+  );
+  const durationSampleCount = Math.ceil(minimumDurationMs / minimumSampleIntervalMs) + 1;
   const modelRotationDegree = tracking.modelRotationDegree
     || markerTracking?.modelRotationDegree
     || [90, 0, 0];
@@ -362,7 +384,10 @@ function validateWorldTracking(caseDefinition) {
     liftMetres,
     modelRotationDegree,
     initialPose: {
-      sampleCount: Math.max(4, Math.round(positiveNumber(initialPoseConfig.sampleCount, 8))),
+      sampleCount: Math.max(configuredSampleCount, durationSampleCount),
+      minimumSampleIntervalMs,
+      minimumDurationMs,
+      trackingWarmupMs: Math.max(700, finiteNumber(initialPoseConfig.trackingWarmupMs, 700)),
       stabilityPositionMetres: positiveNumber(initialPoseConfig.stabilityPositionMetres, 0.015),
       stabilityRotationDegree: positiveNumber(initialPoseConfig.stabilityRotationDegree, 3),
       stabilityScaleFraction: positiveNumber(initialPoseConfig.stabilityScaleFraction, 0.04)
@@ -505,7 +530,7 @@ function clearModel() {
   transport.hidden = true;
   ratePicker.disabled = true;
   if (!activeModel) return;
-  contentRoot.remove(activeModel);
+  modelPlacementRoot.remove(activeModel);
   activeModel.traverse((node) => {
     if (!node.isMesh) return;
     node.geometry?.dispose();
@@ -513,6 +538,9 @@ function clearModel() {
     for (const material of materials) material?.dispose();
   });
   activeModel = null;
+  modelPlacementRoot.position.set(0, 0, 0);
+  modelPlacementRoot.quaternion.identity();
+  modelPlacementRoot.scale.set(1, 1, 1);
   syncWorldAnchorVisibility();
 }
 
@@ -548,11 +576,13 @@ async function loadMode(mode) {
   configurePlaybackRateOptions(mode, requestedPlaybackRate);
   setPlaybackRate(requestedPlaybackRate);
   activeModel = gltf.scene;
-  activeModel.scale.setScalar(physicalScale);
-  activeModel.rotation.set(
+  // Keep SI scale and marker-plane orientation outside the animated GLTF.
+  // Animation tracks are then unable to overwrite the placement transform.
+  modelPlacementRoot.scale.setScalar(physicalScale);
+  modelPlacementRoot.rotation.set(
     ...worldTracking.modelRotationDegree.map(THREE.MathUtils.degToRad)
   );
-  contentRoot.add(activeModel);
+  modelPlacementRoot.add(activeModel);
   syncWorldAnchorVisibility();
   createReferencePlane(mode);
 
@@ -696,7 +726,11 @@ function poseFromDetail(detail) {
 }
 
 function averagedStablePose(samples) {
-  if (samples.length < worldTracking.initialPose.sampleCount) return null;
+  if (!poseWindowReady(
+    samples,
+    worldTracking.initialPose.sampleCount,
+    worldTracking.initialPose.minimumDurationMs
+  )) return null;
 
   const position = new THREE.Vector3();
   for (const sample of samples) position.add(sample.position);
@@ -723,31 +757,57 @@ function averagedStablePose(samples) {
     samples,
     worldTracking.initialPose.stabilityScaleFraction
   );
-  if (maxPositionSpread > worldTracking.initialPose.stabilityPositionMetres) return null;
+  if (scale === null) return null;
+  // A known printed target must provide a marker-derived scale. Falling back
+  // to one here would silently turn responsive scene units into metres.
+  if (targetSize && samples.some((sample) => !sample.scaleCalibrated)) return null;
+  const maxPositionSpreadMetres = sceneDistanceMetres(maxPositionSpread, scale);
+  if (maxPositionSpreadMetres === null
+    || maxPositionSpreadMetres > worldTracking.initialPose.stabilityPositionMetres) return null;
   if (maxRotationSpread > THREE.MathUtils.degToRad(
     worldTracking.initialPose.stabilityRotationDegree
   )) return null;
-  if (scale === null) return null;
   return { position, quaternion, scale };
 }
 
 function applyInitialPose(pose) {
+  worldAnchorRoot.matrixAutoUpdate = true;
   worldAnchorRoot.position.copy(pose.position);
   worldAnchorRoot.quaternion.copy(pose.quaternion);
   worldAnchorRoot.scale.setScalar(pose.scale);
+  worldAnchorRoot.updateMatrix();
+  // The marker is only an initializer. Freeze this matrix so image-target
+  // updates and GLTF animation can never modify the world placement.
+  worldAnchorRoot.matrixAutoUpdate = false;
   poseLocked = true;
+  poseSample.length = 0;
+  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
   syncWorldAnchorVisibility();
   scanGuide.hidden = true;
   renderTrackingStatus();
 }
 
+function resetInitialPoseSamples() {
+  poseSample.length = 0;
+  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+}
+
 function addPoseSample(detail) {
   if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
-    if (!poseLocked) poseSample.length = 0;
+    if (!poseLocked) resetInitialPoseSamples();
     return;
   }
+  const now = performance.now();
+  if (!mayAcceptTimedPoseSample({
+    now,
+    previousSampleAt: lastPoseSampleAt,
+    trackingNormalSince,
+    minimumSampleIntervalMs: worldTracking.initialPose.minimumSampleIntervalMs,
+    trackingWarmupMs: worldTracking.initialPose.trackingWarmupMs
+  })) return;
   const pose = poseFromDetail(detail);
   if (!pose) return;
+  lastPoseSampleAt = pose.capturedAt;
   poseSample.push(pose);
   while (poseSample.length > worldTracking.initialPose.sampleCount) poseSample.shift();
 
@@ -795,8 +855,9 @@ function renderTrackingStatus() {
 function handleImageFound({ detail }) {
   if (poseLocked) return;
   if (landscapeBlocked) return;
+  if (!detail || detail.name !== worldTracking.targetName) return;
   markerVisible = true;
-  if (!poseLocked) poseSample.length = 0;
+  resetInitialPoseSamples();
   addPoseSample(detail);
   renderTrackingStatus();
 }
@@ -804,6 +865,7 @@ function handleImageFound({ detail }) {
 function handleImageUpdated({ detail }) {
   if (poseLocked) return;
   if (landscapeBlocked) return;
+  if (!detail || detail.name !== worldTracking.targetName) return;
   markerVisible = true;
   addPoseSample(detail);
 }
@@ -813,16 +875,25 @@ function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
-  if (!poseLocked) poseSample.length = 0;
+  if (!poseLocked) resetInitialPoseSamples();
   // worldAnchorRoot deliberately remains visible and unchanged. XR8's SLAM
   // camera continues moving in the same world coordinate frame.
   renderTrackingStatus();
 }
 
 function handleTrackingStatus({ detail }) {
+  const previousStatus = trackingStatus;
   trackingStatus = detail?.status || trackingStatus;
   trackingReason = detail?.reason || trackingReason;
-  if (!poseLocked && trackingStatus !== "NORMAL") poseSample.length = 0;
+  if (trackingStatus === "NORMAL") {
+    if (previousStatus !== "NORMAL") {
+      trackingNormalSince = performance.now();
+      if (!poseLocked) resetInitialPoseSamples();
+    }
+  } else {
+    trackingNormalSince = null;
+    if (!poseLocked) resetInitialPoseSamples();
+  }
   if (landscapeBlocked) return;
   renderTrackingStatus();
 }
@@ -958,15 +1029,22 @@ async function runArAttempt({ automatic = false } = {}) {
 
     markerVisible = false;
     poseLocked = false;
-    poseSample.length = 0;
+    resetInitialPoseSamples();
+    trackingNormalSince = null;
+    worldAnchorRoot.matrixAutoUpdate = true;
     worldAnchorRoot.visible = false;
+    worldAnchorRoot.position.set(0, 0, 0);
+    worldAnchorRoot.quaternion.identity();
     worldAnchorRoot.scale.set(1, 1, 1);
+    worldAnchorRoot.updateMatrix();
     trackingStatus = "INITIALIZING";
     trackingReason = "INITIALIZING";
 
     xr8.XrController.configure({
       disableWorldTracking: false,
-      scale: "absolute",
+      // Responsive tracking avoids late floor-scale reconvergence. The known
+      // printed target size calibrates world-unit/metre in poseFromDetail().
+      scale: "responsive",
       imageTargetData: [targetData]
     });
 
@@ -1018,6 +1096,9 @@ async function prepare() {
       targetData.properties,
       definition.anchor.physicalWidthCm
     );
+    if (!targetSize) {
+      throw new Error("posterの印刷寸法とworld target寸法を対応付けられません。");
+    }
     startButton.disabled = false;
     startButton.textContent = "cameraを開始";
     setStatus("cameraを自動起動中…", "ready");
@@ -1074,7 +1155,10 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   window.clearTimeout(orientationRestoreTimer);
 
   if (blocked) {
-    if (!poseLocked) poseSample.length = 0;
+    if (!poseLocked) {
+      resetInitialPoseSamples();
+      trackingNormalSince = null;
+    }
     resumeAfterLandscape = Boolean(mixer && activeAction && playing);
     if (resumeAfterLandscape) setPlaying(false);
     setStatus("tabletは横向きにしてください", "limited");
@@ -1083,7 +1167,10 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 
   orientationRestoreTimer = window.setTimeout(() => {
     lastFrameTime = performance.now();
-    if (!poseLocked) poseSample.length = 0;
+    if (!poseLocked) {
+      resetInitialPoseSamples();
+      trackingNormalSince = trackingStatus === "NORMAL" ? performance.now() : null;
+    }
     if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
     resumeAfterLandscape = false;
     if (autoStartPending && !running) void startAr({ automatic: true });
