@@ -7,10 +7,12 @@ import {
   setupTabletLandscapeGate
 } from "./deviceSupport.js?v=1";
 import {
+  assetArrayBuffer,
   assetObjectUrl,
   carryUnlockFragment,
-  fetchAssetJson
-} from "./secureAsset.js?v=1";
+  fetchAssetJson,
+  usesEncryptedAssets
+} from "./secureAsset.js?v=2";
 import {
   calibratedWorldScale,
   mayAcceptTimedPoseSample,
@@ -19,7 +21,7 @@ import {
   sceneDistanceMetres,
   stableMeanScale,
   targetPhysicalSize
-} from "./markerPoseCore.js?v=3";
+} from "./markerPoseCore.js?v=4";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -66,6 +68,7 @@ contentRoot.add(modelPlacementRoot);
 worldAnchorRoot.visible = false;
 
 const poseSample = [];
+let flipbookNode = [];
 
 let catalog;
 let definition;
@@ -87,12 +90,19 @@ let lastTransportUpdateAt = -Infinity;
 let running = false;
 let playing = true;
 let markerVisible = false;
+let markerPosePreview = false;
+let markerPreviewUpdatedAt = null;
+let markerPreviewCalibrated = false;
+let markerHandoffTimer;
 let poseLocked = false;
 let pipelineAdded = false;
 let startPromise;
 let runtimeNeedsStop = false;
 let autoStartPending = false;
 let automaticStartInFlight = false;
+let cameraPipelineReadyPromise;
+let cameraPipelineReadyResolve;
+let modelStartupPromise;
 let loadSerial = 0;
 let lastFrameTime = performance.now();
 let trackingStatus = "INITIALIZING";
@@ -111,8 +121,70 @@ function setStatus(message, state = "loading") {
   status.dataset.state = state;
 }
 
+function resetCameraPipelineReady() {
+  cameraPipelineReadyPromise = new Promise((resolve) => {
+    cameraPipelineReadyResolve = resolve;
+  });
+}
+
+function markCameraPipelineReady() {
+  cameraPipelineReadyResolve?.({ ok: true });
+  cameraPipelineReadyResolve = undefined;
+  automaticStartInFlight = false;
+}
+
+function markCameraPipelineFailed(error) {
+  cameraPipelineReadyResolve?.({ ok: false, error });
+  cameraPipelineReadyResolve = undefined;
+}
+
+async function waitForCameraPipelineReady(timeoutMs = 15000) {
+  if (running) return;
+  if (!cameraPipelineReadyPromise) throw new Error("camera pipelineを開始できませんでした。");
+  let timeout;
+  try {
+    const outcome = await Promise.race([
+      cameraPipelineReadyPromise,
+      new Promise((_, reject) => {
+        timeout = window.setTimeout(
+          () => reject(new Error("camera pipelineの開始がtimeoutしました。")),
+          timeoutMs
+        );
+      })
+    ]);
+    if (outcome?.ok === false) throw outcome.error;
+  } catch (error) {
+    automaticStartInFlight = false;
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+canvas.addEventListener("webglcontextlost", (event) => {
+  event.preventDefault();
+  setStatus("3D描画memoryが不足しました · pageを再読み込みしてください", "error");
+});
+
 function syncWorldAnchorVisibility() {
-  worldAnchorRoot.visible = poseLocked && Boolean(activeModel);
+  worldAnchorRoot.visible = (poseLocked || markerPosePreview) && Boolean(activeModel);
+}
+
+function syncFlipbookVisibility() {
+  if (!flipbookNode.length) return;
+  let activeCount = 0;
+  for (const node of flipbookNode) {
+    const visible = Math.max(Math.abs(node.scale.x), Math.abs(node.scale.y), Math.abs(node.scale.z)) > 0.5;
+    node.visible = visible;
+    if (visible) activeCount += 1;
+  }
+  // Before AnimationMixer evaluates its first STEP key, preserve frame 0.
+  if (!activeCount) flipbookNode[0].visible = true;
+}
+
+function clearMarkerHandoffTimer() {
+  window.clearTimeout(markerHandoffTimer);
+  markerHandoffTimer = undefined;
 }
 
 function currentClipTime() {
@@ -298,6 +370,7 @@ function seekToSliderValue() {
   const fraction = Math.min(0.999999, Math.max(0, requestedSliderValue / 1000));
   activeAction.time = clipDuration * fraction;
   mixer.update(0);
+  syncFlipbookVisibility();
   updateTransport(true);
   renderTrackingStatus();
 }
@@ -359,14 +432,14 @@ function validateWorldTracking(caseDefinition) {
     initialPoseConfig.minimumSampleIntervalMs,
     100
   ));
-  const minimumDurationMs = Math.max(
-    1100,
-    positiveNumber(initialPoseConfig.minimumDurationMs, 1100)
-  );
-  const configuredSampleCount = Math.max(
-    12,
-    Math.round(positiveNumber(initialPoseConfig.sampleCount, 12))
-  );
+  const minimumDurationMs = Math.min(800, Math.max(
+    600,
+    positiveNumber(initialPoseConfig.minimumDurationMs, 600)
+  ));
+  const configuredSampleCount = Math.min(9, Math.max(
+    7,
+    Math.round(positiveNumber(initialPoseConfig.sampleCount, 7))
+  ));
   const durationSampleCount = Math.ceil(minimumDurationMs / minimumSampleIntervalMs) + 1;
   const modelRotationDegree = tracking.modelRotationDegree
     || markerTracking?.modelRotationDegree
@@ -387,7 +460,10 @@ function validateWorldTracking(caseDefinition) {
       sampleCount: Math.max(configuredSampleCount, durationSampleCount),
       minimumSampleIntervalMs,
       minimumDurationMs,
-      trackingWarmupMs: Math.max(700, finiteNumber(initialPoseConfig.trackingWarmupMs, 700)),
+      trackingWarmupMs: Math.min(600, Math.max(
+        400,
+        finiteNumber(initialPoseConfig.trackingWarmupMs, 400)
+      )),
       stabilityPositionMetres: positiveNumber(initialPoseConfig.stabilityPositionMetres, 0.015),
       stabilityRotationDegree: positiveNumber(initialPoseConfig.stabilityRotationDegree, 3),
       stabilityScaleFraction: positiveNumber(initialPoseConfig.stabilityScaleFraction, 0.04)
@@ -520,23 +596,34 @@ function createReferencePlane(mode) {
   worldAnchorRoot.add(referencePlane);
 }
 
+function disposeModel(model) {
+  model?.traverse((node) => {
+    if (!node.isMesh) return;
+    node.geometry?.dispose();
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials) {
+      if (!material) continue;
+      for (const value of Object.values(material)) {
+        if (value?.isTexture) value.dispose();
+      }
+      material.dispose();
+    }
+  });
+}
+
 function clearModel() {
   clearReferencePlane();
   mixer?.stopAllAction();
   mixer = null;
   activeAction = null;
+  flipbookNode = [];
   clipDuration = 0;
   lastTransportUpdateAt = -Infinity;
   transport.hidden = true;
   ratePicker.disabled = true;
   if (!activeModel) return;
   modelPlacementRoot.remove(activeModel);
-  activeModel.traverse((node) => {
-    if (!node.isMesh) return;
-    node.geometry?.dispose();
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
-    for (const material of materials) material?.dispose();
-  });
+  disposeModel(activeModel);
   activeModel = null;
   modelPlacementRoot.position.set(0, 0, 0);
   modelPlacementRoot.quaternion.identity();
@@ -551,9 +638,22 @@ async function loadMode(mode) {
   ratePicker.disabled = true;
   setStatus(`${mode.label}を読み込み中…`, "loading");
 
-  const modelUrl = await assetObjectUrl(versionedUrl(mode.src), "model/gltf-binary");
-  const gltf = await new GLTFLoader().loadAsync(modelUrl);
-  if (serial !== loadSerial) return;
+  const logicalModelUrl = versionedUrl(mode.src);
+  const loader = new GLTFLoader();
+  let gltf;
+  if (usesEncryptedAssets()) {
+    setStatus(`${mode.label}を復号中…`, "loading");
+    const modelBuffer = await assetArrayBuffer(logicalModelUrl);
+    setStatus(`${mode.label}を3D解析中…`, "loading");
+    gltf = await loader.parseAsync(modelBuffer, new URL(".", logicalModelUrl).href);
+  } else {
+    const modelUrl = await assetObjectUrl(logicalModelUrl, "model/gltf-binary");
+    gltf = await loader.loadAsync(modelUrl);
+  }
+  if (serial !== loadSerial) {
+    disposeModel(gltf.scene);
+    return;
+  }
   const clip = mode.animationName
     ? THREE.AnimationClip.findByName(gltf.animations, mode.animationName)
     : gltf.animations[0];
@@ -576,6 +676,10 @@ async function loadMode(mode) {
   configurePlaybackRateOptions(mode, requestedPlaybackRate);
   setPlaybackRate(requestedPlaybackRate);
   activeModel = gltf.scene;
+  flipbookNode = [];
+  activeModel.traverse((node) => {
+    if (/^frame\d{4}$/i.test(node.name)) flipbookNode.push(node);
+  });
   // Keep SI scale and marker-plane orientation outside the animated GLTF.
   // Animation tracks are then unable to overwrite the placement transform.
   modelPlacementRoot.scale.setScalar(physicalScale);
@@ -595,6 +699,8 @@ async function loadMode(mode) {
     activeAction = action;
     clipDuration = clip.duration;
     mixer.timeScale = playing ? enginePlaybackRate() : 0;
+    mixer.update(0);
+    syncFlipbookVisibility();
     ratePicker.disabled = false;
     updateTransport(true);
   }
@@ -725,6 +831,84 @@ function poseFromDetail(detail) {
   };
 }
 
+function applyMarkerPreviewPose(pose) {
+  if (poseLocked) return;
+  const firstPreview = !markerPosePreview;
+  worldAnchorRoot.matrixAutoUpdate = true;
+  if (!markerPosePreview || markerPreviewUpdatedAt === null) {
+    worldAnchorRoot.position.copy(pose.position);
+    worldAnchorRoot.quaternion.copy(pose.quaternion);
+    worldAnchorRoot.scale.setScalar(pose.scale);
+  } else {
+    const elapsedMs = Math.max(0, pose.capturedAt - markerPreviewUpdatedAt);
+    const alpha = Math.min(0.18, Math.max(0.03, 1 - Math.exp(-elapsedMs / 450)));
+    const currentScale = worldAnchorRoot.scale.x;
+    const positionStep = pose.position.clone().sub(worldAnchorRoot.position);
+    const maximumSceneStep = Math.max(0.001, currentScale * 0.02);
+    if (positionStep.length() > maximumSceneStep) positionStep.setLength(maximumSceneStep);
+    worldAnchorRoot.position.addScaledVector(positionStep, alpha);
+    const rotationDistance = worldAnchorRoot.quaternion.angleTo(pose.quaternion);
+    const rotationAlpha = rotationDistance > 0
+      ? Math.min(alpha, THREE.MathUtils.degToRad(1.5) / rotationDistance)
+      : 1;
+    worldAnchorRoot.quaternion.slerp(pose.quaternion, rotationAlpha);
+    const boundedScale = THREE.MathUtils.clamp(
+      pose.scale,
+      currentScale * 0.98,
+      currentScale * 1.02
+    );
+    const smoothedScale = THREE.MathUtils.lerp(currentScale, boundedScale, alpha * 0.7);
+    worldAnchorRoot.scale.setScalar(smoothedScale);
+  }
+  markerPosePreview = true;
+  markerPreviewCalibrated = pose.scaleCalibrated;
+  markerPreviewUpdatedAt = pose.capturedAt;
+  worldAnchorRoot.updateMatrix();
+  syncWorldAnchorVisibility();
+  if (firstPreview || !markerHandoffTimer) scheduleMarkerHandoffDeadline();
+}
+
+function scheduleMarkerHandoffDeadline(delayMs = 1800) {
+  clearMarkerHandoffTimer();
+  markerHandoffTimer = window.setTimeout(() => {
+    markerHandoffTimer = undefined;
+    if (poseLocked || !markerPosePreview) return;
+    if (landscapeBlocked) {
+      scheduleMarkerHandoffDeadline(400);
+      return;
+    }
+    if (!markerVisible || !markerPreviewCalibrated) return;
+    // A bounded marker-authority interval prevents noisy Android image events
+    // from driving the object forever when the strict quality gate starves.
+    lockCurrentMarkerPreview();
+  }, delayMs);
+}
+
+function lockMarkerPose(pose = null) {
+  if (!markerPosePreview || poseLocked) return false;
+  if (pose) {
+    worldAnchorRoot.matrixAutoUpdate = true;
+    worldAnchorRoot.position.copy(pose.position);
+    worldAnchorRoot.quaternion.copy(pose.quaternion);
+    worldAnchorRoot.scale.setScalar(pose.scale);
+  }
+  worldAnchorRoot.updateMatrix();
+  worldAnchorRoot.matrixAutoUpdate = false;
+  poseLocked = true;
+  markerPosePreview = false;
+  clearMarkerHandoffTimer();
+  poseSample.length = 0;
+  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+  syncWorldAnchorVisibility();
+  scanGuide.hidden = true;
+  renderTrackingStatus();
+  return true;
+}
+
+function lockCurrentMarkerPreview() {
+  return lockMarkerPose();
+}
+
 function averagedStablePose(samples) {
   if (!poseWindowReady(
     samples,
@@ -770,34 +954,23 @@ function averagedStablePose(samples) {
   return { position, quaternion, scale };
 }
 
-function applyInitialPose(pose) {
-  worldAnchorRoot.matrixAutoUpdate = true;
-  worldAnchorRoot.position.copy(pose.position);
-  worldAnchorRoot.quaternion.copy(pose.quaternion);
-  worldAnchorRoot.scale.setScalar(pose.scale);
-  worldAnchorRoot.updateMatrix();
-  // The marker is only an initializer. Freeze this matrix so image-target
-  // updates and GLTF animation can never modify the world placement.
-  worldAnchorRoot.matrixAutoUpdate = false;
-  poseLocked = true;
-  poseSample.length = 0;
-  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
-  syncWorldAnchorVisibility();
-  scanGuide.hidden = true;
-  renderTrackingStatus();
-}
-
 function resetInitialPoseSamples() {
   poseSample.length = 0;
   lastPoseSampleAt = Number.NEGATIVE_INFINITY;
 }
 
 function addPoseSample(detail) {
+  if (poseLocked || landscapeBlocked) return;
+  const pose = poseFromDetail(detail);
+  if (!pose) return;
+  // The marker is the immediate authority. This gives feedback as soon as the
+  // poster is found while the world tracker earns a stable hand-off window.
+  applyMarkerPreviewPose(pose);
   if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
     if (!poseLocked) resetInitialPoseSamples();
     return;
   }
-  const now = performance.now();
+  const now = pose.capturedAt;
   if (!mayAcceptTimedPoseSample({
     now,
     previousSampleAt: lastPoseSampleAt,
@@ -805,15 +978,15 @@ function addPoseSample(detail) {
     minimumSampleIntervalMs: worldTracking.initialPose.minimumSampleIntervalMs,
     trackingWarmupMs: worldTracking.initialPose.trackingWarmupMs
   })) return;
-  const pose = poseFromDetail(detail);
-  if (!pose) return;
   lastPoseSampleAt = pose.capturedAt;
   poseSample.push(pose);
   while (poseSample.length > worldTracking.initialPose.sampleCount) poseSample.shift();
 
   const stablePose = averagedStablePose(poseSample);
   if (!stablePose) return;
-  applyInitialPose(stablePose);
+  // Use the pose that passed the quality gate. The fallback deadline freezes
+  // the smoothed preview only when event cadence prevents this path.
+  lockMarkerPose(stablePose);
 }
 
 function readableTrackingReason(reason) {
@@ -838,8 +1011,10 @@ function renderTrackingStatus() {
   }
   if (!poseLocked) {
     setStatus(
-      markerVisible
-        ? "posterを検出 · 周囲trackingと初期位置を安定化中…"
+      markerPosePreview
+        ? (markerVisible
+          ? "poster基準で仮表示 · 周囲trackingへ固定中…"
+          : "仮位置を保持 · posterをもう一度映してください")
         : "色付きQR poster全体を映してください",
       "scanning"
     );
@@ -875,9 +1050,13 @@ function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
-  if (!poseLocked) resetInitialPoseSamples();
-  // worldAnchorRoot deliberately remains visible and unchanged. XR8's SLAM
-  // camera continues moving in the same world coordinate frame.
+  if (!poseLocked) {
+    clearMarkerHandoffTimer();
+    resetInitialPoseSamples();
+    // Losing the target is not proof of pose quality. Keep the last provisional
+    // pose visible, but only a genuinely stable window may complete hand-off.
+    syncWorldAnchorVisibility();
+  }
   renderTrackingStatus();
 }
 
@@ -928,9 +1107,16 @@ function mayNeedUserActivation(error) {
 }
 
 function handleRuntimeError(error) {
-  showStartFallback(error, {
-    retry: automaticStartInFlight && mayNeedUserActivation(error)
+  const runtimeError = error instanceof Error ? error : new Error(String(error || "runtime error"));
+  runtimeError.flowArHandled = true;
+  // Invalidate an in-flight GLB load. loadMode() disposes the parsed scene when
+  // its serial no longer matches, avoiding a hidden late attachment after XR fails.
+  loadSerial += 1;
+  showStartFallback(runtimeError, {
+    retry: automaticStartInFlight && mayNeedUserActivation(runtimeError)
   });
+  markCameraPipelineFailed(runtimeError);
+  automaticStartInFlight = false;
 }
 
 function handleCameraStatus({ status: cameraStatus, reason }) {
@@ -976,6 +1162,7 @@ function createWorldPipelineModule() {
       });
 
       running = true;
+      markCameraPipelineReady();
       intro.hidden = true;
       scanGuide.hidden = false;
       playButton.disabled = !mixer;
@@ -986,7 +1173,10 @@ function createWorldPipelineModule() {
       const now = performance.now();
       const delta = Math.min(Math.max((now - lastFrameTime) / 1000, 0), 0.1);
       lastFrameTime = now;
-      if (!landscapeBlocked && playing) mixer?.update(delta);
+      if (!landscapeBlocked && playing && (poseLocked || markerPosePreview)) {
+        mixer?.update(delta);
+        syncFlipbookVisibility();
+      }
       updateTransport();
     },
     onCameraStatusChange: handleCameraStatus,
@@ -1004,7 +1194,7 @@ async function runArAttempt({ automatic = false } = {}) {
   if (isTabletPortrait()) {
     autoStartPending = true;
     setStatus("tabletは横向きにしてください", "limited");
-    return;
+    return false;
   }
 
   autoStartPending = false;
@@ -1028,6 +1218,10 @@ async function runArAttempt({ automatic = false } = {}) {
     await requestTabletLandscapeMode();
 
     markerVisible = false;
+    markerPosePreview = false;
+    markerPreviewUpdatedAt = null;
+    markerPreviewCalibrated = false;
+    clearMarkerHandoffTimer();
     poseLocked = false;
     resetInitialPoseSamples();
     trackingNormalSince = null;
@@ -1039,6 +1233,7 @@ async function runArAttempt({ automatic = false } = {}) {
     worldAnchorRoot.updateMatrix();
     trackingStatus = "INITIALIZING";
     trackingReason = "INITIALIZING";
+    resetCameraPipelineReady();
 
     xr8.XrController.configure({
       disableWorldTracking: false,
@@ -1062,23 +1257,39 @@ async function runArAttempt({ automatic = false } = {}) {
     }
 
     await xr8.run(allowedDevices ? { canvas, allowedDevices } : { canvas });
+    return true;
   } catch (error) {
     handleRuntimeError(error);
-  } finally {
-    automaticStartInFlight = false;
+    return false;
   }
 }
 
 async function startAr(options = {}) {
-  if (running) return;
+  if (running) return true;
   if (startPromise) return startPromise;
 
   startPromise = runArAttempt(options);
   try {
-    await startPromise;
+    return await startPromise;
   } finally {
     startPromise = undefined;
   }
+}
+
+async function ensureCameraAndModel(options = {}) {
+  const cameraStarted = await startAr(options);
+  if (!cameraStarted) return false;
+  await waitForCameraPipelineReady();
+  if (!activeModel) {
+    if (!modelStartupPromise) {
+      const requestedMode = selectedMode;
+      modelStartupPromise = loadMode(requestedMode).finally(() => {
+        modelStartupPromise = undefined;
+      });
+    }
+    await modelStartupPromise;
+  }
+  return true;
 }
 
 async function prepare() {
@@ -1102,26 +1313,27 @@ async function prepare() {
     startButton.disabled = false;
     startButton.textContent = "cameraを開始";
     setStatus("cameraを自動起動中…", "ready");
-    void startAr({ automatic: true });
+    // Let camera/SLAM finish allocating first. Decrypting and parsing a large
+    // animated GLB concurrently can exceed Android's short memory/CPU peak.
+    const ready = await ensureCameraAndModel({ automatic: true });
+    if (!ready) return;
   } catch (error) {
+    if (error?.flowArHandled) return;
     showStartFallback(
       error?.message ? error : new Error("world ARを準備できませんでした。"),
       { retry: false }
     );
     return;
   }
-
-  try {
-    await loadMode(selectedMode);
-  } catch (error) {
-    console.error(error);
-    modePicker.disabled = false;
-    setStatus(error?.message || "3D modelを読み込めませんでした", "error");
-  }
 }
 
 startButton.addEventListener("click", async () => {
-  await startAr();
+  try {
+    await ensureCameraAndModel();
+  } catch (error) {
+    if (error?.flowArHandled) return;
+    showStartFallback(error, { retry: true });
+  }
 });
 
 modePicker.addEventListener("change", async () => {
@@ -1155,6 +1367,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   window.clearTimeout(orientationRestoreTimer);
 
   if (blocked) {
+    clearMarkerHandoffTimer();
     if (!poseLocked) {
       resetInitialPoseSamples();
       trackingNormalSince = null;
@@ -1173,12 +1386,17 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
     }
     if (wasBlocked && resumeAfterLandscape && mixer && activeAction) setPlaying(true);
     resumeAfterLandscape = false;
-    if (autoStartPending && !running) void startAr({ automatic: true });
+    if (autoStartPending && !running) {
+      void ensureCameraAndModel({ automatic: true }).catch((error) => {
+        if (!error?.flowArHandled) showStartFallback(error, { retry: true });
+      });
+    }
     renderTrackingStatus();
   }, 200);
 });
 
 window.addEventListener("pagehide", () => {
+  clearMarkerHandoffTimer();
   try { xr8?.stop?.(); } catch {}
   running = false;
 });

@@ -47,17 +47,28 @@ export function calibratedWorldScale(detail, targetSize) {
   const markerScale = finitePositive(detail?.scale);
   const scaledWidth = finitePositive(detail?.scaledWidth);
   const scaledHeight = finitePositive(detail?.scaledHeight);
-  if (!markerScale || !scaledWidth || !scaledHeight) return null;
+  const targetLongAxis = Math.max(
+    finitePositive(targetSize.widthMetres) || 0,
+    finitePositive(targetSize.heightMetres) || 0
+  );
+  if (!markerScale || !targetLongAxis) return null;
+
+  // XR8 defines detail.scale as the detected target's longest extent. This
+  // orientation-independent ratio remains valid when an Android runtime omits
+  // scaledWidth/scaledHeight or reports them in the opposite screen rotation.
+  const longAxisRatio = markerScale / targetLongAxis;
+  if (!scaledWidth || !scaledHeight) return longAxisRatio;
 
   const widthRatio = markerScale * scaledWidth / targetSize.widthMetres;
   const heightRatio = markerScale * scaledHeight / targetSize.heightMetres;
   if (![widthRatio, heightRatio].every(Number.isFinite)
     || widthRatio <= 0 || heightRatio <= 0) return null;
 
-  // Both axes describe the same uniform scale. A disagreement indicates that
-  // the runtime field semantics or target metadata do not match this target.
+  // Prefer both axes when they agree. Some Android/browser combinations swap
+  // them after orientation changes; falling back to the documented long-axis
+  // scale is safer than rejecting every marker pose and hiding the model.
   const axisDisagreement = Math.abs(Math.log(widthRatio / heightRatio));
-  if (axisDisagreement > 0.08) return null;
+  if (axisDisagreement > 0.08) return longAxisRatio;
   const result = Math.sqrt(widthRatio * heightRatio);
 
   // In responsive world tracking this is intentionally not expected to be

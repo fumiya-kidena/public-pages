@@ -105,8 +105,10 @@ async function decryptAsset(input) {
     ) {
       throw new Error(`暗号asset headerが不正です: ${resolved.path}`);
     }
-    const iv = envelope.slice(4, 16);
-    const ciphertext = envelope.slice(16);
+    // Keep views onto the fetched envelope. Large animated GLBs otherwise
+    // allocate two avoidable copies before WebCrypto starts decrypting.
+    const iv = envelope.subarray(4, 16);
+    const ciphertext = envelope.subarray(16);
     let plaintext;
     try {
       plaintext = await crypto.subtle.decrypt(
@@ -140,6 +142,10 @@ async function decryptAsset(input) {
 
 export function usesEncryptedAssets() {
   return Boolean(packageDefinition);
+}
+
+export async function assetArrayBuffer(input) {
+  return decryptAsset(input);
 }
 
 export async function fetchAssetJson(input) {
