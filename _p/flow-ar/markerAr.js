@@ -877,9 +877,12 @@ function scheduleMarkerHandoffDeadline(delayMs = 1800) {
       scheduleMarkerHandoffDeadline(400);
       return;
     }
-    if (!markerVisible || !markerPreviewCalibrated) return;
+    if (!markerPreviewCalibrated) return;
     // A bounded marker-authority interval prevents noisy Android image events
     // from driving the object forever when the strict quality gate starves.
+    // The last calibrated provisional pose is still usable after a brief
+    // image-target loss; requiring the target to be visible at this instant
+    // made low-end Android cameras restart this window indefinitely.
     lockCurrentMarkerPreview();
   }, delayMs);
 }
@@ -1051,10 +1054,10 @@ function handleImageLost({ detail }) {
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
   if (!poseLocked) {
-    clearMarkerHandoffTimer();
     resetInitialPoseSamples();
     // Losing the target is not proof of pose quality. Keep the last provisional
-    // pose visible, but only a genuinely stable window may complete hand-off.
+    // pose and its bounded hand-off deadline. Reacquisition may still satisfy
+    // the strict gate, otherwise the deadline freezes this calibrated pose.
     syncWorldAnchorVisibility();
   }
   renderTrackingStatus();
