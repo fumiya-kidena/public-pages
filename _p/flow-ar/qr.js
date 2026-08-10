@@ -2,7 +2,7 @@ import {
   assetObjectUrl,
   carryUnlockFragment,
   fetchAssetJson
-} from "./secureAsset.js?v=1";
+} from "./secureAsset.js?v=3";
 import {
   caseAnchorAlt,
   caseDisplayLabel,

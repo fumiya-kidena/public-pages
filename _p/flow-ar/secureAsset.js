@@ -189,7 +189,9 @@ export async function assetObjectUrl(input, fallbackMime = "application/octet-st
 export function carryUnlockFragment(url) {
   const target = url instanceof URL ? url : new URL(url, document.baseURI);
   if (window.location.hash.includes("staticrypt_pwd=")) {
-    if (packageDefinition && !logicalPath(target)) {
+    // The deployment root itself has the valid logical path "". Only null
+    // means that the target escaped the encrypted deployment root.
+    if (packageDefinition && logicalPath(target) === null) {
       throw new Error("unlock fragmentをdeployment root外へ転送できません。");
     }
     target.hash = window.location.hash;
