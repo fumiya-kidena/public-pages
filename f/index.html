@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>FLOW AR</title>
+  <script>
+  (() => {
+    "use strict";
+
+    const routes = Object.freeze({
+      b: "../_p/flow-ar/markerAr.html?case=bagBreakup&mode=bagFixed",
+      d: "../_p/flow-ar/?case=oscillatingDroplet&mode=glass"
+    });
+    const match = window.location.hash.slice(1).match(/^([bd])([0-9]{78})$/);
+    if (!match || !Object.prototype.hasOwnProperty.call(routes, match[1])) {
+      document.documentElement.dataset.invalid = "true";
+      return;
+    }
+
+    try {
+      const token = match[2];
+      const credentialValue = BigInt(token);
+      const canonicalToken = credentialValue.toString(10).padStart(78, "0");
+      if (credentialValue >= (BigInt(1) << BigInt(256)) || canonicalToken !== token) {
+        throw new Error("invalid token");
+      }
+      const credentialHex = credentialValue.toString(16).padStart(64, "0");
+      const target = new URL(routes[match[1]], window.location.href);
+      target.hash = `staticrypt_pwd=${credentialHex}&remember_me`;
+      window.location.replace(target.href);
+    } catch {
+      document.documentElement.dataset.invalid = "true";
+    }
+  })();
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+      background: #071f2a;
+      color: #f3efe5;
+    }
+    body {
+      display: none;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      text-align: center;
+    }
+    html[data-invalid="true"] body {
+      display: grid;
+    }
+  </style>
+  <noscript><style>body { display: grid; }</style></noscript>
+</head>
+<body>
+  <p>FLOW AR link could not be opened.<noscript><br>JavaScript is required.</noscript></p>
+</body>
+</html>
