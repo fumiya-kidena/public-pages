@@ -114,6 +114,10 @@ export function sceneDistanceMetres(sceneDistance, worldUnitsPerMetre) {
  */
 export const stablePosterPoseProfile = Object.freeze({
   minimumIntervalMs: 100,
+  // Low-end Android image-target callbacks can be 350--500 ms apart. Keep the
+  // acquisition window alive across that cadence, but discard a genuinely
+  // stale detection episode.
+  acquisitionMaximumSampleGapMs: 1600,
   maximumElapsedMs: 300,
   acquisitionSampleCount: 3,
   acquisitionDurationMs: 180,
@@ -151,33 +155,50 @@ export const stablePosterPoseProfile = Object.freeze({
  */
 export const worldMarkerCorrectionProfile = Object.freeze({
   sampleIntervalMs: 100,
-  maximumSampleGapMs: 450,
-  trackingWarmupMs: 400,
-  sampleCount: 4,
-  minimumDurationMs: 300,
-  extendedSampleCount: 7,
-  extendedMinimumDurationMs: 600,
+  maximumSampleGapMs: 1600,
+  trackingWarmupMs: 250,
+  sampleCount: 3,
+  minimumDurationMs: 160,
+  extendedSampleCount: 4,
+  extendedMinimumDurationMs: 300,
   stability: Object.freeze({
-    positionMetres: 0.01,
-    rotationRadians: 2 * Math.PI / 180,
-    scaleFraction: 0.025
+    positionMetres: 0.008,
+    rotationRadians: 1.5 * Math.PI / 180,
+    scaleFraction: 0.02
   }),
   extendedInnovation: Object.freeze({
-    positionMetres: 0.06,
-    rotationRadians: 8 * Math.PI / 180,
-    scaleFraction: 0.08
+    positionMetres: 0.03,
+    rotationRadians: 3 * Math.PI / 180,
+    scaleFraction: 0.04
   }),
   maximumInnovation: Object.freeze({
-    positionMetres: 0.25,
-    rotationRadians: 25 * Math.PI / 180,
-    scaleFraction: 0.2
+    positionMetres: 0.5,
+    rotationRadians: 70 * Math.PI / 180,
+    scaleFraction: 0.5
+  }),
+  // A SLAM relocalization can legitimately move the complete world frame much
+  // farther than an ordinary image-target correction. It still needs two
+  // independent stable windows before this wider gate is used.
+  relocalizationMaximumInnovation: Object.freeze({
+    positionMetres: 2,
+    rotationRadians: 170 * Math.PI / 180,
+    scaleFraction: 1.5
   }),
   confirmation: Object.freeze({
-    // Seven samples can legitimately span 2.7 s at the allowed 450 ms gap.
-    maximumPendingAgeMs: 4000,
-    positionMetres: 0.012,
-    rotationRadians: 2 * Math.PI / 180,
-    scaleFraction: 0.025
+    // Four sparse samples and the next independent window can legitimately
+    // span several seconds on a low-end tablet.
+    maximumPendingAgeMs: 10000,
+    positionMetres: 0.015,
+    rotationRadians: 2.5 * Math.PI / 180,
+    scaleFraction: 0.03
+  }),
+  transition: Object.freeze({
+    minorDurationMs: 260,
+    majorDurationMs: 800,
+    maximumFrameGapMs: 1000,
+    positionDeadbandMetres: 0.003,
+    rotationDeadbandRadians: 0.4 * Math.PI / 180,
+    scaleDeadbandFraction: 0.008
   }),
   step: Object.freeze({
     minimumIntervalMs: 250,
@@ -203,6 +224,17 @@ export const worldMarkerCorrectionProfile = Object.freeze({
       activeTimeConstantMs: 900,
       maximumStep: 0.002
     })
+  })
+});
+
+export const markerObservationQualityProfile = Object.freeze({
+  initial: Object.freeze({
+    maximumViewAngleRadians: 70 * Math.PI / 180,
+    minimumProjectedSpan: 0.07
+  }),
+  correction: Object.freeze({
+    maximumViewAngleRadians: 60 * Math.PI / 180,
+    minimumProjectedSpan: 0.1
   })
 });
 
@@ -293,8 +325,63 @@ function rejectedMarkerCorrection() {
 }
 
 function nonNegativeMetric(value) {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") {
+    return null;
+  }
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+export function markerAcquisitionSamplingDecision({
+  now,
+  previousSampleAt,
+  profile = stablePosterPoseProfile
+}) {
+  const currentTime = Number(now);
+  const previousTime = Number(previousSampleAt);
+  const minimumIntervalMs = Number(profile?.minimumIntervalMs);
+  const maximumSampleGapMs = Number(profile?.acquisitionMaximumSampleGapMs);
+  if (![currentTime, minimumIntervalMs, maximumSampleGapMs].every(Number.isFinite)
+    || minimumIntervalMs < 0 || maximumSampleGapMs < minimumIntervalMs) {
+    return { accepted: false, resetWindow: false, reason: "invalid" };
+  }
+  if (!Number.isFinite(previousTime)) {
+    return { accepted: true, resetWindow: false, reason: "first" };
+  }
+  const elapsedMs = currentTime - previousTime;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+    return { accepted: false, resetWindow: true, reason: "non-monotonic" };
+  }
+  if (elapsedMs > maximumSampleGapMs) {
+    return { accepted: true, resetWindow: true, reason: "gap" };
+  }
+  if (elapsedMs < minimumIntervalMs) {
+    return { accepted: false, resetWindow: false, reason: "cadence" };
+  }
+  return { accepted: true, resetWindow: false, reason: "cadence" };
+}
+
+export function markerObservationQualityDecision({
+  phase = "correction",
+  trackingStatus,
+  viewAngleRadians,
+  projectedMinimumSpan,
+  profile = markerObservationQualityProfile
+}) {
+  if (trackingStatus !== "NORMAL") {
+    return { accepted: false, reason: "tracking" };
+  }
+  const limit = profile?.[phase];
+  const angle = nonNegativeMetric(viewAngleRadians);
+  const span = nonNegativeMetric(projectedMinimumSpan);
+  const maximumAngle = nonNegativeMetric(limit?.maximumViewAngleRadians);
+  const minimumSpan = nonNegativeMetric(limit?.minimumProjectedSpan);
+  if (angle === null || span === null || maximumAngle === null || minimumSpan === null) {
+    return { accepted: false, reason: "geometry" };
+  }
+  if (angle > maximumAngle) return { accepted: false, reason: "oblique" };
+  if (span < minimumSpan) return { accepted: false, reason: "small" };
+  return { accepted: true, reason: "quality" };
 }
 
 export function markerCorrectionSamplingDecision({
@@ -375,11 +462,29 @@ export function markerCorrectionConfirmationDecision({
   return "apply";
 }
 
+export function markerCorrectionWindowStable({
+  positionSpreadMetres,
+  rotationSpreadRadians,
+  scaleSpreadFraction,
+  profile = worldMarkerCorrectionProfile
+}) {
+  const spread = {
+    positionMetres: nonNegativeMetric(positionSpreadMetres),
+    rotationRadians: nonNegativeMetric(rotationSpreadRadians),
+    scaleFraction: nonNegativeMetric(scaleSpreadFraction)
+  };
+  return !Object.values(spread).some((value) => value === null)
+    && spread.positionMetres <= Number(profile?.stability?.positionMetres)
+    && spread.rotationRadians <= Number(profile?.stability?.rotationRadians)
+    && spread.scaleFraction <= Number(profile?.stability?.scaleFraction);
+}
+
 export function markerCorrectionWindowRequirement({
   positionDistanceMetres,
   rotationDistanceRadians,
   scaleDifferenceFraction,
   forceExtended = false,
+  relocalizing = false,
   profile = worldMarkerCorrectionProfile
 }) {
   const innovation = {
@@ -388,9 +493,18 @@ export function markerCorrectionWindowRequirement({
     scaleFraction: nonNegativeMetric(scaleDifferenceFraction)
   };
   if (Object.values(innovation).some((value) => value === null)) return null;
-  if (innovation.positionMetres > Number(profile?.maximumInnovation?.positionMetres)
-    || innovation.rotationRadians > Number(profile?.maximumInnovation?.rotationRadians)
-    || innovation.scaleFraction > Number(profile?.maximumInnovation?.scaleFraction)) {
+  const maximumInnovation = relocalizing
+    ? profile?.relocalizationMaximumInnovation
+    : profile?.maximumInnovation;
+  const maximum = {
+    positionMetres: nonNegativeMetric(maximumInnovation?.positionMetres),
+    rotationRadians: nonNegativeMetric(maximumInnovation?.rotationRadians),
+    scaleFraction: nonNegativeMetric(maximumInnovation?.scaleFraction)
+  };
+  if (Object.values(maximum).some((value) => value === null)
+    || innovation.positionMetres > maximum.positionMetres
+    || innovation.rotationRadians > maximum.rotationRadians
+    || innovation.scaleFraction > maximum.scaleFraction) {
     return null;
   }
   const extended = forceExtended === true
@@ -418,23 +532,22 @@ export function markerCorrectionStep({
   positionSpreadMetres,
   rotationSpreadRadians,
   scaleSpreadFraction,
+  relocalizing = false,
   profile = worldMarkerCorrectionProfile
 }) {
-  const spread = {
-    positionMetres: nonNegativeMetric(positionSpreadMetres),
-    rotationRadians: nonNegativeMetric(rotationSpreadRadians),
-    scaleFraction: nonNegativeMetric(scaleSpreadFraction)
-  };
-  if (Object.values(spread).some((value) => value === null)
-    || spread.positionMetres > Number(profile?.stability?.positionMetres)
-    || spread.rotationRadians > Number(profile?.stability?.rotationRadians)
-    || spread.scaleFraction > Number(profile?.stability?.scaleFraction)) {
+  if (!markerCorrectionWindowStable({
+    positionSpreadMetres,
+    rotationSpreadRadians,
+    scaleSpreadFraction,
+    profile
+  })) {
     return rejectedMarkerCorrection();
   }
   if (!markerCorrectionWindowRequirement({
     positionDistanceMetres,
     rotationDistanceRadians,
     scaleDifferenceFraction,
+    relocalizing,
     profile
   })) {
     return rejectedMarkerCorrection();
@@ -446,6 +559,54 @@ export function markerCorrectionStep({
     scaleDifferenceFraction,
     profile: profile.step
   });
+}
+
+export function markerCorrectionTransitionPlan({
+  positionDistanceMetres,
+  rotationDistanceRadians,
+  scaleDifferenceFraction,
+  relocalizing = false,
+  profile = worldMarkerCorrectionProfile
+}) {
+  const requirement = markerCorrectionWindowRequirement({
+    positionDistanceMetres,
+    rotationDistanceRadians,
+    scaleDifferenceFraction,
+    forceExtended: relocalizing,
+    relocalizing,
+    profile
+  });
+  if (!requirement) return null;
+
+  const transition = profile?.transition;
+  const deadband = {
+    positionMetres: nonNegativeMetric(transition?.positionDeadbandMetres),
+    rotationRadians: nonNegativeMetric(transition?.rotationDeadbandRadians),
+    scaleFraction: nonNegativeMetric(transition?.scaleDeadbandFraction)
+  };
+  const duration = Number(
+    requirement.extended ? transition?.majorDurationMs : transition?.minorDurationMs
+  );
+  if (Object.values(deadband).some((value) => value === null)
+    || !Number.isFinite(duration) || duration < 0) return null;
+
+  const required = Number(positionDistanceMetres) > deadband.positionMetres
+    || Number(rotationDistanceRadians) > deadband.rotationRadians
+    || Number(scaleDifferenceFraction) > deadband.scaleFraction;
+  return {
+    required,
+    extended: requirement.extended,
+    durationMs: required ? duration : 0
+  };
+}
+
+export function markerCorrectionBlendProgress(elapsedMs, durationMs) {
+  const elapsed = Number(elapsedMs);
+  const duration = Number(durationMs);
+  if (!Number.isFinite(elapsed) || !Number.isFinite(duration) || duration < 0) return null;
+  if (duration === 0) return elapsed >= 0 ? 1 : 0;
+  const linear = Math.min(1, Math.max(0, elapsed / duration));
+  return linear * linear * (3 - 2 * linear);
 }
 
 export function mayAcceptTimedPoseSample({

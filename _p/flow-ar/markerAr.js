@@ -15,20 +15,23 @@ import {
 } from "./secureAsset.js?v=2";
 import {
   calibratedWorldScale,
+  markerAcquisitionSamplingDecision,
+  markerCorrectionBlendProgress,
   markerCorrectionConfirmationDecision,
   markerCorrectionSamplingDecision,
-  markerCorrectionStep,
+  markerCorrectionTransitionPlan,
+  markerCorrectionWindowStable,
   markerCorrectionWindowRequirement,
+  markerObservationQualityDecision,
   mayAcceptTimedPoseSample,
   maySampleInitialPose,
   poseWindowReady,
   sceneDistanceMetres,
   stablePosterPoseProfile,
   stablePosterPoseStep,
-  stableMeanScale,
   targetPhysicalSize,
   worldMarkerCorrectionProfile
-} from "./markerPoseCore.js?v=6";
+} from "./markerPoseCore.js?v=7";
 import {
   arPerformanceProfileForDevice,
   constrainCameraFrameRate,
@@ -119,11 +122,8 @@ let playing = true;
 let markerVisible = false;
 let markerPosePreview = false;
 let markerPreviewUpdatedAt = null;
-let markerPreviewCalibrated = false;
 let lastPosterAcquisitionAt = Number.NEGATIVE_INFINITY;
-let markerHandoffTimer;
 let poseLocked = false;
-let posterLockedFallback = false;
 let pipelineAdded = false;
 let startPromise;
 let runtimeNeedsStop = false;
@@ -140,10 +140,11 @@ let trackingReason = "INITIALIZING";
 let trackingNormalSince = null;
 let lastPoseSampleAt = Number.NEGATIVE_INFINITY;
 let lastMarkerCorrectionSampleAt = Number.NEGATIVE_INFINITY;
-let lastMarkerCorrectionAppliedAt = Number.NEGATIVE_INFINITY;
 let pendingLargeMarkerCorrection = null;
-let authorisedLargeMarkerCorrection = null;
+let markerCorrectionTransition = null;
 let markerCorrectionPhase = "idle";
+let markerTrackingEpoch = 0;
+let markerCorrectionNeedsEpochRebase = false;
 let constrainedCameraTrack;
 let allowedDevices;
 let landscapeBlocked = false;
@@ -203,13 +204,9 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 
 function syncWorldAnchorVisibility() {
-  // In Android-tablet poster-lock fallback, an unlocked preview is trustworthy
-  // only while the poster is visible. Holding its last matrix after target loss
-  // merely exposes SLAM drift as a wildly moving model. Other devices retain
-  // the established world-handoff behaviour.
-  const poseVisible = posterLockedFallback
-    ? markerPosePreview && markerVisible
-    : poseLocked || markerPosePreview;
+  // Before the first world lock, a preview is only valid while the target is
+  // actually visible. After lock, SLAM keeps the content visible off-marker.
+  const poseVisible = poseLocked || (markerPosePreview && markerVisible);
   worldAnchorRoot.visible = poseVisible && Boolean(activeModel);
 }
 
@@ -223,11 +220,6 @@ function syncFlipbookVisibility() {
   }
   // Before AnimationMixer evaluates its first STEP key, preserve frame 0.
   if (!activeCount) flipbookNode[0].visible = true;
-}
-
-function clearMarkerHandoffTimer() {
-  window.clearTimeout(markerHandoffTimer);
-  markerHandoffTimer = undefined;
 }
 
 function currentClipTime() {
@@ -477,17 +469,17 @@ function validateWorldTracking(caseDefinition) {
   }
 
   const initialPoseConfig = tracking.initialPose || tracking.correction || {};
-  const minimumSampleIntervalMs = Math.max(100, positiveNumber(
+  const minimumSampleIntervalMs = Math.max(200, positiveNumber(
     initialPoseConfig.minimumSampleIntervalMs,
-    100
+    200
   ));
   const minimumDurationMs = Math.min(800, Math.max(
     600,
     positiveNumber(initialPoseConfig.minimumDurationMs, 600)
   ));
-  const configuredSampleCount = Math.min(9, Math.max(
-    7,
-    Math.round(positiveNumber(initialPoseConfig.sampleCount, 7))
+  const configuredSampleCount = Math.min(4, Math.max(
+    3,
+    Math.round(positiveNumber(initialPoseConfig.sampleCount, 4))
   ));
   const durationSampleCount = Math.ceil(minimumDurationMs / minimumSampleIntervalMs) + 1;
   const modelRotationDegree = tracking.modelRotationDegree
@@ -564,7 +556,7 @@ async function loadDefinition() {
   }));
 
   introTitle.textContent = definition.label;
-  introCopy.textContent = "最初に色付きQR posterで位置を合わせ、端末をゆっくり左右へ動かします。以後は周囲で追跡し、poster再検出時に位置を緩やかに補正します。";
+  introCopy.textContent = "最初に色付きQR poster全体で位置と向きを合わせます。以後は周囲を追跡し、poster再検出時にずれを自動補正します。";
   platformNote.textContent = deviceProfile.isAndroid
     ? deviceProfile.isTablet
       ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
@@ -886,6 +878,7 @@ function poseFromDetail(detail) {
     quaternion.x, quaternion.y, quaternion.z, quaternion.w].every(Number.isFinite)) {
     return null;
   }
+  if (quaternion.lengthSq() < 1e-10) return null;
   quaternion.normalize();
   const calibratedScale = calibratedWorldScale(detail, targetSize);
   return {
@@ -897,9 +890,85 @@ function poseFromDetail(detail) {
   };
 }
 
-function medianNumber(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+function projectedMarkerMinimumSpan(detail, pose) {
+  const camera = xrScene?.camera;
+  const markerScale = Number(detail?.scale);
+  const scaledWidth = Number(detail?.scaledWidth);
+  const scaledHeight = Number(detail?.scaledHeight);
+  if (!camera) return null;
+
+  let markerWidthScene = Number(targetSize?.widthMetres) * Number(pose.scale);
+  let markerHeightScene = Number(targetSize?.heightMetres) * Number(pose.scale);
+  if (![markerWidthScene, markerHeightScene].every(Number.isFinite)
+    || markerWidthScene <= 0 || markerHeightScene <= 0) {
+    // Compatibility fallback for targets without a configured physical size.
+    markerWidthScene = markerScale * scaledWidth;
+    markerHeightScene = markerScale * scaledHeight;
+  }
+  if (![markerWidthScene, markerHeightScene].every(Number.isFinite)
+    || markerWidthScene <= 0 || markerHeightScene <= 0) return null;
+
+  camera.updateMatrixWorld(true);
+  const halfWidth = markerWidthScene / 2;
+  const halfHeight = markerHeightScene / 2;
+  const worldCorner = [
+    [-halfWidth, -halfHeight],
+    [halfWidth, -halfHeight],
+    [halfWidth, halfHeight],
+    [-halfWidth, halfHeight]
+  ].map(([x, y]) => new THREE.Vector3(x, y, 0)
+    .applyQuaternion(pose.quaternion)
+    .add(pose.position));
+  const cameraCorner = worldCorner.map((point) => point.clone().applyMatrix4(camera.matrixWorldInverse));
+  if (cameraCorner.some((point) => point.z >= -camera.near)) return null;
+  const projected = worldCorner.map((point) => point.clone().project(camera));
+  if (projected.some((point) => ![point.x, point.y, point.z].every(Number.isFinite))) {
+    return null;
+  }
+  // Edge length, unlike an axis-aligned bounding box, is invariant to in-plane
+  // card roll. NDC spans -1..1, hence the final division by two.
+  const edgeLength = projected.map((point, index) => {
+    const next = projected[(index + 1) % projected.length];
+    return Math.hypot(next.x - point.x, next.y - point.y) / 2;
+  });
+  return Math.min(...edgeLength);
+}
+
+function markerViewAngle(pose) {
+  const camera = xrScene?.camera;
+  if (!camera) return null;
+  camera.updateMatrixWorld(true);
+  const cameraPosition = new THREE.Vector3().setFromMatrixPosition(camera.matrixWorld);
+  const toCamera = cameraPosition.sub(pose.position);
+  if (toCamera.lengthSq() < 1e-10) return null;
+  toCamera.normalize();
+  // XR8 flat image-target content is placed in the local XY plane. Its local
+  // Z axis is therefore the plane normal; abs() accepts either printed side.
+  const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(pose.quaternion).normalize();
+  return Math.acos(THREE.MathUtils.clamp(Math.abs(normal.dot(toCamera)), 0, 1));
+}
+
+function markerObservationQuality(detail, pose, phase) {
+  return markerObservationQualityDecision({
+    phase,
+    trackingStatus,
+    viewAngleRadians: markerViewAngle(pose),
+    projectedMinimumSpan: projectedMarkerMinimumSpan(detail, pose)
+  });
+}
+
+function poseSampleDistance(a, b) {
+  const scale = Math.sqrt(Number(a.scale) * Number(b.scale));
+  const positionMetres = sceneDistanceMetres(a.position.distanceTo(b.position), scale);
+  const rotationRadians = quaternionAngle(a.quaternion, b.quaternion);
+  const scaleLogDistance = Math.abs(Math.log(Number(a.scale) / Number(b.scale)));
+  if (positionMetres === null
+    || ![rotationRadians, scaleLogDistance].every(Number.isFinite)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return positionMetres / 0.01
+    + rotationRadians / THREE.MathUtils.degToRad(2)
+    + scaleLogDistance / 0.02;
 }
 
 function robustPosterPose(samples, minimumCount, minimumDurationMs) {
@@ -910,30 +979,26 @@ function robustPosterPose(samples, minimumCount, minimumDurationMs) {
   )) return null;
   if (targetSize && samples.some((sample) => !sample.scaleCalibrated)) return null;
 
-  const position = new THREE.Vector3(
-    medianNumber(samples.map((sample) => sample.position.x)),
-    medianNumber(samples.map((sample) => sample.position.y)),
-    medianNumber(samples.map((sample) => sample.position.z))
-  );
-  // Use the quaternion medoid. Unlike an arithmetic mean it cannot be pulled
-  // halfway towards one bad first detection on a low-resolution camera.
-  let quaternion = samples[0].quaternion;
+  // Select one complete SE(3) sample as the medoid. Taking position axes,
+  // quaternion and scale from separate samples can synthesize a pose that was
+  // never observed, especially in an oblique planar view.
+  let medoid = samples[0];
   let minimumDistance = Number.POSITIVE_INFINITY;
   for (const candidate of samples) {
     const distance = samples.reduce(
-      (sum, sample) => sum + quaternionAngle(candidate.quaternion, sample.quaternion),
+      (sum, sample) => sum + poseSampleDistance(candidate, sample),
       0
     );
     if (distance < minimumDistance) {
       minimumDistance = distance;
-      quaternion = candidate.quaternion;
+      medoid = candidate;
     }
   }
   return {
-    position,
-    quaternion: quaternion.clone(),
-    scale: medianNumber(samples.map((sample) => sample.scale)),
-    scaleCalibrated: samples.every((sample) => sample.scaleCalibrated),
+    position: medoid.position.clone(),
+    quaternion: medoid.quaternion.clone(),
+    scale: medoid.scale,
+    scaleCalibrated: medoid.scaleCalibrated,
     capturedAt: samples[samples.length - 1].capturedAt
   };
 }
@@ -952,12 +1017,14 @@ function resetPosterPoseFilter() {
 }
 
 function collectPosterAcquisitionPose(pose) {
-  const elapsedMs = pose.capturedAt - lastPosterAcquisitionAt;
-  if (posterAcquisitionSample.length
-    && elapsedMs > stablePosterPoseProfile.maximumElapsedMs) {
+  const sampling = markerAcquisitionSamplingDecision({
+    now: pose.capturedAt,
+    previousSampleAt: lastPosterAcquisitionAt
+  });
+  if (sampling.resetWindow) {
     posterAcquisitionSample.length = 0;
   }
-  if (elapsedMs < stablePosterPoseProfile.minimumIntervalMs) return null;
+  if (!sampling.accepted) return null;
   lastPosterAcquisitionAt = pose.capturedAt;
   posterAcquisitionSample.push(pose);
   while (posterAcquisitionSample.length
@@ -971,19 +1038,22 @@ function clearMarkerCorrectionSamples({ resetCadence = true } = {}) {
 }
 
 function resetMarkerCorrectionFilter({
-  resetAppliedAt = false,
-  appliedAt = null,
   phase = "idle"
 } = {}) {
   clearMarkerCorrectionSamples();
   pendingLargeMarkerCorrection = null;
-  authorisedLargeMarkerCorrection = null;
   markerCorrectionPhase = phase;
-  if (appliedAt !== null && Number.isFinite(Number(appliedAt))) {
-    lastMarkerCorrectionAppliedAt = Number(appliedAt);
-  } else if (resetAppliedAt) {
-    lastMarkerCorrectionAppliedAt = Number.NEGATIVE_INFINITY;
+}
+
+function cancelMarkerCorrectionTransition({
+  invalidateEpoch = false,
+  rollback = false
+} = {}) {
+  if (rollback && markerCorrectionTransition?.from) {
+    applyWorldAnchorPose(markerCorrectionTransition.from);
   }
+  markerCorrectionTransition = null;
+  if (invalidateEpoch && poseLocked) markerCorrectionNeedsEpochRebase = true;
 }
 
 function markerCorrectionMetrics(pose, samples) {
@@ -1022,7 +1092,10 @@ function markerCorrectionMetrics(pose, samples) {
   };
 }
 
-function markerCorrectionCandidate({ forceExtended = false } = {}) {
+function markerCorrectionCandidate({
+  forceExtended = false,
+  relocalizing = markerCorrectionNeedsEpochRebase
+} = {}) {
   const profile = worldMarkerCorrectionProfile;
   const baseSamples = markerCorrectionSample.slice(-profile.sampleCount);
   let pose = robustPosterPose(
@@ -1035,7 +1108,8 @@ function markerCorrectionCandidate({ forceExtended = false } = {}) {
   if (!metrics) return null;
   const requirement = markerCorrectionWindowRequirement({
     ...metrics,
-    forceExtended
+    forceExtended,
+    relocalizing
   });
   if (!requirement) return null;
 
@@ -1050,7 +1124,8 @@ function markerCorrectionCandidate({ forceExtended = false } = {}) {
   if (!metrics) return null;
   const confirmedRequirement = markerCorrectionWindowRequirement({
     ...metrics,
-    forceExtended
+    forceExtended,
+    relocalizing
   });
   if (!confirmedRequirement
     || confirmedRequirement.sampleCount > selectedSamples.length
@@ -1060,12 +1135,13 @@ function markerCorrectionCandidate({ forceExtended = false } = {}) {
   // Confirmation references must themselves pass the same stability gate as
   // an applied correction; otherwise two noisy windows could authorise a later
   // large movement without ever providing two stable observations.
-  const quality = markerCorrectionStep({
-    elapsedMs: profile.step.minimumIntervalMs,
-    ...metrics
-  });
-  if (!quality.accepted) return null;
-  return { pose, metrics, requirement: confirmedRequirement };
+  if (!markerCorrectionWindowStable(metrics)) return null;
+  return {
+    pose,
+    metrics,
+    requirement: confirmedRequirement,
+    relocalizing
+  };
 }
 
 function markerCorrectionReference(pose) {
@@ -1096,43 +1172,100 @@ function markerCorrectionReferenceMetrics(reference, pose) {
   };
 }
 
-function applyLockedMarkerCorrection({ pose, metrics }) {
-  if (!poseLocked || !markerVisible || landscapeBlocked || trackingStatus !== "NORMAL") {
-    return false;
-  }
-  const step = markerCorrectionStep({
-    elapsedMs: pose.capturedAt - lastMarkerCorrectionAppliedAt,
-    ...metrics
-  });
-  if (!step.accepted) return false;
-
-  const currentScale = worldAnchorRoot.scale.x;
-  const positionDistanceScene = worldAnchorRoot.position.distanceTo(pose.position);
+function applyWorldAnchorPose(pose) {
   worldAnchorRoot.matrixAutoUpdate = true;
-  if (positionDistanceScene > 0 && step.positionStepMetres > 0) {
-    const positionStep = pose.position.clone().sub(worldAnchorRoot.position);
-    positionStep.setLength(Math.min(
-      positionDistanceScene,
-      step.positionStepMetres * currentScale
-    ));
-    worldAnchorRoot.position.add(positionStep);
-  }
-  if (metrics.rotationDistanceRadians > 0 && step.rotationStepRadians > 0) {
-    worldAnchorRoot.quaternion.slerp(
-      pose.quaternion,
-      Math.min(1, step.rotationStepRadians / metrics.rotationDistanceRadians)
-    );
-  }
-  if (metrics.scaleDifferenceFraction > 0 && step.scaleStepFraction > 0) {
-    const direction = pose.scale >= currentScale ? 1 : -1;
-    const nextScale = currentScale * (1 + direction * step.scaleStepFraction);
-    worldAnchorRoot.scale.setScalar(
-      direction > 0 ? Math.min(nextScale, pose.scale) : Math.max(nextScale, pose.scale)
-    );
-  }
+  worldAnchorRoot.position.copy(pose.position);
+  worldAnchorRoot.quaternion.copy(pose.quaternion);
+  worldAnchorRoot.scale.setScalar(pose.scale);
   worldAnchorRoot.updateMatrix();
   worldAnchorRoot.matrixAutoUpdate = false;
-  lastMarkerCorrectionAppliedAt = pose.capturedAt;
+}
+
+function beginMarkerCorrectionTransition(candidate) {
+  if (!poseLocked || landscapeBlocked || trackingStatus !== "NORMAL") return false;
+  const { pose, metrics, relocalizing } = candidate;
+  const plan = markerCorrectionTransitionPlan({
+    ...metrics,
+    relocalizing
+  });
+  if (!plan) return false;
+  if (!plan.required) {
+    markerCorrectionNeedsEpochRebase = false;
+    markerCorrectionPhase = "corrected";
+    return true;
+  }
+
+  const startedAt = performance.now();
+  markerCorrectionTransition = {
+    startedAt,
+    lastAdvancedAt: startedAt,
+    durationMs: plan.durationMs,
+    epoch: markerTrackingEpoch,
+    from: {
+      position: worldAnchorRoot.position.clone(),
+      quaternion: worldAnchorRoot.quaternion.clone(),
+      scale: worldAnchorRoot.scale.x
+    },
+    to: markerCorrectionReference(pose)
+  };
+  console.info(
+    "FLOW AR marker rebase:",
+    `${Math.round(metrics.positionDistanceMetres * 1000)} mm,`,
+    `${THREE.MathUtils.radToDeg(metrics.rotationDistanceRadians).toFixed(1)} deg,`,
+    `${(metrics.scaleDifferenceFraction * 100).toFixed(1)}%,`,
+    `${plan.durationMs} ms${relocalizing ? ", relocalization" : ""}`
+  );
+  markerCorrectionPhase = "correcting";
+  return true;
+}
+
+function advanceMarkerCorrectionTransition(now) {
+  const transition = markerCorrectionTransition;
+  if (!transition) return false;
+  const frameGapMs = now - transition.lastAdvancedAt;
+  const maximumFrameGapMs = Number(
+    worldMarkerCorrectionProfile.transition.maximumFrameGapMs
+  );
+  if (landscapeBlocked || trackingStatus !== "NORMAL"
+    || transition.epoch !== markerTrackingEpoch
+    || !Number.isFinite(frameGapMs) || frameGapMs < 0
+    || !Number.isFinite(maximumFrameGapMs) || frameGapMs > maximumFrameGapMs) {
+    cancelMarkerCorrectionTransition({ invalidateEpoch: true, rollback: true });
+    markerCorrectionPhase = "idle";
+    return true;
+  }
+  transition.lastAdvancedAt = now;
+  const progress = markerCorrectionBlendProgress(
+    now - transition.startedAt,
+    transition.durationMs
+  );
+  if (progress === null) {
+    cancelMarkerCorrectionTransition({ invalidateEpoch: true, rollback: true });
+    markerCorrectionPhase = "idle";
+    return true;
+  }
+  worldAnchorRoot.matrixAutoUpdate = true;
+  worldAnchorRoot.position.lerpVectors(
+    transition.from.position,
+    transition.to.position,
+    progress
+  );
+  worldAnchorRoot.quaternion.copy(transition.from.quaternion)
+    .slerp(transition.to.quaternion, progress);
+  worldAnchorRoot.scale.setScalar(THREE.MathUtils.lerp(
+    transition.from.scale,
+    transition.to.scale,
+    progress
+  ));
+  worldAnchorRoot.updateMatrix();
+  worldAnchorRoot.matrixAutoUpdate = false;
+  if (progress < 1) return false;
+
+  applyWorldAnchorPose(transition.to);
+  markerCorrectionTransition = null;
+  markerCorrectionNeedsEpochRebase = false;
+  markerCorrectionPhase = "corrected";
+  renderTrackingStatus();
   return true;
 }
 
@@ -1140,41 +1273,32 @@ function processLockedMarkerCorrection(candidate) {
   const { pose, requirement } = candidate;
   if (!requirement.extended) {
     pendingLargeMarkerCorrection = null;
-    authorisedLargeMarkerCorrection = null;
-    const applied = applyLockedMarkerCorrection(candidate);
+    const applied = beginMarkerCorrectionTransition(candidate);
     clearMarkerCorrectionSamples({ resetCadence: false });
-    markerCorrectionPhase = applied ? "corrected" : "confirming";
+    if (!applied) markerCorrectionPhase = "confirming";
     return applied;
   }
 
-  const reference = authorisedLargeMarkerCorrection || pendingLargeMarkerCorrection;
+  const reference = pendingLargeMarkerCorrection;
   const referenceMetrics = markerCorrectionReferenceMetrics(reference, pose);
   const decision = markerCorrectionConfirmationDecision({
     extended: true,
     hasReference: Boolean(reference && referenceMetrics),
-    referenceAgeMs: authorisedLargeMarkerCorrection
-      ? 0
-      : pose.capturedAt - Number(reference?.capturedAt),
+    referenceAgeMs: pose.capturedAt - Number(reference?.capturedAt),
     ...(referenceMetrics || {})
   });
 
   if (decision !== "apply") {
     pendingLargeMarkerCorrection = markerCorrectionReference(pose);
-    authorisedLargeMarkerCorrection = null;
     clearMarkerCorrectionSamples({ resetCadence: false });
     markerCorrectionPhase = "confirming";
     return false;
   }
 
-  if (!authorisedLargeMarkerCorrection) {
-    // Two independent windows agreed. Keep this reference only for the current
-    // uninterrupted detection episode; loss/gap/tracking/orientation resets it.
-    authorisedLargeMarkerCorrection = markerCorrectionReference(pose);
-  }
   pendingLargeMarkerCorrection = null;
-  const applied = applyLockedMarkerCorrection(candidate);
+  const applied = beginMarkerCorrectionTransition(candidate);
   clearMarkerCorrectionSamples({ resetCadence: false });
-  markerCorrectionPhase = applied ? "corrected" : "confirming";
+  if (!applied) markerCorrectionPhase = "confirming";
   return applied;
 }
 
@@ -1183,8 +1307,15 @@ function collectLockedMarkerCorrection(detail) {
   if (!poseLocked || !markerVisible || landscapeBlocked || trackingStatus !== "NORMAL") {
     return false;
   }
+  if (markerCorrectionTransition) return false;
   const pose = poseFromDetail(detail);
   if (!pose?.scaleCalibrated) return false;
+  const quality = markerObservationQuality(detail, pose, "correction");
+  if (!quality.accepted) {
+    clearMarkerCorrectionSamples();
+    markerCorrectionPhase = "low-quality";
+    return previousPhase !== markerCorrectionPhase;
+  }
   const sampling = markerCorrectionSamplingDecision({
     now: pose.capturedAt,
     previousSampleAt: lastMarkerCorrectionSampleAt,
@@ -1192,7 +1323,6 @@ function collectLockedMarkerCorrection(detail) {
   });
   if (sampling.resetWindow) {
     resetMarkerCorrectionFilter({
-      appliedAt: pose.capturedAt,
       phase: "confirming"
     });
   }
@@ -1205,8 +1335,9 @@ function collectLockedMarkerCorrection(detail) {
   }
   const candidate = markerCorrectionCandidate({
     forceExtended: Boolean(
-      pendingLargeMarkerCorrection || authorisedLargeMarkerCorrection
-    )
+      pendingLargeMarkerCorrection || markerCorrectionNeedsEpochRebase
+    ),
+    relocalizing: markerCorrectionNeedsEpochRebase
   });
   if (candidate) processLockedMarkerCorrection(candidate);
   return previousPhase !== markerCorrectionPhase;
@@ -1214,7 +1345,6 @@ function collectLockedMarkerCorrection(detail) {
 
 function applyMarkerPreviewPose(pose) {
   if (poseLocked) return;
-  const firstPreview = !markerPosePreview;
   worldAnchorRoot.matrixAutoUpdate = true;
   if (!markerPosePreview || markerPreviewUpdatedAt === null) {
     worldAnchorRoot.position.copy(pose.position);
@@ -1277,53 +1407,28 @@ function applyMarkerPreviewPose(pose) {
     worldAnchorRoot.scale.setScalar(smoothedScale);
   }
   markerPosePreview = true;
-  markerPreviewCalibrated = pose.scaleCalibrated;
   markerPreviewUpdatedAt = pose.capturedAt;
   worldAnchorRoot.updateMatrix();
   syncWorldAnchorVisibility();
-  if (!posterLockedFallback && (firstPreview || !markerHandoffTimer)) {
-    scheduleMarkerHandoffDeadline();
-  }
   return true;
-}
-
-function scheduleMarkerHandoffDeadline(delayMs = 2800) {
-  clearMarkerHandoffTimer();
-  markerHandoffTimer = window.setTimeout(() => {
-    markerHandoffTimer = undefined;
-    if (poseLocked || !markerPosePreview) return;
-    if (landscapeBlocked) {
-      scheduleMarkerHandoffDeadline(400);
-      return;
-    }
-    if (!markerPreviewCalibrated) return;
-    // A bounded marker-authority interval prevents noisy Android image events
-    // from driving the object forever when the strict quality gate starves.
-    // The last calibrated provisional pose is still usable after a brief
-    // image-target loss; requiring the target to be visible at this instant
-    // made low-end Android cameras restart this window indefinitely.
-    lockCurrentMarkerPreview();
-  }, delayMs);
 }
 
 function lockMarkerPose(pose = null) {
   if (!markerPosePreview || poseLocked) return false;
-  const lockedAt = pose?.capturedAt ?? markerPreviewUpdatedAt ?? performance.now();
-  if (pose) {
-    worldAnchorRoot.matrixAutoUpdate = true;
-    worldAnchorRoot.position.copy(pose.position);
-    worldAnchorRoot.quaternion.copy(pose.quaternion);
-    worldAnchorRoot.scale.setScalar(pose.scale);
+  if (pose) applyWorldAnchorPose(pose);
+  else {
+    worldAnchorRoot.updateMatrix();
+    worldAnchorRoot.matrixAutoUpdate = false;
   }
-  worldAnchorRoot.updateMatrix();
-  worldAnchorRoot.matrixAutoUpdate = false;
   poseLocked = true;
   markerPosePreview = false;
-  clearMarkerHandoffTimer();
+  markerPreviewUpdatedAt = null;
   poseSample.length = 0;
   lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+  cancelMarkerCorrectionTransition();
+  markerCorrectionNeedsEpochRebase = false;
+  console.info("FLOW AR initial marker pose locked (full position/rotation/scale)");
   resetMarkerCorrectionFilter({
-    appliedAt: lockedAt,
     phase: markerVisible ? "confirming" : "idle"
   });
   syncWorldAnchorVisibility();
@@ -1332,53 +1437,31 @@ function lockMarkerPose(pose = null) {
   return true;
 }
 
-function lockCurrentMarkerPreview() {
-  return lockMarkerPose();
-}
-
 function averagedStablePose(samples) {
-  if (!poseWindowReady(
+  const pose = robustPosterPose(
     samples,
     worldTracking.initialPose.sampleCount,
     worldTracking.initialPose.minimumDurationMs
-  )) return null;
-
-  const position = new THREE.Vector3();
-  for (const sample of samples) position.add(sample.position);
-  position.multiplyScalar(1 / samples.length);
-
-  const reference = samples[0].quaternion;
-  const sum = { x: 0, y: 0, z: 0, w: 0 };
-  for (const sample of samples) {
-    const sign = reference.dot(sample.quaternion) < 0 ? -1 : 1;
-    sum.x += sample.quaternion.x * sign;
-    sum.y += sample.quaternion.y * sign;
-    sum.z += sample.quaternion.z * sign;
-    sum.w += sample.quaternion.w * sign;
-  }
-  const quaternion = new THREE.Quaternion(sum.x, sum.y, sum.z, sum.w).normalize();
+  );
+  if (!pose) return null;
 
   const maxPositionSpread = Math.max(
-    ...samples.map((sample) => sample.position.distanceTo(position))
+    ...samples.map((sample) => sample.position.distanceTo(pose.position))
   );
   const maxRotationSpread = Math.max(
-    ...samples.map((sample) => quaternionAngle(sample.quaternion, quaternion))
+    ...samples.map((sample) => quaternionAngle(sample.quaternion, pose.quaternion))
   );
-  const scale = stableMeanScale(
-    samples,
-    worldTracking.initialPose.stabilityScaleFraction
+  const maxScaleSpread = Math.max(
+    ...samples.map((sample) => Math.abs(sample.scale / pose.scale - 1))
   );
-  if (scale === null) return null;
-  // A known printed target must provide a marker-derived scale. Falling back
-  // to one here would silently turn responsive scene units into metres.
-  if (targetSize && samples.some((sample) => !sample.scaleCalibrated)) return null;
-  const maxPositionSpreadMetres = sceneDistanceMetres(maxPositionSpread, scale);
+  const maxPositionSpreadMetres = sceneDistanceMetres(maxPositionSpread, pose.scale);
   if (maxPositionSpreadMetres === null
     || maxPositionSpreadMetres > worldTracking.initialPose.stabilityPositionMetres) return null;
   if (maxRotationSpread > THREE.MathUtils.degToRad(
     worldTracking.initialPose.stabilityRotationDegree
   )) return null;
-  return { position, quaternion, scale };
+  if (maxScaleSpread > worldTracking.initialPose.stabilityScaleFraction) return null;
+  return pose;
 }
 
 function resetInitialPoseSamples() {
@@ -1389,23 +1472,16 @@ function resetInitialPoseSamples() {
 function addPoseSample(detail) {
   if (poseLocked || landscapeBlocked) return;
   const pose = poseFromDetail(detail);
-  if (!pose) return;
-  if (stablePosterPoseFilterEnabled) {
-    if (!markerPosePreview) {
-      const acquisitionPose = collectPosterAcquisitionPose(pose);
-      if (!acquisitionPose) return;
+  if (!pose?.scaleCalibrated) return;
+  const quality = markerObservationQuality(detail, pose, "initial");
+  if (!quality.accepted) return;
+  if (!markerPosePreview) {
+    const acquisitionPose = collectPosterAcquisitionPose(pose);
+    if (acquisitionPose) {
       applyMarkerPreviewPose(acquisitionPose);
       resetPosterPoseFilter();
-    } else {
-      applyMarkerPreviewPose(pose);
-    }
-    if (posterLockedFallback) {
-      resetInitialPoseSamples();
-      return;
     }
   } else {
-    // The marker is the immediate authority. This gives feedback as soon as the
-    // poster is found while the world tracker earns a stable hand-off window.
     applyMarkerPreviewPose(pose);
   }
   if (!maySampleInitialPose(trackingStatus, poseLocked, landscapeBlocked)) {
@@ -1413,6 +1489,10 @@ function addPoseSample(detail) {
     return;
   }
   const now = pose.capturedAt;
+  if (Number.isFinite(lastPoseSampleAt)
+    && now - lastPoseSampleAt > stablePosterPoseProfile.acquisitionMaximumSampleGapMs) {
+    resetInitialPoseSamples();
+  }
   if (!mayAcceptTimedPoseSample({
     now,
     previousSampleAt: lastPoseSampleAt,
@@ -1426,8 +1506,8 @@ function addPoseSample(detail) {
 
   const stablePose = averagedStablePose(poseSample);
   if (!stablePose) return;
-  // Use the pose that passed the quality gate. The fallback deadline freezes
-  // the smoothed preview only when event cadence prevents this path.
+  // Initial alignment happens before playback advances, so the verified full
+  // pose can be applied immediately without a visible mid-animation jump.
   lockMarkerPose(stablePose);
 }
 
@@ -1441,6 +1521,20 @@ function readableTrackingReason(reason) {
   return label[reason] || "周囲trackingが一時的に不安定です";
 }
 
+function lockedTrackingStatusMessage() {
+  if (!markerVisible) return "world追跡中 · posterが映ると位置を自動補正";
+  if (markerCorrectionPhase === "corrected") {
+    return "world追跡中 · poster基準で位置を補正済み";
+  }
+  if (markerCorrectionPhase === "correcting") {
+    return "world追跡中 · poster基準へ再整列中…";
+  }
+  if (markerCorrectionPhase === "low-quality") {
+    return "world追跡中 · posterへ近づき、少し正面から映してください";
+  }
+  return "world追跡中 · poster基準を確認中…";
+}
+
 function renderTrackingStatus() {
   if (!running) return;
   if (landscapeBlocked) {
@@ -1451,16 +1545,11 @@ function renderTrackingStatus() {
     setStatus("camera起動済み · 3D modelを読み込み中…", "loading");
     return;
   }
+  if (trackingStatus === "LIMITED" || trackingStatus === "NOT_AVAILABLE") {
+    setStatus(readableTrackingReason(trackingReason), "limited");
+    return;
+  }
   if (!poseLocked) {
-    if (posterLockedFallback) {
-      setStatus(
-        markerVisible
-          ? "poster固定モード · 安定表示にはposterを映し続けてください"
-          : "poster固定モード · 色付きQR poster全体を映してください",
-        markerVisible ? "found" : "scanning"
-      );
-      return;
-    }
     setStatus(
       markerPosePreview
         ? (markerVisible
@@ -1471,18 +1560,7 @@ function renderTrackingStatus() {
     );
     return;
   }
-  if (trackingStatus === "LIMITED" || trackingStatus === "NOT_AVAILABLE") {
-    setStatus(readableTrackingReason(trackingReason), "limited");
-    return;
-  }
-  setStatus(
-    markerVisible
-      ? markerCorrectionPhase === "corrected"
-        ? "world追跡中 · poster基準で位置を補正済み"
-        : "world追跡中 · poster基準を確認中…"
-      : "world追跡中 · posterが映ると位置を自動補正",
-    "world"
-  );
+  setStatus(lockedTrackingStatusMessage(), "world");
 }
 
 function handleImageFound({ detail }) {
@@ -1490,10 +1568,7 @@ function handleImageFound({ detail }) {
   if (!detail || detail.name !== worldTracking.targetName) return;
   markerVisible = true;
   if (poseLocked) {
-    resetMarkerCorrectionFilter({
-      appliedAt: performance.now(),
-      phase: "confirming"
-    });
+    if (!markerCorrectionTransition) resetMarkerCorrectionFilter({ phase: "confirming" });
     collectLockedMarkerCorrection(detail);
     renderTrackingStatus();
     return;
@@ -1510,10 +1585,7 @@ function handleImageUpdated({ detail }) {
   markerVisible = true;
   if (poseLocked) {
     if (!wasVisible) {
-      resetMarkerCorrectionFilter({
-        appliedAt: performance.now(),
-        phase: "confirming"
-      });
+      if (!markerCorrectionTransition) resetMarkerCorrectionFilter({ phase: "confirming" });
     }
     const correctionChanged = collectLockedMarkerCorrection(detail);
     if (!wasVisible || correctionChanged) renderTrackingStatus();
@@ -1526,21 +1598,18 @@ function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
   markerVisible = false;
-  resetMarkerCorrectionFilter();
+  resetMarkerCorrectionFilter({
+    phase: markerCorrectionTransition ? "correcting" : "idle"
+  });
   // A reacquired poster starts a fresh robust seed. Mixing samples captured
   // before and after target loss can create a false median pose on slow cameras.
   resetPosterPoseFilter();
   if (!poseLocked) {
     resetInitialPoseSamples();
-    if (posterLockedFallback) {
-      // Do not leave an old poster pose visible in a drifting world frame.
-      markerPosePreview = false;
-      markerPreviewUpdatedAt = null;
-      markerPreviewCalibrated = false;
-    }
-    // Losing the target is not proof of pose quality. Keep the last provisional
-    // pose and its bounded hand-off deadline. Reacquisition may still satisfy
-    // the strict gate, otherwise the deadline freezes this calibrated pose.
+    // A provisional pose has not earned world authority. Never freeze it after
+    // target loss; reacquisition must start from a fresh robust window.
+    markerPosePreview = false;
+    markerPreviewUpdatedAt = null;
     syncWorldAnchorVisibility();
   }
   renderTrackingStatus();
@@ -1554,13 +1623,17 @@ function handleTrackingStatus({ detail }) {
     if (previousStatus !== "NORMAL") {
       trackingNormalSince = performance.now();
       resetMarkerCorrectionFilter({
-        appliedAt: trackingNormalSince,
         phase: poseLocked && markerVisible ? "confirming" : "idle"
       });
       if (!poseLocked) resetInitialPoseSamples();
     }
   } else {
     trackingNormalSince = null;
+    if (poseLocked && previousStatus === "NORMAL") {
+      markerTrackingEpoch += 1;
+      markerCorrectionNeedsEpochRebase = true;
+    }
+    cancelMarkerCorrectionTransition({ invalidateEpoch: poseLocked, rollback: true });
     resetMarkerCorrectionFilter();
     if (!poseLocked) resetInitialPoseSamples();
   }
@@ -1680,6 +1753,7 @@ function createWorldPipelineModule() {
     },
     onUpdate: () => {
       const now = performance.now();
+      advanceMarkerCorrectionTransition(now);
       if (!timedWorkDue(now, lastFrameTime, arPerformanceProfile.timelineIntervalMs)) return;
       // Preserve physical playback speed at the reduced cadence. Only a long
       // browser stall is capped; ordinary 10--15 Hz updates keep their full dt.
@@ -1689,7 +1763,9 @@ function createWorldPipelineModule() {
         arPerformanceProfile.maximumTimelineDeltaSeconds
       );
       lastFrameTime = now;
-      if (!landscapeBlocked && playing && (poseLocked || markerPosePreview)) {
+      // Keep the animation at frame zero until the initial full pose is locked.
+      // The user allows an immediate initial snap, but not a mid-animation one.
+      if (!landscapeBlocked && playing && poseLocked) {
         mixer?.update(delta);
         syncFlipbookVisibility();
       }
@@ -1736,16 +1812,16 @@ async function runArAttempt({ automatic = false } = {}) {
     markerVisible = false;
     markerPosePreview = false;
     markerPreviewUpdatedAt = null;
-    markerPreviewCalibrated = false;
     resetPosterPoseFilter();
-    resetMarkerCorrectionFilter({ resetAppliedAt: true });
-    clearMarkerHandoffTimer();
     poseLocked = false;
+    markerTrackingEpoch = 0;
+    markerCorrectionNeedsEpochRebase = false;
+    cancelMarkerCorrectionTransition();
+    resetMarkerCorrectionFilter();
     // The coloured poster seeds the initial world pose. All supported devices,
     // including Android tablets, then use SLAM and accept only stable bounded
     // poster re-corrections. The image-marker page remains an explicit
     // poster-locked fallback.
-    posterLockedFallback = false;
     resetInitialPoseSamples();
     trackingNormalSince = null;
     worldAnchorRoot.matrixAutoUpdate = true;
@@ -1900,12 +1976,17 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   window.clearTimeout(orientationRestoreTimer);
 
   if (blocked) {
-    clearMarkerHandoffTimer();
     markerVisible = false;
     trackingNormalSince = null;
+    if (poseLocked) markerTrackingEpoch += 1;
+    cancelMarkerCorrectionTransition({ invalidateEpoch: poseLocked, rollback: true });
     resetMarkerCorrectionFilter();
     if (!poseLocked) {
       resetInitialPoseSamples();
+      resetPosterPoseFilter();
+      markerPosePreview = false;
+      markerPreviewUpdatedAt = null;
+      syncWorldAnchorVisibility();
     }
     resumeAfterLandscape = Boolean(mixer && activeAction && playing);
     if (resumeAfterLandscape) setPlaying(false);
@@ -1917,7 +1998,6 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
     lastFrameTime = performance.now();
     trackingNormalSince = trackingStatus === "NORMAL" ? performance.now() : null;
     resetMarkerCorrectionFilter({
-      appliedAt: trackingNormalSince,
       phase: poseLocked && markerVisible ? "confirming" : "idle"
     });
     if (!poseLocked) {
@@ -1936,7 +2016,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 
 window.addEventListener("pagehide", () => {
   arUiOverlayGuard.disconnect();
-  clearMarkerHandoffTimer();
+  cancelMarkerCorrectionTransition();
   try { xr8?.stop?.(); } catch {}
   running = false;
 });
