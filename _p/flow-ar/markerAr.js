@@ -22,6 +22,7 @@ import {
   markerCorrectionTransitionPlan,
   markerCorrectionWindowStable,
   markerCorrectionWindowRequirement,
+  markerDirectionCorrection,
   markerObservationQualityDecision,
   mayAcceptTimedPoseSample,
   maySampleInitialPose,
@@ -29,9 +30,10 @@ import {
   sceneDistanceMetres,
   stablePosterPoseProfile,
   stablePosterPoseStep,
+  stableMarkerDirectionEstimate,
   targetPhysicalSize,
   worldMarkerCorrectionProfile
-} from "./markerPoseCore.js?v=7";
+} from "./markerPoseCore.js?v=8";
 import {
   arPerformanceProfileForDevice,
   constrainCameraFrameRate,
@@ -145,6 +147,7 @@ let markerCorrectionTransition = null;
 let markerCorrectionPhase = "idle";
 let markerTrackingEpoch = 0;
 let markerCorrectionNeedsEpochRebase = false;
+let markerDirectionLeadPendingFullPose = false;
 let constrainedCameraTrack;
 let allowedDevices;
 let landscapeBlocked = false;
@@ -1003,6 +1006,35 @@ function robustPosterPose(samples, minimumCount, minimumDurationMs) {
   };
 }
 
+function alignPoseToStableMarkerDirection(
+  pose,
+  samples,
+  sampleCount,
+  minimumDurationMs,
+  maximumNormalSpreadRadians = worldMarkerCorrectionProfile.direction
+    .maximumNormalSpreadRadians
+) {
+  const estimate = stableMarkerDirectionEstimate(samples, {
+    ...worldMarkerCorrectionProfile.direction,
+    sampleCount,
+    minimumDurationMs,
+    maximumNormalSpreadRadians
+  });
+  const correction = estimate && markerDirectionCorrection({
+    currentQuaternion: pose?.quaternion,
+    observedDirection: estimate.direction,
+    observedNormal: estimate.normal
+  });
+  if (!correction || !pose?.quaternion) return null;
+  pose.quaternion.set(
+    correction.quaternion.x,
+    correction.quaternion.y,
+    correction.quaternion.z,
+    correction.quaternion.w
+  ).normalize();
+  return estimate;
+}
+
 function posterAcquisitionPose(samples) {
   return robustPosterPose(
     samples,
@@ -1042,6 +1074,7 @@ function resetMarkerCorrectionFilter({
 } = {}) {
   clearMarkerCorrectionSamples();
   pendingLargeMarkerCorrection = null;
+  markerDirectionLeadPendingFullPose = false;
   markerCorrectionPhase = phase;
 }
 
@@ -1104,6 +1137,12 @@ function markerCorrectionCandidate({
     profile.minimumDurationMs
   );
   if (!pose) return null;
+  if (!alignPoseToStableMarkerDirection(
+    pose,
+    baseSamples,
+    profile.sampleCount,
+    profile.minimumDurationMs
+  )) return null;
   let metrics = markerCorrectionMetrics(pose, baseSamples);
   if (!metrics) return null;
   const requirement = markerCorrectionWindowRequirement({
@@ -1120,6 +1159,12 @@ function markerCorrectionCandidate({
     requirement.minimumDurationMs
   );
   if (!pose) return null;
+  if (!alignPoseToStableMarkerDirection(
+    pose,
+    selectedSamples,
+    requirement.sampleCount,
+    requirement.minimumDurationMs
+  )) return null;
   metrics = markerCorrectionMetrics(pose, selectedSamples);
   if (!metrics) return null;
   const confirmedRequirement = markerCorrectionWindowRequirement({
@@ -1141,6 +1186,63 @@ function markerCorrectionCandidate({
     metrics,
     requirement: confirmedRequirement,
     relocalizing
+  };
+}
+
+function markerDirectionCandidate() {
+  if (markerCorrectionNeedsEpochRebase) return null;
+  const profile = worldMarkerCorrectionProfile.direction;
+  const samples = markerCorrectionSample.slice(-profile.sampleCount);
+  const estimate = stableMarkerDirectionEstimate(samples, profile);
+  if (!estimate) return null;
+
+  // Direction authority still comes from the same accepted full-target
+  // observations. Position and scale must be stable and close to the current
+  // world anchor; only full-quaternion instability may be bypassed here.
+  const observedPose = robustPosterPose(
+    samples,
+    profile.sampleCount,
+    profile.minimumDurationMs
+  );
+  if (!observedPose) return null;
+  const metrics = markerCorrectionMetrics(observedPose, samples);
+  if (!metrics
+    || metrics.positionSpreadMetres > profile.positionSpreadMetres
+    || metrics.scaleSpreadFraction > profile.scaleSpreadFraction
+    || metrics.positionDistanceMetres > profile.maximumPositionInnovationMetres
+    || metrics.scaleDifferenceFraction > profile.maximumScaleInnovationFraction) {
+    return null;
+  }
+  const requirement = markerCorrectionWindowRequirement(metrics);
+  if (!requirement || !poseWindowReady(
+    samples,
+    requirement.sampleCount,
+    requirement.minimumDurationMs
+  )) return null;
+
+  const correction = markerDirectionCorrection({
+    currentQuaternion: worldAnchorRoot.quaternion,
+    observedDirection: estimate.direction,
+    observedNormal: estimate.normal,
+    profile
+  });
+  if (!correction) return null;
+  return {
+    correction,
+    estimate,
+    metrics,
+    pose: {
+      position: worldAnchorRoot.position.clone(),
+      quaternion: new THREE.Quaternion(
+        correction.quaternion.x,
+        correction.quaternion.y,
+        correction.quaternion.z,
+        correction.quaternion.w
+      ).normalize(),
+      scale: worldAnchorRoot.scale.x,
+      scaleCalibrated: true,
+      capturedAt: estimate.capturedAt
+    }
   };
 }
 
@@ -1181,6 +1283,12 @@ function applyWorldAnchorPose(pose) {
   worldAnchorRoot.matrixAutoUpdate = false;
 }
 
+function playbackAtCorrectionSnapPoint() {
+  if (!activeAction || clipDuration <= 0) return false;
+  const snapWindowSecond = Math.min(0.1, clipDuration * 0.02);
+  return currentClipTime() <= snapWindowSecond;
+}
+
 function beginMarkerCorrectionTransition(candidate) {
   if (!poseLocked || landscapeBlocked || trackingStatus !== "NORMAL") return false;
   const { pose, metrics, relocalizing } = candidate;
@@ -1191,15 +1299,19 @@ function beginMarkerCorrectionTransition(candidate) {
   if (!plan) return false;
   if (!plan.required) {
     markerCorrectionNeedsEpochRebase = false;
+    markerDirectionLeadPendingFullPose = false;
     markerCorrectionPhase = "corrected";
     return true;
   }
 
   const startedAt = performance.now();
+  const durationMs = playbackAtCorrectionSnapPoint() ? 0 : plan.durationMs;
   markerCorrectionTransition = {
+    kind: "pose",
+    clearsEpochRebase: true,
     startedAt,
     lastAdvancedAt: startedAt,
-    durationMs: plan.durationMs,
+    durationMs,
     epoch: markerTrackingEpoch,
     from: {
       position: worldAnchorRoot.position.clone(),
@@ -1208,14 +1320,54 @@ function beginMarkerCorrectionTransition(candidate) {
     },
     to: markerCorrectionReference(pose)
   };
+  markerDirectionLeadPendingFullPose = false;
   console.info(
     "FLOW AR marker rebase:",
     `${Math.round(metrics.positionDistanceMetres * 1000)} mm,`,
     `${THREE.MathUtils.radToDeg(metrics.rotationDistanceRadians).toFixed(1)} deg,`,
     `${(metrics.scaleDifferenceFraction * 100).toFixed(1)}%,`,
-    `${plan.durationMs} ms${relocalizing ? ", relocalization" : ""}`
+    `${durationMs} ms${relocalizing ? ", relocalization" : ""}`
   );
   markerCorrectionPhase = "correcting";
+  return true;
+}
+
+function beginMarkerDirectionTransition(candidate) {
+  if (!poseLocked || landscapeBlocked || trackingStatus !== "NORMAL"
+    || markerCorrectionTransition || markerCorrectionNeedsEpochRebase
+    || !candidate?.correction?.required) return false;
+  const startedAt = performance.now();
+  const durationMs = playbackAtCorrectionSnapPoint()
+    ? 0
+    : candidate.correction.durationMs;
+  const targetPose = markerCorrectionReference(candidate.pose);
+  if (durationMs === 0) {
+    applyWorldAnchorPose(targetPose);
+    markerCorrectionPhase = "direction-corrected";
+  } else {
+    markerCorrectionTransition = {
+      kind: "direction",
+      clearsEpochRebase: false,
+      startedAt,
+      lastAdvancedAt: startedAt,
+      durationMs,
+      epoch: markerTrackingEpoch,
+      from: {
+        position: worldAnchorRoot.position.clone(),
+        quaternion: worldAnchorRoot.quaternion.clone(),
+        scale: worldAnchorRoot.scale.x
+      },
+      to: targetPose
+    };
+    markerCorrectionPhase = "direction-correcting";
+  }
+  markerDirectionLeadPendingFullPose = true;
+  clearMarkerCorrectionSamples({ resetCadence: false });
+  console.info(
+    "FLOW AR marker direction lock:",
+    `${THREE.MathUtils.radToDeg(candidate.correction.signedRadians).toFixed(2)} deg,`,
+    `${durationMs} ms`
+  );
   return true;
 }
 
@@ -1263,8 +1415,10 @@ function advanceMarkerCorrectionTransition(now) {
 
   applyWorldAnchorPose(transition.to);
   markerCorrectionTransition = null;
-  markerCorrectionNeedsEpochRebase = false;
-  markerCorrectionPhase = "corrected";
+  if (transition.clearsEpochRebase) markerCorrectionNeedsEpochRebase = false;
+  markerCorrectionPhase = transition.kind === "direction"
+    ? "direction-corrected"
+    : "corrected";
   renderTrackingStatus();
   return true;
 }
@@ -1339,7 +1493,20 @@ function collectLockedMarkerCorrection(detail) {
     ),
     relocalizing: markerCorrectionNeedsEpochRebase
   });
-  if (candidate) processLockedMarkerCorrection(candidate);
+  const directionCandidate = markerDirectionCandidate();
+  // An ordinary stable full-pose candidate already contains the circularly
+  // averaged heading, so keep it authoritative. Let heading run first only
+  // when the full pose is unavailable or rotation alone pushed it onto the
+  // slow extended path; directionCandidate has already gated position/scale.
+  const directionFirst = directionCandidate?.correction.required
+    && !markerDirectionLeadPendingFullPose
+    && !pendingLargeMarkerCorrection
+    && (!candidate || candidate.requirement.extended);
+  if (directionFirst) {
+    beginMarkerDirectionTransition(directionCandidate);
+  } else if (candidate) {
+    processLockedMarkerCorrection(candidate);
+  }
   return previousPhase !== markerCorrectionPhase;
 }
 
@@ -1461,6 +1628,18 @@ function averagedStablePose(samples) {
     worldTracking.initialPose.stabilityRotationDegree
   )) return null;
   if (maxScaleSpread > worldTracking.initialPose.stabilityScaleFraction) return null;
+
+  // A complete SE(3) medoid is still the authority for the initial lock, but
+  // its in-plane heading would otherwise come from just one camera frame.
+  // Circularly average target-local +X across the same verified window.
+  const directionEstimate = alignPoseToStableMarkerDirection(
+    pose,
+    samples,
+    worldTracking.initialPose.sampleCount,
+    worldTracking.initialPose.minimumDurationMs,
+    THREE.MathUtils.degToRad(worldTracking.initialPose.stabilityRotationDegree)
+  );
+  if (!directionEstimate) return null;
   return pose;
 }
 
@@ -1528,6 +1707,12 @@ function lockedTrackingStatusMessage() {
   }
   if (markerCorrectionPhase === "correcting") {
     return "world追跡中 · poster基準へ再整列中…";
+  }
+  if (markerCorrectionPhase === "direction-correcting") {
+    return "world追跡中 · posterの左右方向へ再整列中…";
+  }
+  if (markerCorrectionPhase === "direction-corrected") {
+    return "world追跡中 · posterの左右方向を補正済み";
   }
   if (markerCorrectionPhase === "low-quality") {
     return "world追跡中 · posterへ近づき、少し正面から映してください";

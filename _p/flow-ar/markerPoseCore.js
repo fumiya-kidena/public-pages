@@ -157,8 +157,8 @@ export const worldMarkerCorrectionProfile = Object.freeze({
   sampleIntervalMs: 100,
   maximumSampleGapMs: 1600,
   trackingWarmupMs: 250,
-  sampleCount: 3,
-  minimumDurationMs: 160,
+  sampleCount: 4,
+  minimumDurationMs: 300,
   extendedSampleCount: 4,
   extendedMinimumDurationMs: 300,
   stability: Object.freeze({
@@ -197,8 +197,26 @@ export const worldMarkerCorrectionProfile = Object.freeze({
     majorDurationMs: 800,
     maximumFrameGapMs: 1000,
     positionDeadbandMetres: 0.003,
-    rotationDeadbandRadians: 0.4 * Math.PI / 180,
+    rotationDeadbandRadians: 0.2 * Math.PI / 180,
     scaleDeadbandFraction: 0.008
+  }),
+  // The complete image target already contains the asymmetric left/right
+  // print. Average only its local +X direction in a dedicated channel so
+  // plane-normal noise cannot leave the flow direction diagonally biased.
+  // This channel never authorises a position, plane-normal or scale change.
+  direction: Object.freeze({
+    sampleCount: 4,
+    minimumDurationMs: 300,
+    stabilityRadians: 0.75 * Math.PI / 180,
+    maximumNormalSpreadRadians: 2.5 * Math.PI / 180,
+    maximumNormalDifferenceRadians: 5 * Math.PI / 180,
+    maximumInnovationRadians: 8 * Math.PI / 180,
+    maximumPositionInnovationMetres: 0.03,
+    maximumScaleInnovationFraction: 0.04,
+    positionSpreadMetres: 0.008,
+    scaleSpreadFraction: 0.02,
+    deadbandRadians: 0.2 * Math.PI / 180,
+    transitionDurationMs: 220
   }),
   step: Object.freeze({
     minimumIntervalMs: 250,
@@ -330,6 +348,288 @@ function nonNegativeMetric(value) {
   }
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function finiteQuaternion(value) {
+  const quaternion = {
+    x: Number(value?.x),
+    y: Number(value?.y),
+    z: Number(value?.z),
+    w: Number(value?.w)
+  };
+  if (!Object.values(quaternion).every(Number.isFinite)) return null;
+  const length = Math.hypot(
+    quaternion.x,
+    quaternion.y,
+    quaternion.z,
+    quaternion.w
+  );
+  if (!Number.isFinite(length) || length < 1e-10) return null;
+  return {
+    x: quaternion.x / length,
+    y: quaternion.y / length,
+    z: quaternion.z / length,
+    w: quaternion.w / length
+  };
+}
+
+function finiteVector(value) {
+  const vector = {
+    x: Number(value?.x),
+    y: Number(value?.y),
+    z: Number(value?.z)
+  };
+  return Object.values(vector).every(Number.isFinite) ? vector : null;
+}
+
+function vectorDot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function vectorCross(a, b) {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x
+  };
+}
+
+function normalisedVector(value) {
+  const vector = finiteVector(value);
+  if (!vector) return null;
+  const length = Math.hypot(vector.x, vector.y, vector.z);
+  if (!Number.isFinite(length) || length < 1e-10) return null;
+  return {
+    x: vector.x / length,
+    y: vector.y / length,
+    z: vector.z / length
+  };
+}
+
+function quaternionDot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+function quaternionProduct(a, b) {
+  return finiteQuaternion({
+    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+  });
+}
+
+function rotateVectorByQuaternion(vector, quaternion) {
+  const q = finiteQuaternion(quaternion);
+  const v = finiteVector(vector);
+  if (!q || !v) return null;
+  const qVector = { x: q.x, y: q.y, z: q.z };
+  const twiceCross = vectorCross(qVector, v);
+  twiceCross.x *= 2;
+  twiceCross.y *= 2;
+  twiceCross.z *= 2;
+  const secondCross = vectorCross(qVector, twiceCross);
+  return {
+    x: v.x + q.w * twiceCross.x + secondCross.x,
+    y: v.y + q.w * twiceCross.y + secondCross.y,
+    z: v.z + q.w * twiceCross.z + secondCross.z
+  };
+}
+
+function clampedUnit(value) {
+  return Math.min(1, Math.max(-1, value));
+}
+
+function wrappedRadians(value) {
+  if (!Number.isFinite(value)) return null;
+  let wrapped = (value + Math.PI) % (2 * Math.PI);
+  if (wrapped < 0) wrapped += 2 * Math.PI;
+  return wrapped - Math.PI;
+}
+
+function axisAngleQuaternion(axis, angle) {
+  const unitAxis = normalisedVector(axis);
+  if (!unitAxis || !Number.isFinite(angle)) return null;
+  const halfAngle = angle / 2;
+  const sine = Math.sin(halfAngle);
+  return finiteQuaternion({
+    x: unitAxis.x * sine,
+    y: unitAxis.y * sine,
+    z: unitAxis.z * sine,
+    w: Math.cos(halfAngle)
+  });
+}
+
+/**
+ * Estimate the printed card's absolute left/right direction from a stable
+ * image-target window.
+ *
+ * Relative rotations are expressed in target-local coordinates before the
+ * local-Z twist is extracted. This keeps the estimate independent of whether
+ * the card is horizontal, vertical or arbitrarily tilted. Quaternion signs are
+ * aligned to the first sample, then the heading is circularly averaged.
+ */
+export function stableMarkerDirectionEstimate(
+  samples,
+  profile = worldMarkerCorrectionProfile.direction
+) {
+  if (!Array.isArray(samples)) return null;
+  const count = Math.round(Number(profile?.sampleCount));
+  const minimumDurationMs = Number(profile?.minimumDurationMs);
+  const stabilityRadians = nonNegativeMetric(profile?.stabilityRadians);
+  const maximumNormalSpreadRadians = nonNegativeMetric(
+    profile?.maximumNormalSpreadRadians
+  );
+  if (!Number.isFinite(count) || count < 2
+    || !Number.isFinite(minimumDurationMs) || minimumDurationMs < 0
+    || stabilityRadians === null || maximumNormalSpreadRadians === null) return null;
+  const window = samples.slice(-count);
+  if (!poseWindowReady(window, count, minimumDurationMs)) return null;
+
+  const quaternion = window.map((sample) => finiteQuaternion(sample?.quaternion));
+  if (quaternion.some((value) => !value)) return null;
+  const reference = quaternion[0];
+  for (let index = 1; index < quaternion.length; index += 1) {
+    if (quaternionDot(reference, quaternion[index]) < 0) {
+      quaternion[index] = {
+        x: -quaternion[index].x,
+        y: -quaternion[index].y,
+        z: -quaternion[index].z,
+        w: -quaternion[index].w
+      };
+    }
+  }
+
+  const normal = quaternion.map((value) => rotateVectorByQuaternion(
+    { x: 0, y: 0, z: 1 },
+    value
+  ));
+  const meanNormal = normalisedVector(normal.reduce((sum, value) => ({
+    x: sum.x + value.x,
+    y: sum.y + value.y,
+    z: sum.z + value.z
+  }), { x: 0, y: 0, z: 0 }));
+  if (!meanNormal) return null;
+  const normalSpreadRadians = Math.max(...normal.map((value) => Math.acos(
+    clampedUnit(vectorDot(value, meanNormal))
+  )));
+  if (!Number.isFinite(normalSpreadRadians)
+    || normalSpreadRadians > maximumNormalSpreadRadians) return null;
+
+  const inverseReference = {
+    x: -reference.x,
+    y: -reference.y,
+    z: -reference.z,
+    w: reference.w
+  };
+  const relativeHeading = quaternion.map((value) => {
+    const relative = quaternionProduct(inverseReference, value);
+    if (!relative) return null;
+    const twistLength = Math.hypot(relative.z, relative.w);
+    if (!Number.isFinite(twistLength) || twistLength < 1e-10) return null;
+    return wrappedRadians(2 * Math.atan2(
+      relative.z / twistLength,
+      relative.w / twistLength
+    ));
+  });
+  if (relativeHeading.some((value) => value === null)) return null;
+  const sineMean = relativeHeading.reduce((sum, value) => sum + Math.sin(value), 0);
+  const cosineMean = relativeHeading.reduce((sum, value) => sum + Math.cos(value), 0);
+  if (Math.hypot(sineMean, cosineMean) < 1e-8) return null;
+  const meanHeadingRadians = Math.atan2(sineMean, cosineMean);
+  const headingSpreadRadians = Math.max(...relativeHeading.map((value) => Math.abs(
+    wrappedRadians(value - meanHeadingRadians)
+  )));
+  if (!Number.isFinite(headingSpreadRadians)
+    || headingSpreadRadians > stabilityRadians) return null;
+
+  const meanTwist = axisAngleQuaternion(
+    { x: 0, y: 0, z: 1 },
+    meanHeadingRadians
+  );
+  const meanQuaternion = quaternionProduct(reference, meanTwist);
+  let direction = rotateVectorByQuaternion({ x: 1, y: 0, z: 0 }, meanQuaternion);
+  if (!direction) return null;
+  const alongNormal = vectorDot(direction, meanNormal);
+  direction = normalisedVector({
+    x: direction.x - alongNormal * meanNormal.x,
+    y: direction.y - alongNormal * meanNormal.y,
+    z: direction.z - alongNormal * meanNormal.z
+  });
+  if (!direction) return null;
+
+  return {
+    direction,
+    normal: meanNormal,
+    headingSpreadRadians,
+    normalSpreadRadians,
+    sampleCount: count,
+    capturedAt: Number(window[window.length - 1]?.capturedAt)
+  };
+}
+
+/**
+ * Rotate only around the current card normal until local +X matches the
+ * observed printed-card direction. Position, scale and plane normal remain
+ * unchanged. The delta is pre-multiplied because its axis is world-space.
+ */
+export function markerDirectionCorrection({
+  currentQuaternion,
+  observedDirection,
+  observedNormal,
+  profile = worldMarkerCorrectionProfile.direction
+}) {
+  const current = finiteQuaternion(currentQuaternion);
+  const direction = normalisedVector(observedDirection);
+  const markerNormal = normalisedVector(observedNormal);
+  const maximumNormalDifferenceRadians = nonNegativeMetric(
+    profile?.maximumNormalDifferenceRadians
+  );
+  const maximumInnovationRadians = nonNegativeMetric(profile?.maximumInnovationRadians);
+  const deadbandRadians = nonNegativeMetric(profile?.deadbandRadians);
+  const transitionDurationMs = nonNegativeMetric(profile?.transitionDurationMs);
+  if (!current || !direction || !markerNormal
+    || maximumNormalDifferenceRadians === null
+    || maximumInnovationRadians === null
+    || deadbandRadians === null || transitionDurationMs === null) return null;
+
+  const currentNormal = rotateVectorByQuaternion({ x: 0, y: 0, z: 1 }, current);
+  const currentDirection = rotateVectorByQuaternion({ x: 1, y: 0, z: 0 }, current);
+  if (!currentNormal || !currentDirection) return null;
+  const normalDifferenceRadians = Math.acos(clampedUnit(
+    vectorDot(currentNormal, markerNormal)
+  ));
+  if (!Number.isFinite(normalDifferenceRadians)
+    || normalDifferenceRadians > maximumNormalDifferenceRadians) return null;
+
+  const alongNormal = vectorDot(direction, currentNormal);
+  const projectedDirection = normalisedVector({
+    x: direction.x - alongNormal * currentNormal.x,
+    y: direction.y - alongNormal * currentNormal.y,
+    z: direction.z - alongNormal * currentNormal.z
+  });
+  if (!projectedDirection) return null;
+  const sine = vectorDot(
+    currentNormal,
+    vectorCross(currentDirection, projectedDirection)
+  );
+  const cosine = clampedUnit(vectorDot(currentDirection, projectedDirection));
+  const signedRadians = wrappedRadians(Math.atan2(sine, cosine));
+  if (signedRadians === null) return null;
+  const distanceRadians = Math.abs(signedRadians);
+  if (distanceRadians > maximumInnovationRadians) return null;
+
+  const worldDelta = axisAngleQuaternion(currentNormal, signedRadians);
+  const quaternion = quaternionProduct(worldDelta, current);
+  if (!quaternion) return null;
+  return {
+    quaternion,
+    signedRadians,
+    distanceRadians,
+    normalDifferenceRadians,
+    required: distanceRadians > deadbandRadians,
+    durationMs: distanceRadians > deadbandRadians ? transitionDurationMs : 0
+  };
 }
 
 export function markerAcquisitionSamplingDecision({
