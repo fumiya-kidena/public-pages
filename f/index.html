@@ -17,9 +17,10 @@
     // issued code must be updated here rather than renamed or repurposed.
     const routes = Object.freeze({
       b: "../_p/flow-ar/markerAr.html?case=bagBreakup&mode=bagFixed",
-      d: "../_p/flow-ar/markerAr.html?case=oscillatingDroplet&mode=glass"
+      d: "../_p/flow-ar/markerAr.html?case=oscillatingDroplet&mode=glass",
+      w: "../_p/flow-ar/markerAr.html?case=windWave&mode=surface"
     });
-    const match = window.location.hash.slice(1).match(/^([bd])([0-9]{78})$/);
+    const match = window.location.hash.slice(1).match(/^([bdw])([0-9]{78})$/);
     if (!match || !Object.prototype.hasOwnProperty.call(routes, match[1])) {
       document.documentElement.dataset.invalid = "true";
       return;
