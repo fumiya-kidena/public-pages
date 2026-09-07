@@ -4,12 +4,14 @@ const finitePositive = (value) => {
 };
 
 /**
- * Recover the physical dimensions of the cropped planar target.
+ * Recover the canonical authored dimensions of the cropped planar target.
  *
  * buildWorldTarget.py records dimensions before its aspect-preserving resize.
- * For the rotated FLOW AR poster, originalHeight is the printed poster width,
- * whose physical value is anchor.physicalWidthCm. The runtime rotates that
- * target back into poster orientation, so its event width/height are swapped.
+ * For the rotated FLOW AR poster, originalHeight is the canonical poster width
+ * described by anchor.physicalWidthCm. This is an authoring reference, not an
+ * estimate of the user's actual print size: an enlarged print retains the same
+ * model-to-paper ratios. The runtime rotates the target back into poster
+ * orientation, so its event width/height are swapped.
  */
 export function targetPhysicalSize(properties, posterPhysicalWidthCm) {
   if (!properties || typeof properties !== "object") return null;
@@ -37,43 +39,36 @@ export function targetPhysicalSize(properties, posterPhysicalWidthCm) {
 }
 
 /**
- * Convert the image-target-local scale into the SI world scale used by the
- * model. Official image-target events define physical target extent as
- * scaledWidth/scaledHeight multiplied by scale. Dividing that observed extent
- * by the printed target extent keeps metre-authored content at metre scale.
+ * Map canonical card coordinates to the engine's responsive scene units.
+ *
+ * XR8 reports the observed target's longest extent as detail.scale. Dividing
+ * by the canonical target extent preserves model-to-paper proportions for any
+ * uniformly enlarged print. No actual print size or absolute metre estimate is
+ * needed. The geometry fields describe aspect ratio; they must not introduce a
+ * second scale estimate or change scale when screen orientation changes.
  */
 export function calibratedWorldScale(detail, targetSize) {
   if (!targetSize) return null;
   const markerScale = finitePositive(detail?.scale);
-  const scaledWidth = finitePositive(detail?.scaledWidth);
-  const scaledHeight = finitePositive(detail?.scaledHeight);
   const targetLongAxis = Math.max(
     finitePositive(targetSize.widthMetres) || 0,
     finitePositive(targetSize.heightMetres) || 0
   );
   if (!markerScale || !targetLongAxis) return null;
 
-  // XR8 defines detail.scale as the detected target's longest extent. This
-  // orientation-independent ratio remains valid when an Android runtime omits
-  // scaledWidth/scaledHeight or reports them in the opposite screen rotation.
   const longAxisRatio = markerScale / targetLongAxis;
-  if (!scaledWidth || !scaledHeight) return longAxisRatio;
+  return Number.isFinite(longAxisRatio) && longAxisRatio > 0 ? longAxisRatio : null;
+}
 
-  const widthRatio = markerScale * scaledWidth / targetSize.widthMetres;
-  const heightRatio = markerScale * scaledHeight / targetSize.heightMetres;
-  if (![widthRatio, heightRatio].every(Number.isFinite)
-    || widthRatio <= 0 || heightRatio <= 0) return null;
-
-  // Prefer both axes when they agree. Some Android/browser combinations swap
-  // them after orientation changes; falling back to the documented long-axis
-  // scale is safer than rejecting every marker pose and hiding the model.
-  const axisDisagreement = Math.abs(Math.log(widthRatio / heightRatio));
-  if (axisDisagreement > 0.08) return longAxisRatio;
-  const result = Math.sqrt(widthRatio * heightRatio);
-
-  // In responsive world tracking this is intentionally not expected to be
-  // near one: it is the conversion from SI-authored metres to scene units.
-  return Number.isFinite(result) && result > 0 ? result : null;
+/**
+ * Symmetric fractional scale difference. Shrinking and returning to the
+ * original paper-relative scale must pass the same innovation threshold.
+ */
+export function relativeScaleDifference(a, b) {
+  if (typeof a !== "number" || typeof b !== "number"
+    || !Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+  const difference = Math.max(a / b, b / a) - 1;
+  return Number.isFinite(difference) && difference >= 0 ? difference : null;
 }
 
 export function stableMeanScale(samples, maximumRelativeSpread) {
@@ -176,13 +171,14 @@ export const worldMarkerCorrectionProfile = Object.freeze({
     rotationRadians: 70 * Math.PI / 180,
     scaleFraction: 0.5
   }),
-  // A SLAM relocalization can legitimately move the complete world frame much
-  // farther than an ordinary image-target correction. It still needs two
-  // independent stable windows before this wider gate is used.
+  // A SLAM relocalization or recovery from a wrong paper-relative lock can
+  // move the complete world frame farther than an ordinary correction. This
+  // wider gate still needs two independent stable windows. A scale difference
+  // of four permits a factor of five in either direction, not just shrinking.
   relocalizationMaximumInnovation: Object.freeze({
     positionMetres: 2,
     rotationRadians: 170 * Math.PI / 180,
-    scaleFraction: 1.5
+    scaleFraction: 4
   }),
   confirmation: Object.freeze({
     // Four sparse samples and the next independent window can legitimately

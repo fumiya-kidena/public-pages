@@ -29,13 +29,14 @@ import {
   mayAcceptTimedPoseSample,
   maySampleInitialPose,
   poseWindowReady,
+  relativeScaleDifference,
   sceneDistanceMetres,
   stablePosterPoseProfile,
   stablePosterPoseStep,
   stableMarkerDirectionEstimate,
   targetPhysicalSize,
   worldMarkerCorrectionProfile
-} from "./markerPoseCore.js?v=9";
+} from "./markerPoseCore.js?v=10";
 import {
   arPerformanceProfileForDevice,
   constrainCameraFrameRate,
@@ -1110,15 +1111,17 @@ function cancelMarkerCorrectionTransition({
 
 function markerCorrectionMetrics(pose, samples) {
   const currentScale = worldAnchorRoot.scale.x;
+  // Normalize to the observed paper, not an old anchor that may have shrunk.
+  // These are canonical card units, not inferred physical print dimensions.
   const positionDistanceMetres = sceneDistanceMetres(
     worldAnchorRoot.position.distanceTo(pose.position),
-    currentScale
+    pose.scale
   );
   if (positionDistanceMetres === null || !Number.isFinite(currentScale) || currentScale <= 0) {
     return null;
   }
   const rotationDistanceRadians = quaternionAngle(worldAnchorRoot.quaternion, pose.quaternion);
-  const scaleDifferenceFraction = Math.abs(pose.scale / currentScale - 1);
+  const scaleDifferenceFraction = relativeScaleDifference(pose.scale, currentScale);
   const positionSpreadScene = Math.max(
     ...samples.map((sample) => sample.position.distanceTo(pose.position))
   );
@@ -1127,9 +1130,10 @@ function markerCorrectionMetrics(pose, samples) {
     ...samples.map((sample) => quaternionAngle(sample.quaternion, pose.quaternion))
   );
   const scaleSpreadFraction = Math.max(
-    ...samples.map((sample) => Math.abs(sample.scale / pose.scale - 1))
+    ...samples.map((sample) => relativeScaleDifference(sample.scale, pose.scale)
+      ?? Number.POSITIVE_INFINITY)
   );
-  if (positionSpreadMetres === null
+  if (positionSpreadMetres === null || scaleDifferenceFraction === null
     || ![rotationDistanceRadians, scaleDifferenceFraction,
       rotationSpreadRadians, scaleSpreadFraction].every(Number.isFinite)) {
     return null;
@@ -1148,6 +1152,10 @@ function markerCorrectionCandidate({
   forceExtended = false,
   relocalizing = markerCorrectionNeedsEpochRebase
 } = {}) {
+  const reject = (phase) => {
+    markerCorrectionPhase = phase;
+    return null;
+  };
   const profile = worldMarkerCorrectionProfile;
   const baseSamples = markerCorrectionSample.slice(-profile.sampleCount);
   let pose = robustPosterPose(
@@ -1156,20 +1164,34 @@ function markerCorrectionCandidate({
     profile.minimumDurationMs
   );
   if (!pose) return null;
-  if (!alignPoseToStableMarkerDirection(
+  // Refined long-edge heading is helpful, but must not veto an otherwise
+  // stable full image pose and leave position/size stuck on an old anchor.
+  alignPoseToStableMarkerDirection(
     pose,
     baseSamples,
     profile.sampleCount,
     profile.minimumDurationMs
-  )) return null;
+  );
   let metrics = markerCorrectionMetrics(pose, baseSamples);
-  if (!metrics) return null;
-  const requirement = markerCorrectionWindowRequirement({
+  if (!metrics || !markerCorrectionWindowStable(metrics)) return reject("unstable");
+  let recoveringPaperReference = relocalizing;
+  let requirement = markerCorrectionWindowRequirement({
     ...metrics,
     forceExtended,
     relocalizing
   });
-  if (!requirement) return null;
+  if (!requirement && !relocalizing) {
+    // A wrong old anchor must not veto the correct visible paper forever.
+    // Use the wider gate only with two independent stable observation windows,
+    // even when the SLAM engine still reports NORMAL.
+    recoveringPaperReference = true;
+    requirement = markerCorrectionWindowRequirement({
+      ...metrics,
+      forceExtended: true,
+      relocalizing: true
+    });
+  }
+  if (!requirement) return reject("out-of-range");
 
   const selectedSamples = markerCorrectionSample.slice(-requirement.sampleCount);
   pose = robustPosterPose(
@@ -1178,33 +1200,33 @@ function markerCorrectionCandidate({
     requirement.minimumDurationMs
   );
   if (!pose) return null;
-  if (!alignPoseToStableMarkerDirection(
+  alignPoseToStableMarkerDirection(
     pose,
     selectedSamples,
     requirement.sampleCount,
     requirement.minimumDurationMs
-  )) return null;
+  );
   metrics = markerCorrectionMetrics(pose, selectedSamples);
-  if (!metrics) return null;
+  if (!metrics) return reject("unstable");
   const confirmedRequirement = markerCorrectionWindowRequirement({
     ...metrics,
-    forceExtended,
-    relocalizing
+    forceExtended: forceExtended || recoveringPaperReference,
+    relocalizing: recoveringPaperReference
   });
   if (!confirmedRequirement
     || confirmedRequirement.sampleCount > selectedSamples.length
     || confirmedRequirement.minimumDurationMs > requirement.minimumDurationMs) {
-    return null;
+    return reject("out-of-range");
   }
   // Confirmation references must themselves pass the same stability gate as
   // an applied correction; otherwise two noisy windows could authorise a later
   // large movement without ever providing two stable observations.
-  if (!markerCorrectionWindowStable(metrics)) return null;
+  if (!markerCorrectionWindowStable(metrics)) return reject("unstable");
   return {
     pose,
     metrics,
     requirement: confirmedRequirement,
-    relocalizing
+    relocalizing: recoveringPaperReference
   };
 }
 
@@ -1281,8 +1303,8 @@ function markerCorrectionReferenceMetrics(reference, pose) {
     pose.scale
   );
   const rotationDifferenceRadians = quaternionAngle(reference.quaternion, pose.quaternion);
-  const scaleDifferenceFraction = Math.abs(reference.scale / pose.scale - 1);
-  if (positionDifferenceMetres === null
+  const scaleDifferenceFraction = relativeScaleDifference(reference.scale, pose.scale);
+  if (positionDifferenceMetres === null || scaleDifferenceFraction === null
     || ![rotationDifferenceRadians, scaleDifferenceFraction].every(Number.isFinite)) {
     return null;
   }
@@ -1464,7 +1486,7 @@ function processLockedMarkerCorrection(candidate) {
   if (decision !== "apply") {
     pendingLargeMarkerCorrection = markerCorrectionReference(pose);
     clearMarkerCorrectionSamples({ resetCadence: false });
-    markerCorrectionPhase = "confirming";
+    markerCorrectionPhase = candidate.relocalizing ? "paper-recovery" : "confirming";
     return false;
   }
 
@@ -1772,7 +1794,7 @@ function readableTrackingReason(reason) {
 }
 
 function lockedTrackingStatusMessage() {
-  if (!markerVisible) return "world追跡中 · posterが映ると位置を自動補正";
+  if (!markerVisible) return "world追跡中 · マーカー未認識 · posterが映ると位置を自動補正";
   if (markerCorrectionPhase === "corrected") {
     return "world追跡中 · poster基準で位置を補正済み";
   }
@@ -1787,6 +1809,15 @@ function lockedTrackingStatusMessage() {
   }
   if (markerCorrectionPhase === "low-quality") {
     return "world追跡中 · posterへ近づき、少し正面から映してください";
+  }
+  if (markerCorrectionPhase === "unstable") {
+    return "マーカー認識中 · 観測が揺れているため位置・大きさの補正待ち";
+  }
+  if (markerCorrectionPhase === "out-of-range") {
+    return "マーカー認識中 · ずれが大きすぎるため再整列を保留";
+  }
+  if (markerCorrectionPhase === "paper-recovery") {
+    return "マーカー認識中 · 紙面の位置・大きさを再確認中…";
   }
   return "world追跡中 · poster基準を確認中…";
 }
