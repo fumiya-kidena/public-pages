@@ -15,6 +15,7 @@ import {
 } from "./secureAsset.js?v=2";
 import {
   calibratedWorldScale,
+  confirmMarkerDirectionEstimate,
   markerAcquisitionSamplingDecision,
   markerCorrectionBlendProgress,
   markerCorrectionConfirmationDecision,
@@ -33,7 +34,7 @@ import {
   stableMarkerDirectionEstimate,
   targetPhysicalSize,
   worldMarkerCorrectionProfile
-} from "./markerPoseCore.js?v=8";
+} from "./markerPoseCore.js?v=9";
 import {
   arPerformanceProfileForDevice,
   constrainCameraFrameRate,
@@ -148,6 +149,7 @@ let markerCorrectionPhase = "idle";
 let markerTrackingEpoch = 0;
 let markerCorrectionNeedsEpochRebase = false;
 let markerDirectionLeadPendingFullPose = false;
+let pendingInitialMarkerDirection = null;
 let constrainedCameraTrack;
 let allowedDevices;
 let landscapeBlocked = false;
@@ -1012,13 +1014,15 @@ function alignPoseToStableMarkerDirection(
   sampleCount,
   minimumDurationMs,
   maximumNormalSpreadRadians = worldMarkerCorrectionProfile.direction
-    .maximumNormalSpreadRadians
+    .maximumNormalSpreadRadians,
+  stabilityRadians = worldMarkerCorrectionProfile.direction.stabilityRadians
 ) {
   const estimate = stableMarkerDirectionEstimate(samples, {
     ...worldMarkerCorrectionProfile.direction,
     sampleCount,
     minimumDurationMs,
-    maximumNormalSpreadRadians
+    maximumNormalSpreadRadians,
+    stabilityRadians
   });
   const correction = estimate && markerDirectionCorrection({
     currentQuaternion: pose?.quaternion,
@@ -1036,11 +1040,25 @@ function alignPoseToStableMarkerDirection(
 }
 
 function posterAcquisitionPose(samples) {
-  return robustPosterPose(
+  const pose = robustPosterPose(
     samples,
     stablePosterPoseProfile.acquisitionSampleCount,
     stablePosterPoseProfile.acquisitionDurationMs
   );
+  if (!pose) return null;
+  // The provisional frame-zero model should already respect the card's long
+  // edge. A looser heading spread than the final lock keeps acquisition usable
+  // on low-end cameras; two stricter non-overlapping windows still authorise
+  // the final world heading below.
+  const estimate = alignPoseToStableMarkerDirection(
+    pose,
+    samples,
+    stablePosterPoseProfile.acquisitionSampleCount,
+    stablePosterPoseProfile.acquisitionDurationMs,
+    THREE.MathUtils.degToRad(3),
+    THREE.MathUtils.degToRad(1.5)
+  );
+  return estimate ? pose : null;
 }
 
 function resetPosterPoseFilter() {
@@ -1494,8 +1512,8 @@ function collectLockedMarkerCorrection(detail) {
     relocalizing: markerCorrectionNeedsEpochRebase
   });
   const directionCandidate = markerDirectionCandidate();
-  // An ordinary stable full-pose candidate already contains the circularly
-  // averaged heading, so keep it authoritative. Let heading run first only
+  // An ordinary stable full-pose candidate already contains the directly
+  // averaged long-axis heading, so keep it authoritative. Let heading run first only
   // when the full pose is unavailable or rotation alone pushed it onto the
   // slow extended path; directionCandidate has already gated position/scale.
   const directionFirst = directionCandidate?.correction.required
@@ -1581,7 +1599,9 @@ function applyMarkerPreviewPose(pose) {
 }
 
 function lockMarkerPose(pose = null) {
-  if (!markerPosePreview || poseLocked) return false;
+  // A twice-confirmed stable pose is authoritative even if the looser visual
+  // preview gate happened not to render on a sparse callback sequence.
+  if (poseLocked || (!markerPosePreview && !pose)) return false;
   if (pose) applyWorldAnchorPose(pose);
   else {
     worldAnchorRoot.updateMatrix();
@@ -1592,6 +1612,7 @@ function lockMarkerPose(pose = null) {
   markerPreviewUpdatedAt = null;
   poseSample.length = 0;
   lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+  pendingInitialMarkerDirection = null;
   cancelMarkerCorrectionTransition();
   markerCorrectionNeedsEpochRebase = false;
   console.info("FLOW AR initial marker pose locked (full position/rotation/scale)");
@@ -1631,7 +1652,7 @@ function averagedStablePose(samples) {
 
   // A complete SE(3) medoid is still the authority for the initial lock, but
   // its in-plane heading would otherwise come from just one camera frame.
-  // Circularly average target-local +X across the same verified window.
+  // Directly average target-local +X across the same verified window.
   const directionEstimate = alignPoseToStableMarkerDirection(
     pose,
     samples,
@@ -1640,12 +1661,56 @@ function averagedStablePose(samples) {
     THREE.MathUtils.degToRad(worldTracking.initialPose.stabilityRotationDegree)
   );
   if (!directionEstimate) return null;
-  return pose;
+  return { pose, directionEstimate };
+}
+
+function clearInitialPoseWindow() {
+  poseSample.length = 0;
+  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
 }
 
 function resetInitialPoseSamples() {
-  poseSample.length = 0;
-  lastPoseSampleAt = Number.NEGATIVE_INFINITY;
+  clearInitialPoseWindow();
+  pendingInitialMarkerDirection = null;
+}
+
+function confirmedInitialPose(stableWindow) {
+  const { pose, directionEstimate } = stableWindow || {};
+  if (!pose || !directionEstimate) return null;
+  if (!pendingInitialMarkerDirection) {
+    pendingInitialMarkerDirection = directionEstimate;
+    clearInitialPoseWindow();
+    return null;
+  }
+
+  const confirmedDirection = confirmMarkerDirectionEstimate(
+    pendingInitialMarkerDirection,
+    directionEstimate
+  );
+  if (!confirmedDirection) {
+    // Consecutive windows disagree: the newer verified observation becomes the
+    // next reference instead of averaging two different detector solutions.
+    pendingInitialMarkerDirection = directionEstimate;
+    clearInitialPoseWindow();
+    return null;
+  }
+  const correction = markerDirectionCorrection({
+    currentQuaternion: pose.quaternion,
+    observedDirection: confirmedDirection.direction,
+    observedNormal: confirmedDirection.normal
+  });
+  if (!correction) {
+    pendingInitialMarkerDirection = directionEstimate;
+    clearInitialPoseWindow();
+    return null;
+  }
+  pose.quaternion.set(
+    correction.quaternion.x,
+    correction.quaternion.y,
+    correction.quaternion.z,
+    correction.quaternion.w
+  ).normalize();
+  return pose;
 }
 
 function addPoseSample(detail) {
@@ -1683,10 +1748,15 @@ function addPoseSample(detail) {
   poseSample.push(pose);
   while (poseSample.length > worldTracking.initialPose.sampleCount) poseSample.shift();
 
-  const stablePose = averagedStablePose(poseSample);
-  if (!stablePose) return;
-  // Initial alignment happens before playback advances, so the verified full
-  // pose can be applied immediately without a visible mid-animation jump.
+  const stableWindow = averagedStablePose(poseSample);
+  if (!stableWindow) return;
+  const stablePose = confirmedInitialPose(stableWindow);
+  if (!stablePose) {
+    renderTrackingStatus();
+    return;
+  }
+  // Initial alignment happens before playback advances, so the twice-verified
+  // long-axis heading and latest complete pose can be applied immediately.
   lockMarkerPose(stablePose);
 }
 
@@ -1736,7 +1806,9 @@ function renderTrackingStatus() {
   }
   if (!poseLocked) {
     setStatus(
-      markerPosePreview
+      pendingInitialMarkerDirection
+        ? "poster長辺の方向を再確認中…"
+        : markerPosePreview
         ? (markerVisible
           ? "poster基準で仮表示 · 周囲trackingへ固定中…"
           : "仮位置を保持 · posterをもう一度映してください")

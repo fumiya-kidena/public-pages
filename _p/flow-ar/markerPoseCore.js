@@ -216,7 +216,14 @@ export const worldMarkerCorrectionProfile = Object.freeze({
     positionSpreadMetres: 0.008,
     scaleSpreadFraction: 0.02,
     deadbandRadians: 0.2 * Math.PI / 180,
-    transitionDurationMs: 220
+    transitionDurationMs: 220,
+    initialConfirmation: Object.freeze({
+      maximumDirectionDifferenceRadians: 0.75 * Math.PI / 180,
+      maximumNormalDifferenceRadians: 5 * Math.PI / 180,
+      // Four callbacks in each non-overlapping window can legally arrive at
+      // the 1.6 s low-FPS gap limit, placing the window endpoints 6.4 s apart.
+      maximumAgeMs: 10000
+    })
   }),
   step: Object.freeze({
     minimumIntervalMs: 250,
@@ -406,16 +413,24 @@ function normalisedVector(value) {
   };
 }
 
-function quaternionDot(a, b) {
-  return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
-}
-
 function quaternionProduct(a, b) {
   return finiteQuaternion({
     x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
     y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
     z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
     w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+  });
+}
+
+function projectDirectionToPlane(direction, normal) {
+  const unitDirection = normalisedVector(direction);
+  const unitNormal = normalisedVector(normal);
+  if (!unitDirection || !unitNormal) return null;
+  const alongNormal = vectorDot(unitDirection, unitNormal);
+  return normalisedVector({
+    x: unitDirection.x - alongNormal * unitNormal.x,
+    y: unitDirection.y - alongNormal * unitNormal.y,
+    z: unitDirection.z - alongNormal * unitNormal.z
   });
 }
 
@@ -464,10 +479,13 @@ function axisAngleQuaternion(axis, angle) {
  * Estimate the printed card's absolute left/right direction from a stable
  * image-target window.
  *
- * Relative rotations are expressed in target-local coordinates before the
- * local-Z twist is extracted. This keeps the estimate independent of whether
- * the card is horizontal, vertical or arbitrarily tilted. Quaternion signs are
- * aligned to the first sample, then the heading is circularly averaged.
+ * Average the observed target-local +X vectors directly in world space, then
+ * project them onto the mean card plane. A relative-twist average leaves the
+ * first sample's swing/heading coupled into the result; that can turn a stable
+ * but biased first observation into the initial world lock. Vector averaging
+ * gives every verified observation equal authority and remains independent of
+ * whether the card is horizontal, vertical or arbitrarily tilted. q and -q
+ * naturally rotate vectors identically.
  */
 export function stableMarkerDirectionEstimate(
   samples,
@@ -488,17 +506,6 @@ export function stableMarkerDirectionEstimate(
 
   const quaternion = window.map((sample) => finiteQuaternion(sample?.quaternion));
   if (quaternion.some((value) => !value)) return null;
-  const reference = quaternion[0];
-  for (let index = 1; index < quaternion.length; index += 1) {
-    if (quaternionDot(reference, quaternion[index]) < 0) {
-      quaternion[index] = {
-        x: -quaternion[index].x,
-        y: -quaternion[index].y,
-        z: -quaternion[index].z,
-        w: -quaternion[index].w
-      };
-    }
-  }
 
   const normal = quaternion.map((value) => rotateVectorByQuaternion(
     { x: 0, y: 0, z: 1 },
@@ -516,47 +523,25 @@ export function stableMarkerDirectionEstimate(
   if (!Number.isFinite(normalSpreadRadians)
     || normalSpreadRadians > maximumNormalSpreadRadians) return null;
 
-  const inverseReference = {
-    x: -reference.x,
-    y: -reference.y,
-    z: -reference.z,
-    w: reference.w
-  };
-  const relativeHeading = quaternion.map((value) => {
-    const relative = quaternionProduct(inverseReference, value);
-    if (!relative) return null;
-    const twistLength = Math.hypot(relative.z, relative.w);
-    if (!Number.isFinite(twistLength) || twistLength < 1e-10) return null;
-    return wrappedRadians(2 * Math.atan2(
-      relative.z / twistLength,
-      relative.w / twistLength
-    ));
-  });
-  if (relativeHeading.some((value) => value === null)) return null;
-  const sineMean = relativeHeading.reduce((sum, value) => sum + Math.sin(value), 0);
-  const cosineMean = relativeHeading.reduce((sum, value) => sum + Math.cos(value), 0);
-  if (Math.hypot(sineMean, cosineMean) < 1e-8) return null;
-  const meanHeadingRadians = Math.atan2(sineMean, cosineMean);
-  const headingSpreadRadians = Math.max(...relativeHeading.map((value) => Math.abs(
-    wrappedRadians(value - meanHeadingRadians)
+  const projectedDirection = quaternion.map((value) => projectDirectionToPlane(
+    rotateVectorByQuaternion({ x: 1, y: 0, z: 0 }, value),
+    meanNormal
+  ));
+  if (projectedDirection.some((value) => !value)) return null;
+  const direction = normalisedVector(projectedDirection.reduce((sum, value) => ({
+    x: sum.x + value.x,
+    y: sum.y + value.y,
+    z: sum.z + value.z
+  }), { x: 0, y: 0, z: 0 }));
+  if (!direction) return null;
+  const headingSpreadRadians = Math.max(...projectedDirection.map((value) => Math.abs(
+    Math.atan2(
+      vectorDot(meanNormal, vectorCross(direction, value)),
+      clampedUnit(vectorDot(direction, value))
+    )
   )));
   if (!Number.isFinite(headingSpreadRadians)
     || headingSpreadRadians > stabilityRadians) return null;
-
-  const meanTwist = axisAngleQuaternion(
-    { x: 0, y: 0, z: 1 },
-    meanHeadingRadians
-  );
-  const meanQuaternion = quaternionProduct(reference, meanTwist);
-  let direction = rotateVectorByQuaternion({ x: 1, y: 0, z: 0 }, meanQuaternion);
-  if (!direction) return null;
-  const alongNormal = vectorDot(direction, meanNormal);
-  direction = normalisedVector({
-    x: direction.x - alongNormal * meanNormal.x,
-    y: direction.y - alongNormal * meanNormal.y,
-    z: direction.z - alongNormal * meanNormal.z
-  });
-  if (!direction) return null;
 
   return {
     direction,
@@ -565,6 +550,73 @@ export function stableMarkerDirectionEstimate(
     normalSpreadRadians,
     sampleCount: count,
     capturedAt: Number(window[window.length - 1]?.capturedAt)
+  };
+}
+
+/**
+ * Require two non-overlapping stable windows before the initial heading earns
+ * world authority. Position, scale and plane normal still come from the latest
+ * complete SE(3) medoid; this function confirms and combines only the printed
+ * card's long-axis direction.
+ */
+export function confirmMarkerDirectionEstimate(
+  first,
+  second,
+  profile = worldMarkerCorrectionProfile.direction.initialConfirmation
+) {
+  const firstDirection = normalisedVector(first?.direction);
+  const secondDirection = normalisedVector(second?.direction);
+  const firstNormal = normalisedVector(first?.normal);
+  const secondNormal = normalisedVector(second?.normal);
+  const maximumDirectionDifferenceRadians = nonNegativeMetric(
+    profile?.maximumDirectionDifferenceRadians
+  );
+  const maximumNormalDifferenceRadians = nonNegativeMetric(
+    profile?.maximumNormalDifferenceRadians
+  );
+  const maximumAgeMs = nonNegativeMetric(profile?.maximumAgeMs);
+  const firstCapturedAt = Number(first?.capturedAt);
+  const secondCapturedAt = Number(second?.capturedAt);
+  if (!firstDirection || !secondDirection || !firstNormal || !secondNormal
+    || maximumDirectionDifferenceRadians === null
+    || maximumNormalDifferenceRadians === null || maximumAgeMs === null
+    || !Number.isFinite(firstCapturedAt) || !Number.isFinite(secondCapturedAt)) {
+    return null;
+  }
+  const ageMs = secondCapturedAt - firstCapturedAt;
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > maximumAgeMs) return null;
+
+  const normalDifferenceRadians = Math.acos(clampedUnit(
+    vectorDot(firstNormal, secondNormal)
+  ));
+  if (!Number.isFinite(normalDifferenceRadians)
+    || normalDifferenceRadians > maximumNormalDifferenceRadians) return null;
+  const meanNormal = normalisedVector({
+    x: firstNormal.x + secondNormal.x,
+    y: firstNormal.y + secondNormal.y,
+    z: firstNormal.z + secondNormal.z
+  });
+  if (!meanNormal) return null;
+  const firstProjected = projectDirectionToPlane(firstDirection, meanNormal);
+  const secondProjected = projectDirectionToPlane(secondDirection, meanNormal);
+  if (!firstProjected || !secondProjected) return null;
+  const directionDifferenceRadians = Math.acos(clampedUnit(
+    vectorDot(firstProjected, secondProjected)
+  ));
+  if (!Number.isFinite(directionDifferenceRadians)
+    || directionDifferenceRadians > maximumDirectionDifferenceRadians) return null;
+  const direction = normalisedVector({
+    x: firstProjected.x + secondProjected.x,
+    y: firstProjected.y + secondProjected.y,
+    z: firstProjected.z + secondProjected.z
+  });
+  if (!direction) return null;
+  return {
+    direction,
+    normal: meanNormal,
+    directionDifferenceRadians,
+    normalDifferenceRadians,
+    capturedAt: secondCapturedAt
   };
 }
 
