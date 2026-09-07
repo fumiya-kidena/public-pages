@@ -12,7 +12,7 @@ import {
   carryUnlockFragment,
   fetchAssetJson,
   usesEncryptedAssets
-} from "./secureAsset.js?v=2";
+} from "./secureAsset.js?v=3";
 import {
   calibratedWorldScale,
   confirmMarkerDirectionEstimate,
@@ -1905,9 +1905,15 @@ function showStartFallback(error, { retry = false } = {}) {
   runtimeNeedsStop = pipelineAdded;
   intro.hidden = false;
   markerPreview.hidden = true;
-  introCopy.textContent = retry
-    ? "cameraを自動起動できませんでした。下のbuttonを1回押してください。"
-    : "この端末ではcamera ARを開始できません。fallback表示を使ってください。";
+  const assetFailure = error?.code === "FLOW_AR_RELEASE_STALE"
+    || error?.code === "FLOW_AR_ASSET_HTTP";
+  introCopy.textContent = assetFailure
+    ? error.refreshing
+      ? "最新の公開ページへ更新中です。"
+      : "表示用データを取得できませんでした。端末のAR対応とは別のエラーです。"
+    : retry
+      ? "cameraを自動起動できませんでした。下のbuttonを1回押してください。"
+      : "ARの準備を完了できませんでした。下のエラーを確認するか、fallback表示を使ってください。";
   const message = error?.message || "";
   introError.textContent = /No valid session manager/i.test(message)
     ? "このbrowser／端末ではworld trackingを開始できません。iPhoneまたはAndroidの対応browserで開くか、image-marker版を使ってください。"
@@ -1916,7 +1922,9 @@ function showStartFallback(error, { retry = false } = {}) {
   startButton.hidden = !retry;
   startButton.disabled = !retry;
   startButton.textContent = retry ? "cameraを開始" : "cameraを開始できません";
-  setStatus("world trackingを開始できませんでした", "error");
+  setStatus(assetFailure
+    ? error.refreshing ? "公開データを更新中…" : "公開データを取得できませんでした"
+    : "world trackingを開始できませんでした", error.refreshing ? "loading" : "error");
 }
 
 function mayNeedUserActivation(error) {

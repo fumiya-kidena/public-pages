@@ -36,6 +36,9 @@
       }
       const credentialHex = credentialValue.toString(16).padStart(64, "0");
       const target = new URL(routes[match[1]], window.location.href);
+      // Refresh the destination HTML, whose encrypted asset map is release-specific.
+      // The printed URL/token stay unchanged; this value contains no credential.
+      target.searchParams.set("_flowArOpen", String(Date.now()));
       target.hash = `staticrypt_pwd=${credentialHex}&remember_me`;
       window.location.replace(target.href);
     } catch {

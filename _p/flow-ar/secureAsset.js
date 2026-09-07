@@ -9,6 +9,47 @@ const objectUrlCache = new Map();
 const jsonCache = new Map();
 const pendingDecrypt = new Map();
 let contentKeyPromise;
+let refreshingRelease = false;
+const RELEASE_REFRESH_QUERY = "_flowArRefresh";
+const RELEASE_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
+
+function refreshStaleRelease() {
+  if (refreshingRelease) return true;
+  // The HTML holds this release's key and opaque asset map. Retrying an old
+  // ciphertext URL cannot recover after publication replaces the whole pack.
+  // Reload the encrypted wrapper, preserving the case, mode and unlock hash.
+  const target = new URL(window.location.href);
+  if (logicalPath(target) === null) return false;
+  const now = Date.now();
+  const previous = Number(target.searchParams.get(RELEASE_REFRESH_QUERY));
+  const age = now - previous;
+  // Keep the retry guard in the URL: it also works when storage is disabled.
+  // A persistent missing file must not create an automatic reload loop.
+  if (previous > 0 && age >= 0 && age < RELEASE_REFRESH_COOLDOWN_MS) return false;
+  target.searchParams.set(RELEASE_REFRESH_QUERY, String(now));
+  refreshingRelease = true;
+  try {
+    window.location.replace(target.href);
+    return true;
+  } catch {
+    refreshingRelease = false;
+    return false;
+  }
+}
+
+function encryptedHttpError(status, path) {
+  const error = new Error(`Encrypted asset HTTP ${status}: ${path}`);
+  error.code = "FLOW_AR_ASSET_HTTP";
+  error.httpStatus = status;
+  if (status === 404 || status === 410) {
+    error.code = "FLOW_AR_RELEASE_STALE";
+    error.refreshing = refreshStaleRelease();
+    error.message = error.refreshing
+      ? "公開データの更新を検出しました。最新ページを読み込み直しています。"
+      : `公開データを取得できません（HTTP ${status}）。少し待ってページを再読み込みしてください。`;
+  }
+  return error;
+}
 
 function base64UrlBytes(value) {
   const normalized = String(value).replace(/-/g, "+").replace(/_/g, "/");
@@ -97,7 +138,7 @@ async function decryptAsset(input) {
       encryptedUrl.searchParams.set("v", packageDefinition.assetVersion);
     }
     const response = await fetch(encryptedUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Encrypted asset HTTP ${response.status}: ${resolved.path}`);
+    if (!response.ok) throw encryptedHttpError(response.status, resolved.path);
     const envelope = new Uint8Array(await response.arrayBuffer());
     if (
       envelope.length < 32
