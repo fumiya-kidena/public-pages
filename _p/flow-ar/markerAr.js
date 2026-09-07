@@ -45,6 +45,9 @@ import {
 } from "./arPerformanceCore.js?v=1";
 import { installArUiOverlayGuard } from "./arUiOverlayCore.js?v=1";
 import { hasPlayableTimeline } from "./playbackModeCore.js?v=1";
+import { getCardPointLayout } from "./cardPointLayout.js?v=1";
+import { createCardPointCamera } from "./cardPointCamera.js?v=1";
+import { createCardPointTracking } from "./cardPointTracking.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -157,12 +160,72 @@ let allowedDevices;
 let landscapeBlocked = false;
 let resumeAfterLandscape = false;
 let orientationRestoreTimer;
+let cardPointLayout;
+let cardPointTracker;
+let cardPointCamera;
+let cardPointState = { name: "searching" };
 
 
 function setStatus(message, state = "loading") {
   if (status.textContent === message && status.dataset.state === state) return;
   status.textContent = message;
   status.dataset.state = state;
+}
+
+function setupCardPointTracking() {
+  cardPointLayout = getCardPointLayout(definition.id || requestedCase);
+  if (!cardPointLayout) return;
+  const isEnabled = () => running && !landscapeBlocked && !document.hidden;
+  cardPointTracker = createCardPointTracking({
+    THREE, layout: cardPointLayout, isEnabled,
+    isWorldTrackingNormal: () => trackingStatus === "NORMAL",
+    maySnap: () => !poseLocked || playbackAtCorrectionSnapPoint(),
+    onPose: pose => {
+      markerVisible = true;
+      // Only a pose made from measured dot centres reaches this callback.
+      if (!poseLocked) lockMarkerPose(pose);
+      else applyWorldAnchorPose(pose);
+      syncWorldAnchorVisibility();
+    },
+    onState: detail => {
+      cardPointState = detail;
+      markerVisible = ["points", "correcting"].includes(detail.name);
+      renderTrackingStatus();
+    }
+  });
+  cardPointCamera = createCardPointCamera({
+    isEnabled, maxDimension: 640, intervalMs: 125,
+    onFrame: frame => cardPointTracker.processFrame(frame),
+    onError: () => cardPointTracker.fail()
+  });
+}
+
+function rememberCardImageHint(detail) {
+  const hint = poseFromDetail(detail);
+  if (!hint) return;
+  // A legacy target can be cropped. Shift its search seed to the paper centre;
+  // incorrect hints are harmless because all matches must be measured afresh.
+  const offset = new THREE.Vector3(...worldTracking.contentOffsetMetres, 0);
+  hint.position.add(offset.multiplyScalar(hint.scale).applyQuaternion(hint.quaternion));
+  cardPointTracker.setImageHint(hint);
+}
+
+function renderCardPointStatus() {
+  const count = cardPointState.count || 0;
+  switch (cardPointState.name) {
+    case "points": setStatus(`色点 ${count}/23 · 紙面の位置・向き・大きさを追跡中`, "world"); break;
+    case "correcting": setStatus(`色点 ${count}/23 · 紙面へ再整列中…`, "world"); break;
+    case "confirming":
+    case "confirming-recovery": setStatus(`色点 ${count}/23 · 配置を再確認中…`, "scanning"); break;
+    case "held": setStatus("色点を見失いました · 周囲追跡で保持中", "world"); break;
+    case "held-limited": setStatus("周囲追跡を確認中 · 左右の色点をもう一度映してください", "limited"); break;
+    case "unavailable":
+      posterLockLink.hidden = false;
+      posterLockLink.textContent = "image-marker版";
+      setStatus("色点追跡を開始できません · 再読み込み／image-marker版をお試しください", "error");
+      break;
+    default: setStatus("左右の色点が全部入るように、カード全体を映してください", "scanning");
+  }
 }
 
 function resetCameraPipelineReady() {
@@ -542,9 +605,10 @@ async function loadDefinition() {
 
   assetRoot = new URL(definition.assetRoot, manifestUrl);
   worldTracking = validateWorldTracking(definition);
+  setupCardPointTracking();
   contentRoot.position.set(
-    worldTracking.contentOffsetMetres[0],
-    worldTracking.contentOffsetMetres[1],
+    cardPointLayout ? 0 : worldTracking.contentOffsetMetres[0],
+    cardPointLayout ? 0 : worldTracking.contentOffsetMetres[1],
     worldTracking.liftMetres
   );
 
@@ -563,7 +627,9 @@ async function loadDefinition() {
   }));
 
   introTitle.textContent = definition.label;
-  introCopy.textContent = "最初に色付きQR poster全体で位置と向きを合わせます。以後は周囲を追跡し、poster再検出時にずれを自動補正します。";
+  introCopy.textContent = cardPointLayout
+    ? "左右の色点を直接追跡し、紙面に位置・向き・大きさを合わせます。見失った間は周囲追跡で保持します。"
+    : "最初に色付きQR poster全体で位置と向きを合わせます。以後は周囲を追跡し、poster再検出時にずれを自動補正します。";
   platformNote.textContent = deviceProfile.isAndroid
     ? deviceProfile.isTablet
       ? "Android tablet · Chrome／Firefox／Samsung Internet／Edge · 横向き"
@@ -1832,6 +1898,10 @@ function renderTrackingStatus() {
     setStatus("camera起動済み · 3D modelを読み込み中…", "loading");
     return;
   }
+  if (cardPointTracker) {
+    renderCardPointStatus();
+    return;
+  }
   if (trackingStatus === "LIMITED" || trackingStatus === "NOT_AVAILABLE") {
     setStatus(readableTrackingReason(trackingReason), "limited");
     return;
@@ -1855,6 +1925,7 @@ function renderTrackingStatus() {
 function handleImageFound({ detail }) {
   if (landscapeBlocked) return;
   if (!detail || detail.name !== worldTracking.targetName) return;
+  if (cardPointTracker) { rememberCardImageHint(detail); return; }
   markerVisible = true;
   if (poseLocked) {
     if (!markerCorrectionTransition) resetMarkerCorrectionFilter({ phase: "confirming" });
@@ -1870,6 +1941,7 @@ function handleImageFound({ detail }) {
 function handleImageUpdated({ detail }) {
   if (landscapeBlocked) return;
   if (!detail || detail.name !== worldTracking.targetName) return;
+  if (cardPointTracker) { rememberCardImageHint(detail); return; }
   const wasVisible = markerVisible;
   markerVisible = true;
   if (poseLocked) {
@@ -1886,6 +1958,7 @@ function handleImageUpdated({ detail }) {
 function handleImageLost({ detail }) {
   if (landscapeBlocked) return;
   if (detail?.name && detail.name !== worldTracking.targetName) return;
+  if (cardPointTracker) { cardPointTracker.setImageHint(null); return; }
   markerVisible = false;
   resetMarkerCorrectionFilter({
     phase: markerCorrectionTransition ? "correcting" : "idle"
@@ -1908,6 +1981,11 @@ function handleTrackingStatus({ detail }) {
   const previousStatus = trackingStatus;
   trackingStatus = detail?.status || trackingStatus;
   trackingReason = detail?.reason || trackingReason;
+  if (cardPointTracker) {
+    if (previousStatus !== trackingStatus) cardPointTracker.invalidate();
+    renderTrackingStatus();
+    return;
+  }
   if (trackingStatus === "NORMAL") {
     if (previousStatus !== "NORMAL") {
       trackingNormalSince = performance.now();
@@ -2050,7 +2128,8 @@ function createWorldPipelineModule() {
     },
     onUpdate: () => {
       const now = performance.now();
-      advanceMarkerCorrectionTransition(now);
+      if (cardPointTracker) cardPointTracker.tick(now);
+      else advanceMarkerCorrectionTransition(now);
       if (!timedWorkDue(now, lastFrameTime, arPerformanceProfile.timelineIntervalMs)) return;
       // Preserve physical playback speed at the reduced cadence. Only a long
       // browser stall is capped; ordinary 10--15 Hz updates keep their full dt.
@@ -2111,14 +2190,13 @@ async function runArAttempt({ automatic = false } = {}) {
     markerPreviewUpdatedAt = null;
     resetPosterPoseFilter();
     poseLocked = false;
+    cardPointTracker?.invalidate({ reset: true });
     markerTrackingEpoch = 0;
     markerCorrectionNeedsEpochRebase = false;
     cancelMarkerCorrectionTransition();
     resetMarkerCorrectionFilter();
-    // The coloured poster seeds the initial world pose. All supported devices,
-    // including Android tablets, then use SLAM and accept only stable bounded
-    // poster re-corrections. The image-marker page remains an explicit
-    // poster-locked fallback.
+    // Current cards use measured coloured points whenever visible, with SLAM
+    // for off-card continuity. Legacy layouts retain whole-image correction.
     resetInitialPoseSamples();
     trackingNormalSince = null;
     worldAnchorRoot.matrixAutoUpdate = true;
@@ -2132,9 +2210,9 @@ async function runArAttempt({ automatic = false } = {}) {
     resetCameraPipelineReady();
 
     xr8.XrController.configure({
-      // The standard route hands the initial poster pose to SLAM and keeps the
-      // image target active as an occasional metric correction reference.
-      // Poster-locked tracking remains available on imageMarkerAr.html.
+      // Whole-image events provide search/scene-scale hints for current cards;
+      // they cannot authorize their displayed pose. Poster-locked tracking
+      // remains explicitly available on imageMarkerAr.html.
       disableWorldTracking: arPerformanceProfile.disableWorldTracking,
       // Responsive tracking avoids late floor-scale reconvergence. The known
       // printed target size calibrates world-unit/metre in poseFromDetail().
@@ -2147,6 +2225,7 @@ async function runArAttempt({ automatic = false } = {}) {
         xr8.GlTextureRenderer.pipelineModule(),
         xr8.Threejs.pipelineModule(),
         xr8.XrController.pipelineModule(),
+        ...(cardPointCamera ? [cardPointCamera.pipelineModule()] : []),
         createWorldPipelineModule()
       ];
       const fullWindowCanvas = xr8.FullWindowCanvas?.pipelineModule?.();
@@ -2273,6 +2352,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
   window.clearTimeout(orientationRestoreTimer);
 
   if (blocked) {
+    cardPointTracker?.invalidate();
     markerVisible = false;
     trackingNormalSince = null;
     if (poseLocked) markerTrackingEpoch += 1;
@@ -2312,10 +2392,16 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 });
 
 window.addEventListener("pagehide", () => {
+  cardPointCamera?.dispose();
+  cardPointTracker?.dispose();
   arUiOverlayGuard.disconnect();
   cancelMarkerCorrectionTransition();
   try { xr8?.stop?.(); } catch {}
   running = false;
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) cardPointTracker?.invalidate();
 });
 
 window.addEventListener("pageshow", (event) => {
