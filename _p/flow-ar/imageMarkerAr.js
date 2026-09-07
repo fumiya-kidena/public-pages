@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { arModelDisplayMultiplier } from "./modelPresentationCore.js?v=1";
 import { MindARThree } from "mindar-image-three";
 import {
   deviceProfile,
@@ -501,7 +502,8 @@ async function loadMode(mode) {
   }
   configurePlaybackRateOptions(mode, requestedPlaybackRate);
   setPlaybackRate(requestedPlaybackRate);
-  const normalizedScale = physicalScale / webTracking.physicalWidthMetres;
+  const normalizedScale = physicalScale * arModelDisplayMultiplier(definition.id)
+    / webTracking.physicalWidthMetres;
   activeModel.scale.setScalar(normalizedScale);
   const rotation = mode.webAr?.rotationDegree || webTracking.modelRotationDegree || [90, 0, 0];
   if (!Array.isArray(rotation) || rotation.length !== 3 || !rotation.every(Number.isFinite)) {

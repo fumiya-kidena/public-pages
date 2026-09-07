@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { arModelDisplayMultiplier } from "./modelPresentationCore.js?v=1";
 import {
   deviceProfile,
   isTabletPortrait,
@@ -741,7 +742,7 @@ async function loadMode(mode) {
   });
   // Keep SI scale and marker-plane orientation outside the animated GLTF.
   // Animation tracks are then unable to overwrite the placement transform.
-  modelPlacementRoot.scale.setScalar(physicalScale);
+  modelPlacementRoot.scale.setScalar(physicalScale * arModelDisplayMultiplier(definition.id));
   modelPlacementRoot.rotation.set(
     ...worldTracking.modelRotationDegree.map(THREE.MathUtils.degToRad)
   );
