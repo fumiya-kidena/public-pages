@@ -407,7 +407,7 @@ function updatePlaybackRateLabels() {
 
 function configurePlaybackRateOptions(mode, defaultRate) {
   const physical = modeTiming(mode).basis === "physical";
-  const rates = physical
+  const rates = definition.id?.toLowerCase() === "windwave" ? [0.2, 0.5, 1] : physical
     ? [...[0.5, 1, 2, 4].map((factor) => defaultRate * factor), 1]
     : [0.25, 0.5, 1, 2];
   const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
@@ -831,8 +831,9 @@ async function loadMode(mode) {
   if (!Number.isFinite(physicalScale) || physicalScale <= 0) {
     throw new Error(`${mode.id}: webAr.modelScaleが不正です。`);
   }
-  const defaultPlaybackRate = definition.id?.toLowerCase() === "windwave" ? 0.2 : 1;
-  const requestedPlaybackRate = Number(mode.webAr?.playbackRate ?? defaultPlaybackRate);
+  // Viewer preference overrides older encrypted manifests; no model rebuild needed.
+  const requestedPlaybackRate = definition.id?.toLowerCase() === "windwave"
+    ? 0.5 : Number(mode.webAr?.playbackRate ?? 1);
   if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
     throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
   }

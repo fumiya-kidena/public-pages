@@ -167,7 +167,7 @@ function updatePlaybackRateLabels() {
 
 function configurePlaybackRateOptions(mode, defaultRate) {
   const physical = modeTiming(mode).basis === "physical";
-  const rates = physical
+  const rates = mode?.caseId?.toLowerCase() === "windwave" ? [0.2, 0.5, 1] : physical
     ? [...[0.5, 1, 2, 4].map((factor) => defaultRate * factor), 1]
     : [0.25, 0.5, 1, 2];
   const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
@@ -204,8 +204,9 @@ function playbackTimingText(currentTime, clipDuration) {
 }
 
 function modePlaybackRate(mode) {
+  if (mode?.caseId?.toLowerCase() === "windwave") return 0.5;
   const requested = Number(mode?.webAr?.playbackRate ?? mode?.playbackRate);
-  const fallback = mode?.caseId?.toLowerCase() === "windwave" ? 0.2 : 1;
+  const fallback = 1;
   return Number.isFinite(requested) && requested > 0 ? requested : fallback;
 }
 
