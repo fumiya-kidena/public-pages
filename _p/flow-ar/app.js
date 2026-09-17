@@ -168,7 +168,7 @@ function updatePlaybackRateLabels() {
 function configurePlaybackRateOptions(mode, defaultRate) {
   const physical = modeTiming(mode).basis === "physical";
   const rates = physical
-    ? [0.5, 1, 2, 4].map((factor) => defaultRate * factor)
+    ? [...[0.5, 1, 2, 4].map((factor) => defaultRate * factor), 1]
     : [0.25, 0.5, 1, 2];
   const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
     .filter((rate) => Number.isFinite(rate) && rate > 0)

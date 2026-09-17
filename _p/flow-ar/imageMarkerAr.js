@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { installCompactArTransport } from "./arTransportControls.js?v=1";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { arModelDisplayMultiplier } from "./modelPresentationCore.js?v=1";
 import { MindARThree } from "mindar-image-three";
@@ -31,6 +32,7 @@ const transport = document.getElementById("transport");
 const seekSlider = document.getElementById("seek-slider");
 const ratePicker = document.getElementById("rate-picker");
 const seekTime = document.getElementById("seek-time");
+installCompactArTransport({transport, playButton, seekSlider, document});
 const homeLink = document.getElementById("home-link");
 const fallbackLink = document.getElementById("fallback-link");
 const scanGuide = document.getElementById("scan-guide");
@@ -154,7 +156,7 @@ function updatePlaybackRateLabels() {
 function configurePlaybackRateOptions(mode, defaultRate) {
   const physical = modeTiming(mode).basis === "physical";
   const rates = physical
-    ? [0.5, 1, 2, 4].map((factor) => defaultRate * factor)
+    ? [...[0.5, 1, 2, 4].map((factor) => defaultRate * factor), 1]
     : [0.25, 0.5, 1, 2];
   const uniqueRates = [...new Set(rates.map((rate) => Number(rate.toPrecision(12))))]
     .filter((rate) => Number.isFinite(rate) && rate > 0)
@@ -254,7 +256,7 @@ function setPlaying(nextPlaying) {
   if (!mixer || !activeAction) return;
   playing = Boolean(nextPlaying);
   mixer.timeScale = playing ? enginePlaybackRate() : 0;
-  playButton.textContent = playing ? "一時停止" : "再生";
+  playButton.textContent = playing ? "Ⅱ" : "▶";
   playButton.setAttribute("aria-label", playing ? "animationを一時停止" : "animationを再生");
   updateTransport(true);
 }
