@@ -48,6 +48,7 @@ import { hasPlayableTimeline } from "./playbackModeCore.js?v=1";
 import { getCardPointLayout } from "./cardPointLayout.js?v=1";
 import { createCardPointCamera } from "./cardPointCamera.js?v=1";
 import { createCardPointTracking } from "./cardPointTracking.js?v=1";
+import { createCardQrSwitch } from "./cardQrSwitch.js?v=1";
 
 // 8th Wall's Three.js pipeline reads this global. All application code still
 // imports the same vendored Three.js module through the import map.
@@ -163,6 +164,8 @@ let orientationRestoreTimer;
 let cardPointLayout;
 let cardPointTracker;
 let cardPointCamera;
+let cardQrScanner;
+let qrSwitchPending = false;
 let cardPointState = { name: "searching" };
 
 
@@ -176,6 +179,26 @@ function setupCardPointTracking() {
   cardPointLayout = getCardPointLayout(definition.id || requestedCase);
   if (!cardPointLayout) return;
   const isEnabled = () => running && !landscapeBlocked && !document.hidden;
+  cardQrScanner = createCardQrSwitch({
+    base: window.location.href,
+    allowed: collectCaseReferences(catalog).map(item => item.id),
+    currentCase: () => definition.id,
+    onSwitch: ({caseId, mode}) => {
+      qrSwitchPending = true;
+      setStatus("別カードのQRを確認 · ARを切り替え中…", "loading");
+      const next = new URL('./markerAr.html', window.location.href);
+      next.searchParams.set('case', caseId);
+      if (mode) next.searchParams.set('mode', mode);
+      next.searchParams.set('_flowArOpen', String(Date.now()));
+      window.location.replace(carryUnlockFragment(next));
+    },
+    onError: () => {
+      const note = document.createElement('p');
+      note.textContent = 'QR切替を開始できません。切り替える場合は端末のカメラでQRを開いてください。';
+      note.style.cssText = 'position:fixed;top:80px;left:12px;right:12px;z-index:30;background:#10202ddd;color:white;padding:8px;font-size:12px';
+      arUi.append(note);
+    }
+  });
   cardPointTracker = createCardPointTracking({
     THREE, layout: cardPointLayout, isEnabled,
     isWorldTrackingNormal: () => trackingStatus === "NORMAL",
@@ -195,7 +218,10 @@ function setupCardPointTracking() {
   });
   cardPointCamera = createCardPointCamera({
     isEnabled, maxDimension: 640, intervalMs: 125,
-    onFrame: frame => cardPointTracker.processFrame(frame),
+    onFrame: frame => {
+      cardQrScanner.processFrame(frame);
+      return cardPointTracker.processFrame(frame);
+    },
     onError: () => cardPointTracker.fail()
   });
 }
@@ -1900,6 +1926,7 @@ function lockedTrackingStatusMessage() {
 }
 
 function renderTrackingStatus() {
+  if (qrSwitchPending) return;
   if (!running) return;
   if (landscapeBlocked) {
     setStatus("tabletは横向きにしてください", "limited");
@@ -2403,6 +2430,7 @@ setupTabletLandscapeGate(orientationGate, (blocked, wasBlocked) => {
 });
 
 window.addEventListener("pagehide", () => {
+  cardQrScanner?.dispose();
   cardPointCamera?.dispose();
   cardPointTracker?.dispose();
   arUiOverlayGuard.disconnect();
