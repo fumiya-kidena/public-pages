@@ -53,6 +53,8 @@ export function createCardPointTracking({
     if (result.reason !== "measured") {
       candidate = null;
       tick(now());
+      if (!anchor) state("searching", { reason: result.reason, count: result.count || 0,
+        candidateCount: result.candidateCount || 0 });
       return;
     }
     lastMeasuredAt = frame.capturedAt;

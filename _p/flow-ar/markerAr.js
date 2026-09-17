@@ -224,7 +224,18 @@ function renderCardPointStatus() {
       posterLockLink.textContent = "image-marker版";
       setStatus("色点追跡を開始できません · 再読み込み／image-marker版をお試しください", "error");
       break;
-    default: setStatus("左右の色点が全部入るように、カード全体を映してください", "scanning");
+    default: {
+      const reason = {
+        "insufficient-components": "色点候補が不足",
+        "pattern-not-confirmed": "左右の配列を照合中",
+        "point-fit-rejected": "点の位置関係を確認中",
+        "pose-rejected": "紙面の向きを確認中",
+        "metric-reprojection-rejected": "紙面の向きを確認中"
+      }[cardPointState.reason] || "カメラから色点を取得中";
+      const detail = count ? `対応点 ${count}/${cardPointLayout?.points.length || 23}`
+        : `候補 ${cardPointState.candidateCount || 0}個（背景含む）`;
+      setStatus(`3D読込済み · ${reason} · ${detail}`, "scanning");
+    }
   }
 }
 

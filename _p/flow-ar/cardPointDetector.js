@@ -25,15 +25,19 @@ function hueDistance(a, b) {
 
 function classify(r, g, b, targetHue) {
   const c = hue(r, g, b);
-  if (c.v < 25 || c.v > 248 && c.s < 0.16) return 0;
-  if (c.s > 0.24 && c.v >= 52) {
+  if (c.v > 248 && c.s < 0.12) return 0;
+  // Printed ink is often grey, almost black, or dark blue under room lighting.
+  // Reserve only clearly dark ink before accepting broad chromatic families.
+  if (c.v < 35 || c.v < 135 && (c.s < 0.12 || hueDistance(c.h, targetHue.ink) < 18)) return 2;
+  if (c.s >= 0.08 && c.v >= 35) {
     const da = hueDistance(c.h, targetHue.accent);
     const dor = hueDistance(c.h, targetHue.orange);
-    const di = hueDistance(c.h, targetHue.ink);
-    if (Math.min(da, dor) < 22 && Math.min(da, dor) < di + 2) return da < dor ? 1 : 3;
+    // Use nearest colour family, not a screen-RGB match. The two grids,
+    // missing cells and geometric fit still have to independently agree.
+    if (Math.min(da, dor) < 42) return da < dor ? 1 : 3;
   }
   // Neutral/dark-blue ink, including shadows and camera colour desaturation.
-  if (c.v < 128 && (c.s < 0.40 || hueDistance(c.h, targetHue.ink) < 35)) return 2;
+  if (c.v < 180 && (c.s < 0.40 || hueDistance(c.h, targetHue.ink) < 35)) return 2;
   return 0;
 }
 

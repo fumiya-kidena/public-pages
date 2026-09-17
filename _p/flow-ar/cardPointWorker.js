@@ -8,7 +8,8 @@ export function evaluateCardPointFrame({ caseId, data, width, height, projection
   if (!layout) return { reason: "unsupported-layout", count: 0 };
   const detection = detectCardPoints({ data, width, height }, layout, { seedHomography, allowGlobal });
   const count = detection.matches.length;
-  if (count < 17) return { reason: detection.diagnostics.reason, count: 0 };
+  if (count < 17) return { reason: detection.diagnostics.reason, count,
+    candidateCount: detection.diagnostics.candidateCount || 0 };
   const fitted = fitCardHomography(detection.matches, layout, { minPoints: 17, maxRmsPixels: 2 });
   if (!fitted || fitted.inlierCount < 17) return { reason: "point-fit-rejected", count };
   const pose = poseFromCardHomography(fitted.homography, projectionMatrix, { width, height }, {
