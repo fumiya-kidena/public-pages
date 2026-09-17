@@ -498,7 +498,7 @@ async function loadMode(mode) {
     throw new Error(`${mode.id}: webAr.modelScaleが不正です。`);
   }
   const requestedPlaybackRate = definition.id?.toLowerCase() === "windwave"
-    ? 0.5 : Number(mode.webAr?.playbackRate ?? 1);
+    ? 0.2 : Number(mode.webAr?.playbackRate ?? 1);
   if (!Number.isFinite(requestedPlaybackRate) || requestedPlaybackRate <= 0) {
     throw new Error(`${mode.id}: webAr.playbackRateが不正です。`);
   }

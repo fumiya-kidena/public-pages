@@ -204,7 +204,7 @@ function playbackTimingText(currentTime, clipDuration) {
 }
 
 function modePlaybackRate(mode) {
-  if (mode?.caseId?.toLowerCase() === "windwave") return 0.5;
+  if (mode?.caseId?.toLowerCase() === "windwave") return 0.2;
   const requested = Number(mode?.webAr?.playbackRate ?? mode?.playbackRate);
   const fallback = 1;
   return Number.isFinite(requested) && requested > 0 ? requested : fallback;
