@@ -1,5 +1,5 @@
 # AGENTS.md — public-pages deployment rules
-This repository contains generated GitHub Pages output. `CLAUDE.md` only imports this file with `@AGENTS.md`.
+This repository contains generated GitHub Pages output.
 
 ## Generated-content boundary
 - Treat deployed HTML, JavaScript, vendor files, opaque `.enc` assets, and redirect pages as generated artifacts. Change them in their source repository and regenerate them.
