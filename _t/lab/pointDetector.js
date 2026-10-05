@@ -335,4 +335,3 @@ function searchRegions(h, layout, width, height, step) {
   }
   return regions;
 }
-

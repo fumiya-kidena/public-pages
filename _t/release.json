@@ -2,7 +2,7 @@
   "family": "FLOW AR Test Box",
   "revision": "box-pilot-1",
   "entry": "/public-pages/_t/",
-  "generatedAt": "2026-10-05T07:27:26.932Z",
+  "generatedAt": "2026-10-05T07:30:18.062Z",
   "researchDataIncluded": false,
   "files": [
     {
@@ -42,8 +42,8 @@
     },
     {
       "path": "lab/pointDetector.js",
-      "bytes": 18268,
-      "sha256": "6161e11f4dec20fe819d1cab75f2ea8645db6b53b0244822b4f0595691cb6430"
+      "bytes": 18267,
+      "sha256": "452b086518519b3d0157e2d3098955c8df65419065575018a5c001be4c717492"
     },
     {
       "path": "lab/pointWorker.js",
