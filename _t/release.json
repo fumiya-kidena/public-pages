@@ -1,0 +1,134 @@
+{
+  "family": "FLOW AR Test Box",
+  "revision": "box-pilot-1",
+  "entry": "/public-pages/_t/",
+  "generatedAt": "2026-10-05T07:27:26.932Z",
+  "researchDataIncluded": false,
+  "files": [
+    {
+      "path": "lab/index.html",
+      "bytes": 3417,
+      "sha256": "a2ea2eba8a3804e1786bab720b74ac005043cd307b6985a0f6a7b6de86c77c41"
+    },
+    {
+      "path": "lab/lab.css",
+      "bytes": 2782,
+      "sha256": "e1a3c98392c94a57880c773c659be7cdf1eda48308abecbe065931e760f6ac45"
+    },
+    {
+      "path": "lab/app.js",
+      "bytes": 11573,
+      "sha256": "c2fb3e26efb29d6b8d9a8ccbd1d7b76984f3ba9e658ac7f0d6960760060259e1"
+    },
+    {
+      "path": "lab/layout.js",
+      "bytes": 1521,
+      "sha256": "c6fb218a66aa830470acb7b65e8128d1a27f4fb5132b33a6e9e119b8e0f04006"
+    },
+    {
+      "path": "lab/box.js",
+      "bytes": 2268,
+      "sha256": "1f8144a9fc07d23fd7243094a1f226a0f7f8d0eccbd25d35f3e936e4f320d7c8"
+    },
+    {
+      "path": "lab/metrics.js",
+      "bytes": 2269,
+      "sha256": "5c2898583d04e15d12c9b7efcec3ad4868e174e3d0e17f7571e1d367a5fd7074"
+    },
+    {
+      "path": "lab/pointCamera.js",
+      "bytes": 15204,
+      "sha256": "66b7e59ebd5cdf3f064ff5f7550fca48a1efa6c9fa4e3331a77db3aeea4554a5"
+    },
+    {
+      "path": "lab/pointDetector.js",
+      "bytes": 18268,
+      "sha256": "6161e11f4dec20fe819d1cab75f2ea8645db6b53b0244822b4f0595691cb6430"
+    },
+    {
+      "path": "lab/pointWorker.js",
+      "bytes": 4062,
+      "sha256": "155cfde2cc79ee3e16bbdbf62ec184af8601220c6ddf9dbcac60542f7cf5b958"
+    },
+    {
+      "path": "lab/trackingCore.js",
+      "bytes": 15976,
+      "sha256": "5513fe8e83112e45cd9b8140fba07a59bbc8e38342f24eff787608e4b573d57c"
+    },
+    {
+      "path": "lab/xr8Adapter.js",
+      "bytes": 16404,
+      "sha256": "cc498cf64c99c9a880655347f7502daa0d16965ff991873ca6e2e257ab7b1d46"
+    },
+    {
+      "path": "lab/webXrAdapter.js",
+      "bytes": 25217,
+      "sha256": "929b0addf6efc81b108084cbf7a965fe90f2b5c5e8627d5b2fa7ef608b21c2ed"
+    },
+    {
+      "path": "cardPointLayout.js",
+      "bytes": 2089,
+      "sha256": "9d1516f7e59254cae657de8d9c73e01d4e7d3ddd7093790e759ebda4ec2abcd8"
+    },
+    {
+      "path": "cardPointPose.js",
+      "bytes": 17976,
+      "sha256": "ef31c2142ab43d9488bb532cb58e62e8fe03a5cec5f366d92d8a29d95f6df69a"
+    },
+    {
+      "path": "cardPointScale.js",
+      "bytes": 9267,
+      "sha256": "270aaa7a6e820ab112d4c635c3c6e6e12f3742f6d3ea3d2ceac8714f2492e115"
+    },
+    {
+      "path": "cardPointTracking.js",
+      "bytes": 9072,
+      "sha256": "dcd7b292039112a30c281724fa5e7e577455dc2061397f60e2295fb2ba6aa743"
+    },
+    {
+      "path": "cardPointWorker.js",
+      "bytes": 2470,
+      "sha256": "7fc8ec8b54607de6ee132af60210392f09265560a2883d2ca5f24dbc24bc3323"
+    },
+    {
+      "path": "cardPointDetector.js",
+      "bytes": 16016,
+      "sha256": "556fc0cda039afc0ef29baed7bba869311f2e1dc884b9f795d37b50f1d0ca8eb"
+    },
+    {
+      "path": "vendor/8thwall/xr.js",
+      "bytes": 1036695,
+      "sha256": "b3973936862f4cb77ae32d24f253d8a0e8b1de4fa2a0cf688833742889ee829d"
+    },
+    {
+      "path": "vendor/8thwall/xr-slam.js",
+      "bytes": 5538007,
+      "sha256": "398f675c920892afd4521d5196df2b6b8a1b8a90b6a5c749cf5ad1a6e0a85270"
+    },
+    {
+      "path": "vendor/8thwall/XR_ENGINE_LICENSE.txt",
+      "bytes": 15994,
+      "sha256": "ed166ff1e5002cd7557f2c595a2398b092e76481070e6bc3b253e51517f3ae61"
+    },
+    {
+      "path": "vendor/8thwall/resources/powered-by.svg",
+      "bytes": 6056,
+      "sha256": "4c8bf13771807ac55c963fc08421f611e6e1ab37d5410dc0bbf049f94bea0797"
+    },
+    {
+      "path": "vendor/three/three.module.min.js",
+      "bytes": 670681,
+      "sha256": "3e690ac7d180b0aadf0891bea39eec643e29e2d3e75c99b18689518665f69ba6"
+    },
+    {
+      "path": "vendor/three/THREE_LICENSE.txt",
+      "bytes": 1081,
+      "sha256": "852e0e8699169bf9f6fdc6bda3e682d078dcbc738b5d33e74df594721bff271d"
+    },
+    {
+      "path": "index.html",
+      "bytes": 624,
+      "sha256": "38355f85d7860016f4388844cd4e7f230a3609aebaa14161fa4923a28e64777c"
+    }
+  ]
+}
