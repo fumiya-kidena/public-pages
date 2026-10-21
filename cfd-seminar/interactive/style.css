@@ -35,13 +35,24 @@
 .domain-label{text-align:center;font-size:11px;margin-top:8px;color:var(--muted)}
 #flow{image-rendering:pixelated;background:white;border-color:#aebcc4}
 #flow.wide{width:100%;max-width:920px;aspect-ratio:2}
-.flow-domain{display:grid;grid-template-columns:64px minmax(0,1fr) 64px;grid-template-rows:auto auto auto;gap:6px;align-items:center;width:100%;max-width:1060px;margin:0 auto}
+.flow-domain{display:grid;grid-template-columns:64px 34px minmax(0,1fr) 64px;grid-template-rows:auto auto 28px auto;gap:6px 0;align-items:center;width:100%;max-width:1060px;margin:0 auto}
 .flow-domain[data-case="cavity"]{max-width:720px}
-.flow-domain #flow{grid-column:2;grid-row:2;width:100%;max-width:none}
-.boundary-top,.boundary-bottom{grid-column:2;text-align:center;font-size:12px;color:var(--ink);line-height:1.6}
-.boundary-top{grid-row:1}.boundary-bottom{grid-row:3}
+.flow-domain #flow{grid-column:3;grid-row:2;width:100%;max-width:none}
+.spatial-axis{position:relative;color:var(--muted);font-size:10px;line-height:14px;font-variant-numeric:tabular-nums;pointer-events:none}
+.spatial-axis .axis-ticks{position:absolute;inset:0}
+.spatial-axis .axis-title{position:absolute;white-space:nowrap}
+.axis-x{grid-column:3;grid-row:3;height:34px;margin-top:-6px;align-self:start}
+.axis-x .axis-title{bottom:0;left:50%;transform:translateX(-50%)}
+.axis-x .axis-tick{position:absolute;top:0;transform:translateX(-50%);padding-top:6px}
+.axis-x .axis-tick::before{content:"";position:absolute;top:0;left:50%;width:1px;height:5px;background:#82929b}
+.axis-y{grid-column:2;grid-row:2;height:100%;min-width:0}
+.axis-y .axis-title{left:0;top:50%;writing-mode:vertical-rl;transform:translateY(-50%) rotate(180deg)}
+.axis-y .axis-tick{position:absolute;right:0;transform:translateY(50%);display:flex;align-items:center}
+.axis-y .axis-tick::after{content:"";width:5px;height:1px;background:#82929b;margin-left:3px}
+.boundary-top,.boundary-bottom{grid-column:3;text-align:center;font-size:12px;color:var(--ink);line-height:1.6}
+.boundary-top{grid-row:1}.boundary-bottom{grid-row:4}
 .boundary-side{grid-row:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;text-align:center;font-size:11px;line-height:1.4;color:var(--muted)}
-.boundary-left{grid-column:1}.boundary-right{grid-column:3}
+.boundary-left{grid-column:1;padding-right:6px}.boundary-right{grid-column:4;padding-left:6px}
 .boundary-side strong{font-size:11px;font-weight:600;white-space:nowrap;color:var(--ink)}
 .boundary-arrow{font-size:28px;line-height:1;color:var(--visc)}
 .boundary-arrow[hidden]{display:none}
@@ -51,7 +62,7 @@
 .canvas-wrap:fullscreen .flow-domain{max-width:calc(160vh + 140px)}
 .canvas-wrap:fullscreen .flow-domain[data-case="cavity"]{max-width:calc(70vh + 140px)}
 .canvas-wrap:fullscreen .flow-domain #flow{width:100%;max-width:none}
-@media(max-width:650px){.flow-domain{grid-template-columns:48px minmax(0,1fr) 48px;gap:4px}.boundary-side,.boundary-side strong{font-size:10px}.boundary-top,.boundary-bottom,.scale-note{font-size:10px}.boundary-arrow{font-size:24px}}
+@media(max-width:650px){.flow-domain{grid-template-columns:48px 32px minmax(0,1fr) 48px;gap:6px 0}.spatial-axis{font-size:9px}.boundary-side,.boundary-side strong{font-size:10px}.boundary-top,.boundary-bottom,.scale-note{font-size:10px}.boundary-arrow{font-size:24px}}
 .control-section:last-child{flex-wrap:wrap}
 #grid-info{flex-basis:100%;margin:8px 0 0;font-variant-numeric:tabular-nums}
 main{max-width:1600px}

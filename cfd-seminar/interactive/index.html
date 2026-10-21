@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>流れを組み立てる | CFD Lab</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-white-10mm">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-white-10mm"></script><script defer src="app.js?v=20261022-white-10mm"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-spatial-axes">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-white-10mm"></script><script defer src="app.js?v=20261022-spatial-axes"></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="../">CFD <b>Lab</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD seminar <span aria-hidden="true">↗</span></a></header>
@@ -41,7 +41,9 @@
         <div class="flow-domain" id="flow-domain" data-case="channel" role="group" aria-label="速度場と境界条件">
           <div class="boundary-top" id="boundary-top">静止壁 0 mm/s</div>
           <div class="boundary-side boundary-left"><span id="boundary-left-kind">流入</span><strong id="boundary-left-speed">1.0 mm/s</strong><span class="boundary-arrow" id="boundary-left-arrow" aria-hidden="true">→</span></div>
-          <canvas id="flow" width="1440" height="720" aria-label="計算した速度場。周囲に境界速度、下に時刻、運動エネルギー、発散を表示。"></canvas>
+          <div class="spatial-axis axis-y" id="axis-y" role="group" aria-label="縦座標 y、単位mm"><span class="axis-title">y (mm)</span><div class="axis-ticks"></div></div>
+          <canvas id="flow" width="1440" height="720" aria-label="計算した速度場。横軸x・縦軸yはmm単位、原点は左下。周囲に境界条件を表示。"></canvas>
+          <div class="spatial-axis axis-x" id="axis-x" role="group" aria-label="横座標 x、単位mm"><span class="axis-title">x (mm)</span><div class="axis-ticks"></div></div>
           <div class="boundary-side boundary-right"><span class="boundary-arrow" id="boundary-right-arrow" aria-hidden="true">→</span><span id="boundary-right-kind">自由流出</span><strong id="boundary-right-speed" hidden>0 mm/s</strong><span id="boundary-pressure" title="出口圧力のDirichlet条件。圧力表示はこの基準圧力との差です。"></span></div>
           <div class="boundary-bottom">静止壁 0 mm/s</div>
         </div>

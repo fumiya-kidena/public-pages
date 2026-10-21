@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
+let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .001;
 const domainHeight = .01;
@@ -80,6 +81,27 @@ function color(t, signed) {
   const a = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(a)), f = a - i;
   return stops[i].map((x, c) => Math.round(x * (1 - f) + stops[i + 1][c] * f));
 }
+function spatialAxes() {
+  const { width, height } = canvas.getBoundingClientRect();
+  if (!width || !height) return;
+  const key = [frame.lx, frame.ly, Math.round(width), Math.round(height)].join('/');
+  if (key === axisLayoutKey) return;
+  axisLayoutKey = key;
+  for (const [axis, length, pixels, spacing] of [['x', frame.lx*1000, width, 60], ['y', frame.ly*1000, height, 48]]) {
+    const rough = length / Math.max(1, Math.floor(pixels / spacing));
+    const magnitude = 10 ** Math.floor(Math.log10(rough));
+    const step = [1, 2, 5, 10].find(value => value*magnitude >= rough) * magnitude;
+    const ticks = document.createDocumentFragment();
+    for (let i = 0; i <= Math.floor(length/step + 1e-8); i++) {
+      const value = Number((i*step).toPrecision(8));
+      const tick = document.createElement('span');
+      tick.className = 'axis-tick'; tick.textContent = value;
+      tick.style[axis === 'x' ? 'left' : 'bottom'] = `${value/length*100}%`;
+      ticks.appendChild(tick);
+    }
+    $(`axis-${axis}`).querySelector('.axis-ticks').replaceChildren(ticks);
+  }
+}
 function draw() {
   if (!frame) return;
   const { n, nx, u, v, p, div, options: o } = frame;
@@ -132,6 +154,7 @@ function draw() {
   $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#fff,#bc3d56)' : '';
   $('speed-scale-note').hidden = signed || o.case !== 'channel';
   $('speed-scale-note').textContent = `定常・十分発達した流れの理論最大値 ${(speedMax*1000).toFixed(1)} mm/s`;
+  spatialAxes();
 }
 function receive({ data }) {
   pending = Math.max(0, pending - 1);
