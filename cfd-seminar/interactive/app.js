@@ -4,11 +4,11 @@ const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 const explanations = [
-  '移流：速度の分布が、流れによって運ばれます。粘性がなくても数値的な減衰は生じます。',
-  '粘性：速い場所と遅い場所の速度差がならされます。静止壁の下では運動エネルギーが減少します。',
+  '移流：速度の分布が、流れによって運ばれます。一様な流れや静止状態では、この項だけでは変化しません。',
+  '粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
   '圧力補正：仮の速度に生じた流入・流出の不釣り合いを、圧力を使って取り除きます。'
 ];
-const options = () => ({ advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value, lid: +$('lid').value });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value, [$('case').value === 'channel' ? 'inflow' : 'lid']: +$('lid').value });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 function equation() {
   const expressions = { 'eq-time': '\\frac{\\partial \\mathbf{u}}{\\partial t}', 'eq-advection': '-(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}', 'eq-viscosity': '+\\nu\\nabla^2\\mathbf{u}', 'eq-pressure': '-\\frac{1}{\\rho}\\nabla p', continuity: '\\nabla\\cdot\\mathbf{u}=0' };
@@ -19,15 +19,16 @@ function equation() {
 }
 function controlState() {
   const o = options();
-  for (const key of ['advection', 'viscosity', 'pressure']) $('eq-' + key).classList.toggle('disabled-term', !o[key]);
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.pressure][i]));
   $('nu').disabled = !o.viscosity;
-  $('nu-value').textContent = o.nu.toFixed(3); $('lid-value').textContent = o.lid.toFixed(1);
-  $('continuity').style.opacity = o.pressure ? '1' : '.35';
+  const channel = o.case === 'channel', speed = channel ? o.inflow : o.lid;
+  $('nu-value').textContent = o.nu.toFixed(3); $('lid-value').textContent = speed.toFixed(2);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
   $('model-note').classList.toggle('complete', count === 3);
-  $('wall-label').textContent = o.lid ? `上壁：右向き ${o.lid.toFixed(1)} →` : '上壁：静止';
+  $('wall-label').textContent = channel ? `ポワズイユ流：左から右へ ${speed.toFixed(2)} →` : `キャビティ流：上壁 ${speed.toFixed(2)} →`;
+  $('drive-name').textContent = channel ? '流入速度' : '上壁の速度';
+  $('boundary-note').textContent = channel ? '左から一様に流入、右へ流出。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
 }
 function playState(value) {
   running = value;
@@ -89,6 +90,7 @@ function receive({ data }) {
   $('projection').textContent = data.options.pressure && data.iterations ? `${scientific(data.before)} → ${scientific(data.after)}` : '未実行';
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('current', i === (data.phase + 2) % 3 && data.dt > 0));
   if (data.dt > 0) $('stage-description').textContent = data.stage + '完了。' + explanations[(data.phase + 2) % 3];
+  else $('stage-description').textContent = explanations[0];
   draw();
   // Leave time for UI and paint; there is at most one automatic batch in flight.
   if (running) setTimeout(schedule, 25);
@@ -109,6 +111,12 @@ for (const id of ['advection', 'viscosity', 'pressure', 'nu', 'lid']) $(id).addE
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
 });
 $('grid').onchange = () => { if (worker) reset(); };
+$('case').onchange = () => {
+  const channel = $('case').value === 'channel';
+  $('lid').min = channel ? '0.05' : '0'; $('lid').max = channel ? '0.5' : '1';
+  $('lid').step = channel ? '0.05' : '0.1'; $('lid').value = channel ? '0.1' : '1';
+  controlState(); if (worker) reset();
+};
 $('arrows').onchange = draw;
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
   view = button.dataset.view;

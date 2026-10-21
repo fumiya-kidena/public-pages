@@ -5,40 +5,56 @@
     constructor(n = 40) {
       if (![24, 40, 56].includes(n)) throw new Error('Unsupported grid');
       this.n = n; this.s = n + 2; this.h = 1 / n;
-      this.options = { advection: true, viscosity: false, pressure: false, nu: 0.008, lid: 0 };
+      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 0.02, lid: 1, inflow: 0.1 };
       for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s ** 2);
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
     configure(options) {
+      const changedCase = 'case' in options && options.case !== this.options.case;
+      if ('case' in options) {
+        if (!['channel', 'cavity'].includes(options.case)) throw new Error('Unsupported case');
+        this.options.case = options.case;
+      }
       for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) this.options[key] = !!options[key];
-      for (const [key, lo, hi] of [['nu', 0.001, 0.04], ['lid', 0, 1]]) {
+      for (const [key, lo, hi] of [['nu', 0.001, 0.04], ['lid', 0, 1], ['inflow', 0.05, 0.5]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
           this.options[key] = Math.max(lo, Math.min(hi, x));
         }
       }
+      if (changedCase) { this.reset(); return; }
       // Parameter changes start a new complete step, not half of the old operator sequence.
       if (this.phase) { this.u.set(this.un); this.v.set(this.vn); this.phase = 0; }
       this.boundary();
       this.lastStage = '設定変更'; this.stats = this.measure();
     }
     reset() {
-      const n = this.n, h = this.h, s = this.s;
+      const n = this.n, s = this.s;
       for (const key of ['u', 'v', 'un', 'vn', 'p']) this[key].fill(0);
-      const psi = (i, j) => 0.12 * Math.sin(Math.PI * i / n) ** 2 * Math.sin(Math.PI * j / n) ** 2;
-      for (let j = 1; j <= n; j++) for (let i = 0; i <= n; i++) this.u[i + s * j] = (psi(i, j) - psi(i, j - 1)) / h;
-      for (let j = 0; j <= n; j++) for (let i = 1; i <= n; i++) this.v[i + s * j] = -(psi(i, j) - psi(i - 1, j)) / h;
+      if (this.options.case === 'channel') {
+        for (let j = 1; j <= n; j++) for (let i = 0; i <= n; i++) this.u[i + s * j] = this.options.inflow;
+      }
       this.time = 0; this.steps = 0; this.phase = 0; this.dt = 0;
       this.lastStage = '準備完了'; this.iterations = 0; this.converged = true;
       this.beforeProjection = 0; this.afterProjection = 0;
       this.boundary(); this.stats = this.measure();
     }
-    boundary() {
+    boundary(refreshOutlet = true) {
       const { n, s, u, v } = this;
-      for (let j = 1; j <= n; j++) { u[s * j] = 0; u[n + s * j] = 0; v[s * j] = -v[1 + s * j]; v[n + 1 + s * j] = -v[n + s * j]; }
-      for (let i = 1; i <= n; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * this.options.lid - u[i + s * n]; }
+      const channel = this.options.case === 'channel';
+      if (channel && refreshOutlet) {
+        let outflow = 0;
+        for (let j = 1; j <= n; j++) outflow += u[n - 1 + s * j];
+        for (let j = 1; j <= n; j++) u[n + s * j] = outflow > 1e-12 ? u[n - 1 + s * j] * n * this.options.inflow / outflow : this.options.inflow;
+      }
+      for (let j = 1; j <= n; j++) {
+        u[s * j] = channel ? this.options.inflow : 0;
+        if (!channel) u[n + s * j] = 0;
+        v[s * j] = -v[1 + s * j]; v[n + 1 + s * j] = (channel ? 1 : -1) * v[n + s * j];
+      }
+      for (let i = 1; i <= n; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
     }
     begin() {
       this.boundary(); this.un.set(this.u); this.vn.set(this.v);
@@ -110,7 +126,8 @@
       for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) p[i + s * j] -= mean;
       for (let j = 1; j <= n; j++) for (let i = 1; i < n; i++) { const k = i + s * j; u[k] -= dt * (p[k + 1] - p[k]) / h; }
       for (let j = 1; j < n; j++) for (let i = 1; i <= n; i++) { const k = i + s * j; v[k] -= dt * (p[k + s] - p[k]) / h; }
-      this.boundary(); this.iterations = iter; this.converged = rr <= tolerance;
+      // Preserve the flux-compatible outlet during correction; refreshing it here would reintroduce divergence.
+      this.boundary(false); this.iterations = iter; this.converged = rr <= tolerance;
       this.afterProjection = this.measure().divergence;
       if (!this.converged) throw new Error('圧力計算が収束しませんでした。条件を戻してリセットしてください。');
     }
