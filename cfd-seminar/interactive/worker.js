@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js');
+importScripts('solver.js?v=20261021-advection');
 let solver = new FlowSolver(100);
 self.onmessage = ({ data }) => {
   try {
