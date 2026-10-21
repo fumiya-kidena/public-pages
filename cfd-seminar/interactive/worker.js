@@ -1,6 +1,6 @@
 'use strict';
-importScripts('solver.js?v=20261021-upwind');
-let solver = new FlowSolver(100);
+importScripts('solver.js?v=20261022-grid64');
+let solver = new FlowSolver();
 self.onmessage = ({ data }) => {
   try {
     if (data.type === 'reset') { solver = new FlowSolver(data.n || solver.n); solver.configure(data.options || {}); solver.reset(); }

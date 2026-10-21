@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>流れを組み立てる | CFD Lab</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261021-upwind">
-  <script defer src="../assets/katex.min.js"></script><script defer src="equations.js?v=20261021-upwind"></script><script defer src="app.js?v=20261021-upwind"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-grid64">
+  <script defer src="../assets/katex.min.js"></script><script defer src="equations.js?v=20261022-grid64"></script><script defer src="app.js?v=20261022-grid64"></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="../">CFD <b>Lab</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD seminar <span aria-hidden="true">↗</span></a></header>
@@ -30,7 +30,7 @@
         <label class="slider-label" for="lid"><span id="drive-name">流入速度 (mm/s)</span><output id="lid-value">1.0</output></label><input id="lid" type="range" min="0.1" max="10" step="0.1" value="1">
         <p class="muted">既定値は水の概数：ν = 1 mm²/s、ρ = 1000 kg/m³。</p><p class="muted" id="boundary-note">左から一様に流入、右へ流出。上下の壁は静止しています。</p>
       </div>
-      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="50">50分割 · 2 mm</option><option value="100" selected>100分割 · 1 mm</option><option value="200">200分割 · 0.5 mm（高負荷）</option></select><p class="muted" id="grid-info"></p></div>
+      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="32">32分割 · 0.5倍</option><option value="64" selected>64分割 · 標準</option><option value="96">96分割 · 1.5倍</option><option value="128">128分割 · 2倍</option></select><p class="muted" id="grid-info"></p></div>
       <div class="control-section time-settings"><label class="select-label" for="dt-max">時間刻みの上限 (s)</label><input id="dt-max" type="number" min="0.001" max="1" step="0.001" value="0.1"><p class="muted">移流・拡散の安定条件により、実際のΔtはこの上限以下に自動調整します。</p><output id="reynolds" class="muted"></output></div>
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">

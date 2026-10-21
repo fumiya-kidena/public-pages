@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   class FlowSolver {
-    constructor(n = 100) {
+    constructor(n = 64) {
       if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
       // SI throughout: m, s, m/s, m^2/s. Pressure storage is p/rho (m^2/s^2).
       this.n = n; this.ly = 0.1; this.h = this.ly / n; this.rho = 1000;
