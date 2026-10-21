@@ -91,9 +91,11 @@ function draw() {
     for (let j = 1; j < n; j += spacing) for (let i = 1; i < nx; i += spacing) {
       const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < 1e-8) continue;
       const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, .001) * cell*spacing*.7), dx = u[k] / speed, dy = -v[k] / speed;
+      if (length < .5) continue;
+      const head = Math.min(4, length * .35), wing = head * .6;
       const ex = x + dx * length / 2, ey = y + dy * length / 2;
       ctx.beginPath(); ctx.moveTo(x - dx * length / 2, y - dy * length / 2); ctx.lineTo(ex, ey);
-      ctx.lineTo(ex - 4 * dx + 3 * dy, ey - 4 * dy - 3 * dx); ctx.moveTo(ex, ey); ctx.lineTo(ex - 4 * dx - 3 * dy, ey - 4 * dy + 3 * dx); ctx.stroke();
+      ctx.lineTo(ex - head * dx + wing * dy, ey - head * dy - wing * dx); ctx.moveTo(ex, ey); ctx.lineTo(ex - head * dx - wing * dy, ey - head * dy + wing * dx); ctx.stroke();
     }
   }
   const names = { speed: '速さ', pressure: '圧力 / 密度', divergence: '発散' };
