@@ -4,12 +4,13 @@ const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let dtLimit = +$('dt-max').value;
+const boundarySpeed = .001;
 const explanations = [
   '① 移流：速度の分布が、流れによって運ばれます。',
   '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
   '③ 圧力補正：仮の速度に生じた流入・流出の不釣り合いを、圧力を使って取り除きます。'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, [$('case').value === 'channel' ? 'inflow' : 'lid']: +$('lid').value * 1e-3 });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, inflow: boundarySpeed, lid: boundarySpeed });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
@@ -24,17 +25,24 @@ function controlState() {
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.pressure][i]));
   $('nu').disabled = !o.viscosity;
   const channel = o.case === 'channel', speed = channel ? o.inflow : o.lid;
-  $('nu-value').textContent = (o.nu*1e6).toFixed(1); $('lid-value').textContent = (speed*1000).toFixed(1);
+  $('nu-value').textContent = (o.nu*1e6).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
   if (channel && o.advection && !o.viscosity && !o.pressure) $('model-note').textContent += ' この差分式では、内部速度ゼロから移流だけでは流入の変化が伝わりません。';
   if (!channel && !o.viscosity) $('model-note').textContent += ' 粘性OFFでは、静止した内部へ上壁の運動は伝わりません。';
   $('model-note').classList.toggle('complete', count === 3);
-  $('wall-label').textContent = channel ? `Poiseuille flow：流入 ${(speed*1000).toFixed(1)} mm/s →` : `Cavity flow：上壁 ${(speed*1000).toFixed(1)} mm/s →`;
-  $('drive-name').textContent = channel ? '流入速度 (mm/s)' : '上壁の速度 (mm/s)';
+  $('wall-label').textContent = channel ? 'Poiseuille flow' : 'Cavity flow';
+  $('flow-domain').dataset.case = o.case;
+  $('boundary-top').textContent = channel ? '静止壁  0 mm/s' : `上壁 →  ${(speed*1000).toFixed(1)} mm/s`;
+  $('boundary-left-kind').textContent = channel ? '流入' : '静止壁';
+  $('boundary-right-kind').textContent = channel ? '流出・平均' : '静止壁';
+  $('boundary-left-speed').textContent = channel ? `${(speed*1000).toFixed(1)} mm/s` : '0 mm/s';
+  $('boundary-right-speed').textContent = channel ? `${(speed*1000).toFixed(1)} mm/s` : '0 mm/s';
+  $('boundary-left-arrow').hidden = !channel;
+  $('boundary-right-arrow').hidden = !channel;
   $('boundary-note').textContent = channel ? '左から一様に流入、右へ流出。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 3*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
+  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * .1 / o.nu)} (H = 100 mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
@@ -77,7 +85,8 @@ function draw() {
   field.width = nx; field.height = n;
   const pixels = fctx.createImageData(nx, n), signed = view !== 'speed';
   const referenceSpeed = o.case === 'channel' ? o.inflow : o.lid;
-  let max = view === 'speed' ? referenceSpeed : view === 'pressure' ? Math.max(referenceSpeed**2, 1e-12) : Math.max(referenceSpeed/frame.ly, 1e-12);
+  const speedMax = referenceSpeed * (o.case === 'channel' ? 1.5 : 1);
+  let max = view === 'speed' ? speedMax : view === 'pressure' ? Math.max(referenceSpeed**2, 1e-12) : Math.max(referenceSpeed/frame.ly, 1e-12);
   if (signed) for (const value of (view === 'pressure' ? p : div)) max = Math.max(max, Math.abs(value));
   for (let j = 0; j < n; j++) for (let i = 0; i < nx; i++) {
     const k = i + nx * j, pixel = (i + nx * (n - 1 - j)) * 4;
@@ -92,17 +101,25 @@ function draw() {
   for (let j = 1; j < n; j++) { ctx.moveTo(0,j*cell); ctx.lineTo(width,j*cell); }
   ctx.stroke();
   if ($('arrows').checked) {
-    const spacing = Math.max(2, Math.round(n / 16));
-    ctx.strokeStyle = signed ? 'rgba(20,35,45,.65)' : 'rgba(244,251,250,.72)'; ctx.lineWidth = 1.5;
+    const screenCell = Math.max(1, canvas.getBoundingClientRect().height) / n;
+    const spacing = Math.max(1, Math.round(n / 24), Math.ceil(9 / screenCell));
+    const pixelScale = width / Math.max(1, canvas.getBoundingClientRect().width);
+    const shafts = new Path2D(), heads = new Path2D();
     for (let j = 1; j < n; j += spacing) for (let i = 1; i < nx; i += spacing) {
       const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < 1e-8) continue;
-      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.7), dx = u[k] / speed, dy = -v[k] / speed;
-      if (length < .5) continue;
-      const head = Math.min(4, length * .35), wing = head * .6;
+      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.65), dx = u[k] / speed, dy = -v[k] / speed;
+      if (length < .6*pixelScale) continue;
+      const head = Math.min(4*pixelScale, length * .4), wing = head * .55;
       const ex = x + dx * length / 2, ey = y + dy * length / 2;
-      ctx.beginPath(); ctx.moveTo(x - dx * length / 2, y - dy * length / 2); ctx.lineTo(ex, ey);
-      ctx.lineTo(ex - head * dx + wing * dy, ey - head * dy - wing * dx); ctx.moveTo(ex, ey); ctx.lineTo(ex - head * dx - wing * dy, ey - head * dy + wing * dx); ctx.stroke();
+      shafts.moveTo(x - dx * length / 2, y - dy * length / 2); shafts.lineTo(ex, ey);
+      heads.moveTo(ex, ey); heads.lineTo(ex - head * dx + wing * dy, ey - head * dy - wing * dx);
+      heads.lineTo(ex - head * dx - wing * dy, ey - head * dy + wing * dx); heads.closePath();
     }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(8,22,30,.8)'; ctx.lineWidth = 2.4*pixelScale;
+    ctx.stroke(shafts); ctx.stroke(heads);
+    ctx.strokeStyle = '#f5fcff'; ctx.fillStyle = '#f5fcff'; ctx.lineWidth = 1.1*pixelScale;
+    ctx.stroke(shafts); ctx.fill(heads);
   }
   const names = { speed: '速さ (mm/s)', pressure: '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
   const displayMax = max * (view === 'speed' ? 1000 : view === 'pressure' ? frame.rho : 1);
@@ -110,6 +127,8 @@ function draw() {
   $('domain-label').textContent = `${scaleLabel(frame.lx*1000)} × ${scaleLabel(frame.ly*1000)} mm · ${nx} × ${n} セル · 格子幅 ${scaleLabel(frame.h*1000)} mm`;
   $('colorbar').previousElementSibling.textContent = signed ? scaleLabel(-displayMax) : '0';
   $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#dfe6ea,#bc3d56)' : '';
+  $('speed-scale-note').hidden = signed || o.case !== 'channel';
+  $('speed-scale-note').textContent = `定常・十分発達した流れの理論最大値 ${(speedMax*1000).toFixed(1)} mm/s`;
 }
 function receive({ data }) {
   pending = Math.max(0, pending - 1);
@@ -135,7 +154,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-channel3'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-flowview'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -143,7 +162,7 @@ $('play').onclick = () => { playState(!running); schedule(); };
 $('reset').onclick = () => { if (worker) reset(); };
 $('step').onclick = () => { playState(false); send('advance'); };
 $('stage-step').onclick = () => { playState(false); send('stage'); };
-for (const id of ['advection', 'viscosity', 'pressure', 'nu', 'lid']) $(id).addEventListener('input', () => {
+for (const id of ['advection', 'viscosity', 'pressure', 'nu']) $(id).addEventListener('input', () => {
   controlState(); if (worker) send('configure', { options: options() });
   const stage = ['advection', 'viscosity', 'pressure'].indexOf(id);
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
@@ -155,12 +174,10 @@ $('dt-max').onchange = () => {
   controlState(); if (worker) send('configure', { options: options() });
 };
 $('case').onchange = () => {
-  const channel = $('case').value === 'channel';
-  $('lid').min = channel ? '0.1' : '0'; $('lid').max = '10';
-  $('lid').step = '0.1'; $('lid').value = '1';
   controlState(); if (worker) reset();
 };
 $('arrows').onchange = draw;
+new ResizeObserver(draw).observe(canvas);
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
   view = button.dataset.view;
   document.querySelectorAll('[data-view]').forEach(el => el.setAttribute('aria-pressed', String(el === button))); draw();

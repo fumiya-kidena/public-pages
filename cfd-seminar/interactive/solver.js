@@ -31,7 +31,7 @@
       this.lastStage = '設定変更'; this.stats = this.measure();
     }
     reset() {
-      this.nx = this.options.case === 'channel' ? 3 * this.n : this.n;
+      this.nx = this.options.case === 'channel' ? 2 * this.n : this.n;
       this.s = this.nx + 2;
       for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
       this.time = 0; this.steps = 0; this.phase = 0; this.dt = 0;
