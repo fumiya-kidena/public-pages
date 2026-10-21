@@ -9,6 +9,7 @@
   "disc-predictor": "q^*=q^n-\\Delta t\\,A(q^n)+\\nu\\Delta t\\,\\Delta_hq^n",
   "disc-divergence": "d_{i,j}=\\frac{u^*_{i+\\frac12,j}-u^*_{i-\\frac12,j}}h+\\frac{v^*_{i,j+\\frac12}-v^*_{i,j-\\frac12}}h",
   "disc-poisson": "\\Delta_h\\pi_{i,j}=\\frac{d_{i,j}}{\\Delta t}\\quad\\Longleftrightarrow\\quad-\\Delta_h\\pi_{i,j}=-\\frac{d_{i,j}}{\\Delta t}",
+  "disc-outlet": "\\begin{aligned}\\pi_{N_x+1,j}&=-\\pi_{N_x,j}\\\\u^{n+1}_{N_x+\\frac12,j}&=u^*_{N_x+\\frac12,j}+\\frac{2\\Delta t}{h}\\pi_{N_x,j}\\end{aligned}",
   "disc-correction": "\\begin{aligned}u^{n+1}_{i+\\frac12,j}&=u^*_{i+\\frac12,j}-\\frac{\\Delta t}h(\\pi_{i+1,j}-\\pi_{i,j})\\\\v^{n+1}_{i,j+\\frac12}&=v^*_{i,j+\\frac12}-\\frac{\\Delta t}h(\\pi_{i,j+1}-\\pi_{i,j})\\end{aligned}",
   "dimensional-equation": "Re=\\frac{UL}{\\nu},\\qquad U=\\frac{Re\\,\\nu}L,\\qquad x=L\\hat x,\\quad u=U\\hat u,\\quad t=\\frac LU\\hat t"
 };

@@ -43,6 +43,7 @@
 .boundary-side strong{font-size:11px;font-weight:600;white-space:nowrap;color:#f0f8fc}
 .boundary-arrow{font-size:28px;line-height:1;color:#80e0d1}
 .boundary-arrow[hidden]{display:none}
+.boundary-side [hidden]{display:none}
 .scale-note{margin:6px 0 0;text-align:center;font-size:11px;color:#b8c9d1}
 .scale-note[hidden]{display:none}
 .canvas-wrap:fullscreen .flow-domain{max-width:calc(160vh + 140px)}

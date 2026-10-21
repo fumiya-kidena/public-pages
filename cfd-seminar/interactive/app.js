@@ -14,7 +14,7 @@ const options = () => ({ case: $('case').value, advection: $('advection').checke
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
-  const expressions = { 'eq-time': '\\frac{\\partial \\mathbf{u}}{\\partial t}', 'eq-advection': '-(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}', 'eq-viscosity': '+\\nu\\nabla^2\\mathbf{u}', 'eq-pressure': '-\\frac{1}{\\rho}\\nabla p', continuity: '\\nabla\\cdot\\mathbf{u}=0' };
+  const expressions = { 'eq-time': '\\frac{\\partial \\mathbf{u}}{\\partial t}', 'eq-advection': '-(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}', 'eq-viscosity': '+\\nu\\nabla^2\\mathbf{u}', 'eq-pressure': '-\\frac{1}{\\rho}\\nabla p', continuity: '\\nabla\\cdot\\mathbf{u}=0', 'boundary-pressure': 'p=p_0' };
   for (const [id, expression] of Object.entries(expressions)) {
     if (window.katex) katex.render(expression, $(id), { throwOnError: false });
     else $(id).textContent = expression;
@@ -35,12 +35,14 @@ function controlState() {
   $('flow-domain').dataset.case = o.case;
   $('boundary-top').textContent = channel ? '静止壁  0 mm/s' : `上壁 →  ${(speed*1000).toFixed(1)} mm/s`;
   $('boundary-left-kind').textContent = channel ? '流入' : '静止壁';
-  $('boundary-right-kind').textContent = channel ? '流出・平均' : '静止壁';
+  $('boundary-right-kind').textContent = channel ? '自由流出' : '静止壁';
   $('boundary-left-speed').textContent = channel ? `${(speed*1000).toFixed(1)} mm/s` : '0 mm/s';
-  $('boundary-right-speed').textContent = channel ? `${(speed*1000).toFixed(1)} mm/s` : '0 mm/s';
+  $('boundary-right-speed').textContent = '0 mm/s';
+  $('boundary-right-speed').hidden = channel;
+  $('boundary-pressure').hidden = !channel;
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
-  $('boundary-note').textContent = channel ? '左から一様に流入、右へ流出。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
+  $('boundary-note').textContent = channel ? '左から一様に流入、右は自由流出・圧力指定。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
   $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * .1 / o.nu)} (H = 100 mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
@@ -120,7 +122,7 @@ function draw() {
     ctx.strokeStyle = '#f5fcff'; ctx.fillStyle = '#f5fcff'; ctx.lineWidth = 1.1*pixelScale;
     ctx.stroke(shafts); ctx.fill(heads);
   }
-  const names = { speed: '速さ (mm/s)', pressure: '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
+  const names = { speed: '速さ (mm/s)', pressure: o.case === 'channel' ? '圧力差 (Pa)' : '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
   const displayMax = max * (view === 'speed' ? 1000 : view === 'pressure' ? frame.rho : 1);
   $('legend-name').textContent = names[view]; $('scale-max').textContent = scaleLabel(displayMax);
   $('domain-label').textContent = `${scaleLabel(frame.lx*1000)} × ${scaleLabel(frame.ly*1000)} mm · ${nx} × ${n} セル · 格子幅 ${scaleLabel(frame.h*1000)} mm`;
@@ -153,7 +155,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-flowview2'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-outlet'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

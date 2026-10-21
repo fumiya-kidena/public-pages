@@ -4,7 +4,7 @@
   class FlowSolver {
     constructor(n = 64) {
       if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
-      // SI throughout: m, s, m/s, m^2/s. Pressure storage is p/rho (m^2/s^2).
+      // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.ly = 0.1; this.h = this.ly / n; this.rho = 1000;
       this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.001, inflow: 0.001, dtMax: 0.1 };
       this.reset();
@@ -44,9 +44,7 @@
       const { n, nx, s, u, v } = this;
       const channel = this.options.case === 'channel';
       if (channel && refreshOutlet) {
-        let outflow = 0;
-        for (let j = 1; j <= n; j++) outflow += u[nx - 1 + s * j];
-        for (let j = 1; j <= n; j++) u[nx + s * j] = outflow > 1e-12 ? u[nx - 1 + s * j] * n * this.options.inflow / outflow : this.options.inflow;
+        for (let j = 1; j <= n; j++) u[nx + s * j] = u[nx - 1 + s * j];
       }
       for (let j = 1; j <= n; j++) {
         u[s * j] = channel ? this.options.inflow : 0;
@@ -92,9 +90,10 @@
     }
     negativeLaplacian(x, out) {
       const { n, nx, s, h } = this, ih2 = 1 / h ** 2;
+      const channel = this.options.case === 'channel';
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j;
-        out[k] = ((i > 1 ? x[k] - x[k - 1] : 0) + (i < nx ? x[k] - x[k + 1] : 0) + (j > 1 ? x[k] - x[k - s] : 0) + (j < n ? x[k] - x[k + s] : 0)) * ih2;
+        out[k] = ((i > 1 ? x[k] - x[k - 1] : 0) + (i < nx ? x[k] - x[k + 1] : channel ? 2*x[k] : 0) + (j > 1 ? x[k] - x[k - s] : 0) + (j < n ? x[k] - x[k + s] : 0)) * ih2;
       }
     }
     dot(a, b) {
@@ -104,15 +103,16 @@
     }
     projection() {
       const { n, nx, s, h, dt, u, v, p, rhs, r, d, ad } = this;
+      const channel = this.options.case === 'channel';
       this.beforeProjection = this.measure().divergence;
       let mean = 0;
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j; rhs[k] = -((u[k] - u[k - 1]) + (v[k] - v[k - s])) / h / dt; mean += rhs[k];
       }
-      mean /= nx * n; p.fill(0);
+      mean = channel ? 0 : mean / (nx * n); p.fill(0);
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; r[k] = d[k] = rhs[k] - mean; }
       let rr = this.dot(r, r), tolerance = Math.max(1e-20, rr * 1e-14), iter = 0;
-      // Mean-zero conjugate gradients for the same Neumann Poisson problem as the seminar.
+      // Outlet-face Dirichlet pressure for channel; mean-zero Neumann problem for cavity.
       while (rr > tolerance && iter < Math.max(nx, n) * 6) {
         this.negativeLaplacian(d, ad);
         const denom = this.dot(d, ad);
@@ -123,13 +123,21 @@
         for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; d[k] = r[k] + beta * d[k]; }
         rr = next; iter++;
       }
-      mean = 0;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) mean += p[i + s * j];
-      mean /= nx * n;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) p[i + s * j] -= mean;
+      if (!channel) {
+        mean = 0;
+        for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) mean += p[i + s * j];
+        mean /= nx * n;
+        for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) p[i + s * j] -= mean;
+      }
       for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) { const k = i + s * j; u[k] -= dt * (p[k + 1] - p[k]) / h; }
       for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; v[k] -= dt * (p[k + s] - p[k]) / h; }
-      // Preserve the flux-compatible outlet during correction; refreshing it here would reintroduce divergence.
+      if (channel) for (let j = 1; j <= n; j++) {
+        const k = nx + s*j;
+        // The outlet face is h/2 from the last pressure center; its gauge pressure is zero.
+        p[k + 1] = -p[k];
+        u[k] += 2*dt*p[k]/h;
+      }
+      // Keep the pressure-corrected outlet face so the discrete divergence stays consistent.
       this.boundary(false); this.iterations = iter; this.converged = rr <= tolerance;
       this.afterProjection = this.measure().divergence;
       if (!this.converged) throw new Error('圧力計算が収束しませんでした。条件を戻してリセットしてください。');
