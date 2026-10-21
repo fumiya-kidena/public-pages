@@ -3,13 +3,15 @@ const $ = id => document.getElementById(id);
 const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
+let dtLimit = +$('dt-max').value;
 const explanations = [
-  '移流：速度の分布が、流れによって運ばれます。',
-  '粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
-  '圧力補正：仮の速度に生じた流入・流出の不釣り合いを、圧力を使って取り除きます。'
+  '① 移流：速度の分布が、流れによって運ばれます。',
+  '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
+  '③ 圧力補正：仮の速度に生じた流入・流出の不釣り合いを、圧力を使って取り除きます。'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value, [$('case').value === 'channel' ? 'inflow' : 'lid']: +$('lid').value });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, [$('case').value === 'channel' ? 'inflow' : 'lid']: +$('lid').value * 1e-3 });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
+const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
   const expressions = { 'eq-time': '\\frac{\\partial \\mathbf{u}}{\\partial t}', 'eq-advection': '-(\\mathbf{u}\\cdot\\nabla)\\mathbf{u}', 'eq-viscosity': '+\\nu\\nabla^2\\mathbf{u}', 'eq-pressure': '-\\frac{1}{\\rho}\\nabla p', continuity: '\\nabla\\cdot\\mathbf{u}=0' };
   for (const [id, expression] of Object.entries(expressions)) {
@@ -22,15 +24,16 @@ function controlState() {
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.pressure][i]));
   $('nu').disabled = !o.viscosity;
   const channel = o.case === 'channel', speed = channel ? o.inflow : o.lid;
-  $('nu-value').textContent = o.nu.toFixed(3); $('lid-value').textContent = speed.toFixed(2);
+  $('nu-value').textContent = (o.nu*1e6).toFixed(1); $('lid-value').textContent = (speed*1000).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
   $('model-note').classList.toggle('complete', count === 3);
-  $('wall-label').textContent = channel ? `Poiseuille flow：流入 ${speed.toFixed(2)} →` : `Cavity flow：上壁 ${speed.toFixed(2)} →`;
-  $('drive-name').textContent = channel ? '流入速度' : '上壁の速度';
+  $('wall-label').textContent = channel ? `Poiseuille flow：流入 ${(speed*1000).toFixed(1)} mm/s →` : `Cavity flow：上壁 ${(speed*1000).toFixed(1)} mm/s →`;
+  $('drive-name').textContent = channel ? '流入速度 (mm/s)' : '上壁の速度 (mm/s)';
   $('boundary-note').textContent = channel ? '左から一様に流入、右へ流出。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / h = ${(1/n).toFixed(3).replace(/0+$/, '')}（無次元）`;
+  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
+  $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * .1 / o.nu)} (H = 100 mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
   const box = $('equation-system').getBoundingClientRect();
@@ -72,7 +75,8 @@ function draw() {
   field.width = nx; field.height = n;
   const pixels = fctx.createImageData(nx, n), signed = view !== 'speed';
   const referenceSpeed = o.case === 'channel' ? o.inflow : o.lid;
-  const max = view === 'speed' ? referenceSpeed : view === 'pressure' ? 0.2 : 0.5;
+  let max = view === 'speed' ? referenceSpeed : view === 'pressure' ? Math.max(referenceSpeed**2, 1e-12) : Math.max(referenceSpeed/frame.ly, 1e-12);
+  if (signed) for (const value of (view === 'pressure' ? p : div)) max = Math.max(max, Math.abs(value));
   for (let j = 0; j < n; j++) for (let i = 0; i < nx; i++) {
     const k = i + nx * j, pixel = (i + nx * (n - 1 - j)) * 4;
     const value = view === 'speed' ? Math.hypot(u[k], v[k]) : view === 'pressure' ? p[k] : div[k];
@@ -90,7 +94,7 @@ function draw() {
     ctx.strokeStyle = signed ? 'rgba(20,35,45,.65)' : 'rgba(244,251,250,.72)'; ctx.lineWidth = 1.5;
     for (let j = 1; j < n; j += spacing) for (let i = 1; i < nx; i += spacing) {
       const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < 1e-8) continue;
-      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, .001) * cell*spacing*.7), dx = u[k] / speed, dy = -v[k] / speed;
+      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.7), dx = u[k] / speed, dy = -v[k] / speed;
       if (length < .5) continue;
       const head = Math.min(4, length * .35), wing = head * .6;
       const ex = x + dx * length / 2, ey = y + dy * length / 2;
@@ -98,10 +102,11 @@ function draw() {
       ctx.lineTo(ex - head * dx + wing * dy, ey - head * dy - wing * dx); ctx.moveTo(ex, ey); ctx.lineTo(ex - head * dx - wing * dy, ey - head * dy + wing * dx); ctx.stroke();
     }
   }
-  const names = { speed: '速さ', pressure: '圧力 / 密度', divergence: '発散' };
-  $('legend-name').textContent = names[view]; $('scale-max').textContent = max.toFixed(2);
-  $('domain-label').textContent = `Lx = ${frame.lx} / Ly = 1 · ${nx} × ${n} · h = ${frame.h.toFixed(3).replace(/0+$/, '')}`;
-  $('colorbar').previousElementSibling.textContent = signed ? (-max).toFixed(2) : '0';
+  const names = { speed: '速さ (mm/s)', pressure: '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
+  const displayMax = max * (view === 'speed' ? 1000 : view === 'pressure' ? frame.rho : 1);
+  $('legend-name').textContent = names[view]; $('scale-max').textContent = scaleLabel(displayMax);
+  $('domain-label').textContent = `${scaleLabel(frame.lx*1000)} × ${scaleLabel(frame.ly*1000)} mm · ${nx} × ${n} セル · 格子幅 ${scaleLabel(frame.h*1000)} mm`;
+  $('colorbar').previousElementSibling.textContent = signed ? scaleLabel(-displayMax) : '0';
   $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#dfe6ea,#bc3d56)' : '';
 }
 function receive({ data }) {
@@ -110,9 +115,11 @@ function receive({ data }) {
   frame = data;
   $('run-state').textContent = running ? '計算中' : '停止中';
   $('play').disabled = false; $('step').disabled = false; $('stage-step').disabled = false;
-  $('time').textContent = data.time.toFixed(3) + (data.phase ? '（途中）' : '');
-  $('energy').textContent = data.stats.energy.toFixed(5); $('divergence').textContent = scientific(data.stats.divergence);
-  $('projection').textContent = data.options.pressure && data.iterations ? `${scientific(data.before)} → ${scientific(data.after)}` : '未実行';
+  $('time').textContent = data.time.toFixed(3) + ' s' + (data.phase ? '（途中）' : '');
+  $('dt').textContent = data.dt > 0 ? Number(data.dt.toPrecision(6)).toString() + ' s' : '— s';
+  $('dt').title = data.dt > 0 ? `Δt = ${data.dt.toPrecision(10)} s / 安定性の指標 ${(data.cfl+data.diffusionNumber).toFixed(3)} ≤ 0.35` : '';
+  $('energy').textContent = scientific(data.stats.energy); $('divergence').textContent = scientific(data.stats.divergence);
+  $('projection').textContent = data.options.pressure && data.projectionCount ? `${scientific(data.before)} → ${scientific(data.after)}` : '未実行';
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('current', i === (data.phase + 2) % 3 && data.dt > 0));
   if (data.dt > 0) $('stage-description').textContent = data.stage + '完了。' + explanations[(data.phase + 2) % 3];
   else $('stage-description').textContent = explanations[0];
@@ -123,6 +130,8 @@ function receive({ data }) {
 equation(); controlState(); $('stage-step').disabled = true;
 new ResizeObserver(pressureOutline).observe($('equation-system'));
 document.fonts.ready.then(pressureOutline);
+document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
+document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
   worker = new Worker('worker.js'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
@@ -138,10 +147,15 @@ for (const id of ['advection', 'viscosity', 'pressure', 'nu', 'lid']) $(id).addE
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
 });
 $('grid').onchange = () => { controlState(); if (worker) reset(); };
+$('dt-max').onchange = () => {
+  if (!$('dt-max').value || !$('dt-max').reportValidity()) return;
+  dtLimit = +$('dt-max').value;
+  controlState(); if (worker) send('configure', { options: options() });
+};
 $('case').onchange = () => {
   const channel = $('case').value === 'channel';
-  $('lid').min = channel ? '0.05' : '0'; $('lid').max = channel ? '0.5' : '1';
-  $('lid').step = channel ? '0.05' : '0.1'; $('lid').value = channel ? '0.1' : '1';
+  $('lid').min = channel ? '0.1' : '0'; $('lid').max = '10';
+  $('lid').step = '0.1'; $('lid').value = '1';
   controlState(); if (worker) reset();
 };
 $('arrows').onchange = draw;

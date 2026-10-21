@@ -2,10 +2,11 @@
 (function (root) {
   'use strict';
   class FlowSolver {
-    constructor(n = 40) {
-      if (![20, 40, 50].includes(n)) throw new Error('Unsupported grid');
-      this.n = n; this.h = 1 / n;
-      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 0.02, lid: 1, inflow: 0.1 };
+    constructor(n = 100) {
+      if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
+      // SI throughout: m, s, m/s, m^2/s. Pressure storage is p/rho (m^2/s^2).
+      this.n = n; this.ly = 0.1; this.h = this.ly / n; this.rho = 1000;
+      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.001, inflow: 0.001, dtMax: 0.1 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
@@ -16,7 +17,7 @@
         this.options.case = options.case;
       }
       for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) this.options[key] = !!options[key];
-      for (const [key, lo, hi] of [['nu', 0.001, 0.04], ['lid', 0, 1], ['inflow', 0.05, 0.5]]) {
+      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.01], ['inflow', 0.0001, 0.01], ['dtMax', 0.001, 1]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
@@ -34,6 +35,7 @@
       this.s = this.nx + 2;
       for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
       this.time = 0; this.steps = 0; this.phase = 0; this.dt = 0;
+      this.cfl = 0; this.diffusionNumber = 0; this.projectionCount = 0;
       this.lastStage = '準備完了'; this.iterations = 0; this.converged = true;
       this.beforeProjection = 0; this.afterProjection = 0;
       this.stats = this.measure();
@@ -58,7 +60,11 @@
       let speed = 0;
       for (let k = 0; k < this.u.length; k++) speed = Math.max(speed, Math.abs(this.u[k]), Math.abs(this.v[k]));
       const nu = this.options.viscosity ? this.options.nu : 0;
-      this.dt = Math.min(0.02, 0.35 / (2 * speed / this.h + 4 * nu / this.h ** 2 + 1e-10));
+      const advectionRate = this.options.advection ? 2 * speed / this.h : 0;
+      const diffusionRate = 4 * nu / this.h ** 2;
+      this.dt = Math.min(this.options.dtMax, 0.35 / (advectionRate + diffusionRate + 1e-30));
+      this.cfl = advectionRate * this.dt;
+      this.diffusionNumber = diffusionRate * this.dt;
     }
     advection() {
       const { n, nx, s, un, vn, u, v, dt, h } = this;
@@ -127,6 +133,7 @@
       this.boundary(false); this.iterations = iter; this.converged = rr <= tolerance;
       this.afterProjection = this.measure().divergence;
       if (!this.converged) throw new Error('圧力計算が収束しませんでした。条件を戻してリセットしてください。');
+      this.projectionCount++;
     }
     stage() {
       if (this.phase === 0) this.begin();
@@ -140,7 +147,7 @@
       }
       this.phase = (stage + 1) % 3;
       this.stats = this.measure();
-      if (!Number.isFinite(this.stats.energy) || this.stats.maxSpeed > 20) throw new Error('速度が計算範囲を超えました。リセットしてください。');
+      if (!Number.isFinite(this.stats.energy) || this.stats.maxSpeed > 1) throw new Error('速度が計算範囲を超えました。リセットしてください。');
       return stage;
     }
     step() { do { this.stage(); } while (this.phase !== 0); }
@@ -160,7 +167,7 @@
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: 1, u, v, p, div, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;

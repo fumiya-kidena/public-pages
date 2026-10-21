@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const equations = {
+  "time-step-equation": "\\Delta t=\\min\\!\\left(\\Delta t_{\\max},\\frac{0.35}{2U_{\\max}/h+4\\nu/h^2}\\right),\\qquad t^{n+1}=t^n+\\Delta t",
   "disc-advection": "A(q)_{i,j}=a^+D_x^-q+a^-D_x^+q+b^+D_y^-q+b^-D_y^+q",
   "disc-upwind": "\\begin{aligned}D_x^-q&=\\frac{q_{i,j}-q_{i-1,j}}h,&D_x^+q&=\\frac{q_{i+1,j}-q_{i,j}}h\\\\a^+&=\\max(a,0),&a^-&=\\min(a,0)\\end{aligned}",
   "disc-interpolation": "\\begin{aligned}\\bar v_{i+\\frac12,j}&=\\frac{v_{i,j+\\frac12}+v_{i+1,j+\\frac12}+v_{i,j-\\frac12}+v_{i+1,j-\\frac12}}4\\\\\\bar u_{i,j+\\frac12}&=\\frac{u_{i+\\frac12,j}+u_{i-\\frac12,j}+u_{i+\\frac12,j+1}+u_{i-\\frac12,j+1}}4\\end{aligned}",

@@ -1,6 +1,6 @@
 'use strict';
 importScripts('solver.js');
-let solver = new FlowSolver(40);
+let solver = new FlowSolver(100);
 self.onmessage = ({ data }) => {
   try {
     if (data.type === 'reset') { solver = new FlowSolver(data.n || solver.n); solver.configure(data.options || {}); solver.reset(); }
