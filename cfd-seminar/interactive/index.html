@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
+  <title>流れを組み立てる | CFD Lab</title>
+  <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css">
+  <script defer src="../assets/katex.min.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+<header class="masthead"><a class="brand" href="../">CFD <b>Lab</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD seminar <span aria-hidden="true">↗</span></a></header>
+<main>
+  <noscript>この教材の計算にはJavaScriptが必要です。</noscript>
+  <div class="heading"><div><p class="eyebrow">INTERACTIVE FLUID MECHANICS</p><h1>流れを組み立てる</h1></div><span class="local"><span></span>端末内で計算</span></div>
+  <section class="equation-band" aria-label="支配方程式">
+    <div class="equation-line"><span id="eq-time"></span><span>=</span><span id="eq-advection" class="equation-term adv"></span><span id="eq-viscosity" class="equation-term visc disabled-term"></span><span id="eq-pressure" class="equation-term press disabled-term"></span></div>
+    <div class="equation-caption"><span>Navier–Stokes方程式</span><span id="continuity"></span></div>
+  </section>
+  <div class="workspace">
+    <aside class="controls" aria-label="計算条件">
+      <h2>流れを変える3つの作用</h2>
+      <label class="term adv"><input id="advection" type="checkbox" checked><span><strong><small>01</small>移流</strong><span class="explanation">流れが、運動量を運ぶ。</span></span></label>
+      <label class="term visc"><input id="viscosity" type="checkbox"><span><strong><small>02</small>粘性</strong><span class="explanation">速度の違いを、ならす。</span></span></label>
+      <label class="term press"><input id="pressure" type="checkbox"><span><strong><small>03</small>圧力補正</strong><span class="explanation">流入と流出を、つり合わせる。</span></span></label>
+      <p id="model-note" class="model-note">圧力補正なし：非圧縮条件を満たさない途中モデルです。</p>
+      <div class="control-section"><h2>物性と境界</h2>
+        <label class="slider-label" for="nu">動粘性係数 <output id="nu-value">0.008</output></label><input id="nu" type="range" min="0.001" max="0.040" step="0.001" value="0.008" disabled>
+        <label class="slider-label" for="lid">上壁の速度 <output id="lid-value">0.0</output></label><input id="lid" type="range" min="0" max="1" step="0.1" value="0">
+        <p class="muted">正方形の閉じた領域。左右・底の壁は静止、壁を通り抜ける流れはありません。</p>
+      </div>
+      <div class="control-section"><label class="select-label" for="grid">計算の細かさ</label><select id="grid"><option value="24">軽量 · 24 × 24</option><option value="40" selected>標準 · 40 × 40</option><option value="56">詳細 · 56 × 56</option></select></div>
+    </aside>
+    <section class="simulation" aria-label="流れのシミュレーション">
+      <div class="view-toolbar"><div class="segmented" role="group" aria-label="表示する量"><button data-view="speed" aria-pressed="true">速さ</button><button data-view="pressure" aria-pressed="false">圧力</button><button data-view="divergence" aria-pressed="false">発散</button></div><label class="arrow-toggle"><input id="arrows" type="checkbox" checked>速度の矢印</label><button class="icon-button" id="fullscreen" title="表示を拡大" aria-label="表示を拡大"><img src="icons/maximize.svg" alt=""></button></div>
+      <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><span class="time">時刻 <output id="time">0.000</output></span><label class="rate-label">再生速度 <select id="rate"><option value="1">1×</option><option value="3" selected>3×</option><option value="6">6×</option></select></label></div>
+      <div class="canvas-wrap" id="canvas-wrap"><div class="canvas-top"><span id="wall-label">上壁：静止</span><span id="run-state">読み込み中</span></div><canvas id="flow" width="720" height="720" aria-label="計算した速度場。下の数値欄に時刻、運動エネルギー、発散を表示。"></canvas><div class="canvas-bottom"><span>0</span><div id="colorbar" class="colorbar"></div><span id="scale-max">0.40</span><b id="legend-name">速さ</b></div></div>
+      <div class="pipeline" aria-label="計算の順番"><button class="stage adv" data-stage="0"><small>01</small>移流</button><span>→</span><button class="stage visc" data-stage="1"><small>02</small>粘性</button><span>→</span><button class="stage press" data-stage="2"><small>03</small>圧力補正</button><button id="stage-step" class="stage-step" title="次の処理だけ進める">処理を1つ進める<img src="icons/step-forward.svg" alt=""></button></div>
+      <p class="stage-description" id="stage-description" aria-live="polite">移流：速度の分布が、流れによって運ばれます。</p>
+      <div class="metrics"><div><span>運動エネルギー</span><output id="energy">—</output></div><div><span>流れの発散（RMS）</span><output id="divergence">—</output></div><div><span>直近の圧力補正 前 → 後</span><output id="projection">未実行</output></div></div>
+      <p id="error" role="alert" hidden></p>
+    </section>
+  </div>
+  <section class="reading"><div><p class="eyebrow">FRACTIONAL STEP</p><h2>一度に解かず、作用を分ける。</h2><p>まず移流と粘性で仮の速度を計算します。その速度では、ある場所に流れ込む量と、流れ出す量が一致するとは限りません。そこで圧力を求め、流れの発散を小さくするように速度を補正します。<a href="#ref-3">[3]</a></p></div><div><h3>見比べるポイント</h3><p><b>移流のみ</b>では流れの形が変わります。<b>粘性</b>を加えると静止壁の下で運動が減衰します。<b>圧力補正</b>を加えると、発散がほぼゼロに戻ります。上壁を動かすと、壁から流体へ運動が伝わります。</p><p class="muted">チェックは独立です。全項OFFなら速度場は更新されません。項の組み合わせを比較するときは同じ開始状態に戻してください。</p></div></section>
+  <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。表示値は無次元です。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は安定性を優先した1次風上、圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>速度の矢印は向きと相対的な速さを表し、長さには表示上限があります。色の尺度は速さ0–0.5、圧力−0.2–0.2、発散−0.5–0.5で固定です。範囲外の値は端の色になります。格子変更では計算をリセットします。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
+  <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
+</main>
+</body></html>
