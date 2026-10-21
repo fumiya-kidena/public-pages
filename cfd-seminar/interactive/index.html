@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>流れを組み立てる | CFD Lab</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-profiles">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-profiles"></script><script defer src="app.js?v=20261022-profiles"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-ns-form">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-profiles"></script><script defer src="app.js?v=20261022-ns-form"></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="../">CFD <b>Lab</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD seminar <span aria-hidden="true">↗</span></a></header>
@@ -18,7 +18,7 @@
     <svg id="pressure-outline" aria-hidden="true"><path></path></svg>
     <label class="continuity-row" for="pressure"><span class="equation-name">③ 連続の式</span><span id="continuity"></span></label>
     <div class="equation-caption">Navier–Stokes方程式</div>
-    <div class="equation-line"><span id="eq-time"></span><span>=</span><label class="equation-toggle adv"><input id="advection" type="checkbox" checked aria-label="① 移流項"><span id="eq-advection"></span><small><b class="term-number">①</b> 移流項</small></label><label class="equation-toggle visc"><input id="viscosity" type="checkbox" aria-label="② 粘性項"><span id="eq-viscosity"></span><small><b class="term-number">②</b> 粘性項</small></label><label class="equation-toggle press"><input id="pressure" type="checkbox" aria-label="③ 圧力項・圧力補正"><span id="eq-pressure"></span><small><b class="term-number">③</b> 圧力項</small></label></div>
+    <div class="equation-line"><span id="eq-time"></span><label class="equation-toggle adv"><input id="advection" type="checkbox" checked aria-label="① 移流項"><span id="eq-advection"></span><small><b class="term-number">①</b> 移流項</small></label><span>=</span><label class="equation-toggle press"><input id="pressure" type="checkbox" aria-label="③ 圧力項・圧力補正"><span id="eq-pressure"></span><small><b class="term-number">③</b> 圧力項</small></label><label class="equation-toggle visc"><input id="viscosity" type="checkbox" aria-label="② 粘性項"><span id="eq-viscosity"></span><small><b class="term-number">②</b> 粘性項</small></label></div>
     </div>
   </section>
   <div class="workspace">
