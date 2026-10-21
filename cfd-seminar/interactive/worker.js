@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-outlet');
+importScripts('solver.js?v=20261022-profiles');
 let solver = new FlowSolver();
 self.onmessage = ({ data }) => {
   try {
@@ -8,6 +8,6 @@ self.onmessage = ({ data }) => {
     if (data.type === 'advance') for (let i = 0; i < Math.min(12, data.count || 1); i++) solver.step();
     if (data.type === 'stage') solver.stage();
     const state = solver.snapshot();
-    self.postMessage({ ...state, request: data.request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer]);
+    self.postMessage({ ...state, request: data.request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.profileU.buffer]);
   } catch (error) { self.postMessage({ error: error.message, request: data.request }); }
 };

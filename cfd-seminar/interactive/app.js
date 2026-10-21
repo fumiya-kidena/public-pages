@@ -5,6 +5,7 @@ const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .001;
+const domainHeight = .02;
 const explanations = [
   '① 移流：速度の分布が、流れによって運ばれます。',
   '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
@@ -44,8 +45,8 @@ function controlState() {
   $('boundary-right-arrow').hidden = !channel;
   $('boundary-note').textContent = channel ? '左から一様に流入、右は自由流出・圧力指定。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
-  $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * .1 / o.nu)} (H = 100 mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
+  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
+  $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
   const box = $('equation-system').getBoundingClientRect();
@@ -146,6 +147,7 @@ function receive({ data }) {
   if (data.dt > 0) $('stage-description').textContent = data.stage + '完了。' + explanations[(data.phase + 2) % 3];
   else $('stage-description').textContent = explanations[0];
   draw();
+  FlowProfile.update(data);
   // Leave time for UI and paint; there is at most one automatic batch in flight.
   if (running) setTimeout(schedule, 25);
 }
@@ -155,7 +157,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-outlet'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-profiles'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -178,7 +180,7 @@ $('case').onchange = () => {
   controlState(); if (worker) reset();
 };
 $('arrows').onchange = draw;
-new ResizeObserver(draw).observe(canvas);
+new ResizeObserver(() => { draw(); FlowProfile.resize(); }).observe(canvas);
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
   view = button.dataset.view;
   document.querySelectorAll('[data-view]').forEach(el => el.setAttribute('aria-pressed', String(el === button))); draw();

@@ -5,7 +5,7 @@
     constructor(n = 64) {
       if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
-      this.n = n; this.ly = 0.1; this.h = this.ly / n; this.rho = 1000;
+      this.n = n; this.ly = 0.02; this.h = this.ly / n; this.rho = 1000;
       this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.001, inflow: 0.001, dtMax: 0.1 };
       this.reset();
     }
@@ -170,12 +170,16 @@
     }
     snapshot() {
       const { n, nx, s, h } = this, u = new Float32Array(nx * n), v = new Float32Array(nx * n), p = new Float32Array(nx * n), div = new Float32Array(nx * n);
+      const channel = this.options.case === 'channel', section = channel ? nx : nx/2;
+      const profileU = new Float32Array(n+2), left = Math.floor(section), right = Math.ceil(section);
+      for (let j = 1; j <= n; j++) profileU[j] = (this.u[left+s*j]+this.u[right+s*j])/2;
+      profileU[n+1] = !channel && this.dt > 0 ? this.options.lid : 0;
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, a = i - 1 + nx * (j - 1);
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, profileU, profileX: section*h, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;
