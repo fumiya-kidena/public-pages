@@ -2,7 +2,8 @@
 (() => {
   const equations = {
   "time-step-equation": "\\Delta t=\\min\\!\\left(\\Delta t_{\\max},\\frac{0.35}{2U_{\\max}/h+4\\nu/h^2}\\right),\\qquad t^{n+1}=t^n+\\Delta t",
-  "disc-advection": "A(q)_{i,j}=a^+D_x^-q+a^-D_x^+q+b^+D_y^-q+b^-D_y^+q",
+  "disc-advection": "\\begin{aligned}A(u)&=G_x(u)+\\bar v^+D_y^-u+\\bar v^-D_y^+u\\\\A(v)&=\\bar u^+D_x^-v+\\bar u^-D_x^+v+G_y(v)\\\\G_x(q)_{i,j}&=\\frac{F(q_{i,j},q_{i+1,j})-F(q_{i-1,j},q_{i,j})}{h}\\end{aligned}",
+  "disc-flux": "\\begin{aligned}f(q)&=q^2/2\\\\F(L,R)&=\\begin{cases}\\min_{q\\in[L,R]} f(q)&L\\le R\\\\\\max(f(L),f(R))&L>R\\end{cases}\\end{aligned}",
   "disc-upwind": "\\begin{aligned}D_x^-q&=\\frac{q_{i,j}-q_{i-1,j}}h,&D_x^+q&=\\frac{q_{i+1,j}-q_{i,j}}h\\\\a^+&=\\max(a,0),&a^-&=\\min(a,0)\\end{aligned}",
   "disc-interpolation": "\\begin{aligned}\\bar v_{i+\\frac12,j}&=\\frac{v_{i,j+\\frac12}+v_{i+1,j+\\frac12}+v_{i,j-\\frac12}+v_{i+1,j-\\frac12}}4\\\\\\bar u_{i,j+\\frac12}&=\\frac{u_{i+\\frac12,j}+u_{i-\\frac12,j}+u_{i+\\frac12,j+1}+u_{i-\\frac12,j+1}}4\\end{aligned}",
   "disc-diffusion": "\\Delta_hq_{i,j}=\\frac{q_{i+1,j}+q_{i-1,j}+q_{i,j+1}+q_{i,j-1}-4q_{i,j}}{h^2}",
@@ -19,7 +20,7 @@
   for (const [id, tex] of Object.entries(equations)) render(document.getElementById(id), tex, true);
   document.querySelectorAll('[data-math]').forEach(el => render(el, el.dataset.math));
   const kernels = {
-    advection: ['0', '0', '0', '-a', 'a+b', '0', '0', '-b', '0'],
+    advection: ['0', '0', '0', '-\\frac{u_W}{2}', '\\frac{u_C}{2}+\\bar v', '0', '0', '-\\bar v', '0'],
     diffusion: ['0', '1', '0', '1', '-4', '1', '0', '1', '0'],
     poisson: ['0', '-1', '0', '-1', '4', '-1', '0', '-1', '0']
   };

@@ -48,15 +48,17 @@
     <p class="notation">正方格子の幅は <span data-math="h"></span> (m)、時刻は <span data-math="t^n"></span> (s)。式中の速度はm/s、動粘性係数はm²/sです。圧力はセル中心、速度はセルの面に置くMAC格子です。以下は内部点の式です。</p>
     <div class="math-block" id="time-step-equation"></div><p class="muted">Umaxは境界用の仮想点を含む速度成分の最大絶対値です。移流OFFでは分母の速度項、粘性OFFでは拡散項を除きます。時刻・Δtの単位は秒です。</p>
     <article class="discrete-row adv">
-      <div class="discrete-formulas"><h3>① 移流項 <small>1次風上差分</small></h3>
-        <p><span data-math="q=u"></span> または <span data-math="v"></span>。その位置の移流速度を <span data-math="(a,b)"></span> とします。</p>
+      <div class="discrete-formulas"><h3>① 移流項 <small>1次Godunov・風上差分</small></h3>
+        <p>自分自身を運ぶ方向では、<span data-math="u\,\partial_xu=\partial_x(u^2/2)"></span> を使い、隣り合う値から境界を通る流束を求めます。これにより、内部が速度ゼロでも流入の変化が伝わります。</p>
         <div class="math-block" id="disc-advection"></div>
+        <div class="math-block" id="disc-flux"></div>
+        <p class="muted"><abbr title="隣り合う一定値の間にできる波の伝播から境界の流束を決める方法">Godunov法</abbr>の流束です。L・Rは境界の両側の値。L ≤ 0 ≤ Rなら最小値はゼロです。GyはGxのx方向をy方向へ置き換えます。圧力・粘性OFFの一方向流入ではBurgers方程式となり、速度Uからゼロへ進む前線の速さはU/2です。非圧縮流れそのものではありません。<a class="cite" href="#ref-7" title="Ketcheson, LeVeque, del Razo (2020), Riemann Problems and Jupyter Solutions">[7]</a></p>
+        <p>元のCFD seminarの点ごとの移流差分とは、この自己移流の扱いが異なります。初期速度はゼロのままです。直交する方向は、平均速度の符号で選ぶ1次風上差分です。</p>
         <div class="math-block" id="disc-upwind"></div>
-        <p class="muted">y方向も同様に、j−1 / j+1の点で差分を取り、bの符号で選びます。qの添字はその速度成分の格子位置を表します。uには (a,b) = (u, vの4点平均)、vには (a,b) = (uの4点平均, v) を使います。</p>
-        <p class="muted">図は右・上向きの流れ。速度が負の方向では反対側の点を使います。MAC格子で異なる速度成分が必要なときは、周囲4点を平均します。</p>
+        <p class="muted">qはuまたはv、aは直交する方向の平均速度。y方向も同様にj−1 / j+1の点で差分を取ります。qの添字はその速度成分の格子位置を表します。MAC格子で異なる速度成分が必要なときは、周囲4点を平均します。</p>
         <div class="math-block" id="disc-interpolation"></div>
       </div>
-      <figure class="kernel-figure"><figcaption>① 移流のカーネル <span data-math="a,b\geq0"></span></figcaption><div class="kernel-axis">y ↑　x →</div><div class="stencil" data-kernel="advection"></div><p class="muted">係数全体に <span data-math="1/h"></span>。中心は <span data-math="q_{i,j}"></span>。</p></figure>
+      <figure class="kernel-figure"><figcaption>① uの移流のカーネル</figcaption><div class="kernel-axis">y ↑　x →</div><div class="stencil" data-kernel="advection"></div><p class="muted">周囲のuと平均vが非負の場合。Cは中心、Wは左隣。各点のuに図の係数を掛け、全体をhで割ります。係数も速度で変わります。符号が変わる場合は上の流束の式を使います。</p></figure>
     </article>
     <article class="discrete-row visc">
       <div class="discrete-formulas"><h3>② 粘性項 <small>2次中心差分</small></h3>
@@ -85,6 +87,8 @@
     <p class="muted">上の既定値は高さ100 mm・ν = 1 mm²/s・速度1 mm/sでRe = 100です。領域寸法は固定で、格子数を変えると格子幅が変わります。表は定常参照解と比較するための条件であり、過渡状態や粗い格子が参照解に一致することを保証しません。実際の水槽の奥行き方向・自由表面・温度変化は含みません。</p>
   </section>
   <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが100 × 100 mm、Poiseuille flowが200 × 100 mm。速度はmm/s、圧力はPa（領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数はp/ρで、表示時にρ = 1000 kg/m³を掛けます。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowでは流入と等しい流出流量を課します。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は安定性を優先した1次風上、圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>速度の矢印は向きと相対的な速さを表し、長さには表示上限があります。速さの色の最大値はPoiseuille flowの流入速度、Cavity flowの上壁速度です。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは流入・上壁速度より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
-  <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
+  <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p>
+  <p id="ref-7">[7] Ketcheson, D. I., LeVeque, R. J., del Razo, M. J. (2020). Riemann Problems and Jupyter Solutions. SIAM. <a href="https://www.clawpack.org/riemann_book/html/Burgers.html" target="_blank" rel="noopener">著者によるオンライン版：Burgers方程式</a></p>
+  <p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
 </main>
 </body></html>

@@ -27,6 +27,8 @@ function controlState() {
   $('nu-value').textContent = (o.nu*1e6).toFixed(1); $('lid-value').textContent = (speed*1000).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
+  if (channel && o.advection && !o.viscosity && !o.pressure) $('model-note').textContent += ' 静止状態への一様流入では、前線が流入速度の半分の速さで進みます。';
+  if (!channel && !o.viscosity) $('model-note').textContent += ' 粘性OFFでは、静止した内部へ上壁の運動は伝わりません。';
   $('model-note').classList.toggle('complete', count === 3);
   $('wall-label').textContent = channel ? `Poiseuille flow：流入 ${(speed*1000).toFixed(1)} mm/s →` : `Cavity flow：上壁 ${(speed*1000).toFixed(1)} mm/s →`;
   $('drive-name').textContent = channel ? '流入速度 (mm/s)' : '上壁の速度 (mm/s)';

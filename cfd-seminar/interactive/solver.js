@@ -66,17 +66,23 @@
       this.cfl = advectionRate * this.dt;
       this.diffusionNumber = diffusionRate * this.dt;
     }
+    static burgersFlux(left, right) {
+      const fl = left * left / 2, fr = right * right / 2;
+      if (left > right) return Math.max(fl, fr);
+      return left <= 0 && right >= 0 ? 0 : Math.min(fl, fr);
+    }
     advection() {
       const { n, nx, s, un, vn, u, v, dt, h } = this;
-      // cfd-seminar/advection.f90 MAC interpolation; first-order upwind from advection2.html.
+      // Godunov flux for self-advection; MAC-averaged upwind for cross-advection.
+      const flux = FlowSolver.burgersFlux;
       const diff = (a, k, stride, speed) => speed >= 0 ? (a[k] - a[k - stride]) / h : (a[k + stride] - a[k]) / h;
       for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) {
         const k = i + s * j, va = (vn[k] + vn[k + 1] + vn[k - s] + vn[k + 1 - s]) / 4;
-        u[k] -= dt * (un[k] * diff(un, k, 1, un[k]) + va * diff(un, k, s, va));
+        u[k] -= dt * ((flux(un[k], un[k + 1]) - flux(un[k - 1], un[k])) / h + va * diff(un, k, s, va));
       }
       for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, ua = (un[k] + un[k - 1] + un[k + s] + un[k - 1 + s]) / 4;
-        v[k] -= dt * (ua * diff(vn, k, 1, ua) + vn[k] * diff(vn, k, s, vn[k]));
+        v[k] -= dt * (ua * diff(vn, k, 1, ua) + (flux(vn[k], vn[k + s]) - flux(vn[k - s], vn[k])) / h);
       }
       this.boundary();
     }
