@@ -34,7 +34,7 @@ function controlState() {
   $('drive-name').textContent = channel ? '流入速度 (mm/s)' : '上壁の速度 (mm/s)';
   $('boundary-note').textContent = channel ? '左から一様に流入、右へ流出。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
+  $('grid-info').textContent = `${channel ? 3*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(100/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * .1 / o.nu)} (H = 100 mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
@@ -135,7 +135,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-grid64'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-channel3'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

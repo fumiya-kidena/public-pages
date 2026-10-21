@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-grid64');
+importScripts('solver.js?v=20261022-channel3');
 let solver = new FlowSolver();
 self.onmessage = ({ data }) => {
   try {

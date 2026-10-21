@@ -32,8 +32,8 @@
 .equation-system .equation-toggle{border-radius:0}
 .domain-label{text-align:center;font-size:11px;margin-top:8px;color:#c6d2db}
 #flow{image-rendering:pixelated}
-#flow.wide{width:100%;max-width:920px;aspect-ratio:2}
-.canvas-wrap:fullscreen #flow.wide{width:min(92vw,160vh);max-width:none}
+#flow.wide{width:100%;max-width:920px;aspect-ratio:3}
+.canvas-wrap:fullscreen #flow.wide{width:min(92vw,240vh);max-width:none}
 .control-section:last-child{flex-wrap:wrap}
 #grid-info{flex-basis:100%;margin:8px 0 0;font-variant-numeric:tabular-nums}
 .discretization,.dimensional{border-top:1px solid var(--line);padding:28px 0;margin-top:20px}
