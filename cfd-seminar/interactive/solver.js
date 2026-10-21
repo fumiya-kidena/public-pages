@@ -3,10 +3,9 @@
   'use strict';
   class FlowSolver {
     constructor(n = 40) {
-      if (![24, 40, 56].includes(n)) throw new Error('Unsupported grid');
-      this.n = n; this.s = n + 2; this.h = 1 / n;
+      if (![20, 40, 50].includes(n)) throw new Error('Unsupported grid');
+      this.n = n; this.h = 1 / n;
       this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 0.02, lid: 1, inflow: 0.1 };
-      for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s ** 2);
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
@@ -27,34 +26,32 @@
       if (changedCase) { this.reset(); return; }
       // Parameter changes start a new complete step, not half of the old operator sequence.
       if (this.phase) { this.u.set(this.un); this.v.set(this.vn); this.phase = 0; }
-      this.boundary();
+      if (this.dt > 0) this.boundary();
       this.lastStage = '設定変更'; this.stats = this.measure();
     }
     reset() {
-      const n = this.n, s = this.s;
-      for (const key of ['u', 'v', 'un', 'vn', 'p']) this[key].fill(0);
-      if (this.options.case === 'channel') {
-        for (let j = 1; j <= n; j++) for (let i = 0; i <= n; i++) this.u[i + s * j] = this.options.inflow;
-      }
+      this.nx = this.options.case === 'channel' ? 2 * this.n : this.n;
+      this.s = this.nx + 2;
+      for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
       this.time = 0; this.steps = 0; this.phase = 0; this.dt = 0;
       this.lastStage = '準備完了'; this.iterations = 0; this.converged = true;
       this.beforeProjection = 0; this.afterProjection = 0;
-      this.boundary(); this.stats = this.measure();
+      this.stats = this.measure();
     }
     boundary(refreshOutlet = true) {
-      const { n, s, u, v } = this;
+      const { n, nx, s, u, v } = this;
       const channel = this.options.case === 'channel';
       if (channel && refreshOutlet) {
         let outflow = 0;
-        for (let j = 1; j <= n; j++) outflow += u[n - 1 + s * j];
-        for (let j = 1; j <= n; j++) u[n + s * j] = outflow > 1e-12 ? u[n - 1 + s * j] * n * this.options.inflow / outflow : this.options.inflow;
+        for (let j = 1; j <= n; j++) outflow += u[nx - 1 + s * j];
+        for (let j = 1; j <= n; j++) u[nx + s * j] = outflow > 1e-12 ? u[nx - 1 + s * j] * n * this.options.inflow / outflow : this.options.inflow;
       }
       for (let j = 1; j <= n; j++) {
         u[s * j] = channel ? this.options.inflow : 0;
-        if (!channel) u[n + s * j] = 0;
-        v[s * j] = -v[1 + s * j]; v[n + 1 + s * j] = (channel ? 1 : -1) * v[n + s * j];
+        if (!channel) u[nx + s * j] = 0;
+        v[s * j] = -v[1 + s * j]; v[nx + 1 + s * j] = (channel ? 1 : -1) * v[nx + s * j];
       }
-      for (let i = 1; i <= n; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
+      for (let i = 1; i <= nx; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
     }
     begin() {
       this.boundary(); this.un.set(this.u); this.vn.set(this.v);
@@ -64,68 +61,68 @@
       this.dt = Math.min(0.02, 0.35 / (2 * speed / this.h + 4 * nu / this.h ** 2 + 1e-10));
     }
     advection() {
-      const { n, s, un, vn, u, v, dt, h } = this;
+      const { n, nx, s, un, vn, u, v, dt, h } = this;
       // cfd-seminar/advection.f90 MAC interpolation; first-order upwind from advection2.html.
       const diff = (a, k, stride, speed) => speed >= 0 ? (a[k] - a[k - stride]) / h : (a[k + stride] - a[k]) / h;
-      for (let j = 1; j <= n; j++) for (let i = 1; i < n; i++) {
+      for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) {
         const k = i + s * j, va = (vn[k] + vn[k + 1] + vn[k - s] + vn[k + 1 - s]) / 4;
         u[k] -= dt * (un[k] * diff(un, k, 1, un[k]) + va * diff(un, k, s, va));
       }
-      for (let j = 1; j < n; j++) for (let i = 1; i <= n; i++) {
+      for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, ua = (un[k] + un[k - 1] + un[k + s] + un[k - 1 + s]) / 4;
         v[k] -= dt * (ua * diff(vn, k, 1, ua) + vn[k] * diff(vn, k, s, vn[k]));
       }
       this.boundary();
     }
     diffusion() {
-      const { n, s, un, vn, u, v, dt, h } = this, a = dt * this.options.nu / h ** 2;
-      for (let j = 1; j <= n; j++) for (let i = 1; i < n; i++) {
+      const { n, nx, s, un, vn, u, v, dt, h } = this, a = dt * this.options.nu / h ** 2;
+      for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) {
         const k = i + s * j; u[k] += a * (un[k - 1] + un[k + 1] + un[k - s] + un[k + s] - 4 * un[k]);
       }
-      for (let j = 1; j < n; j++) for (let i = 1; i <= n; i++) {
+      for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j; v[k] += a * (vn[k - 1] + vn[k + 1] + vn[k - s] + vn[k + s] - 4 * vn[k]);
       }
       this.boundary();
     }
     negativeLaplacian(x, out) {
-      const { n, s, h } = this, ih2 = 1 / h ** 2;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) {
+      const { n, nx, s, h } = this, ih2 = 1 / h ** 2;
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j;
-        out[k] = ((i > 1 ? x[k] - x[k - 1] : 0) + (i < n ? x[k] - x[k + 1] : 0) + (j > 1 ? x[k] - x[k - s] : 0) + (j < n ? x[k] - x[k + s] : 0)) * ih2;
+        out[k] = ((i > 1 ? x[k] - x[k - 1] : 0) + (i < nx ? x[k] - x[k + 1] : 0) + (j > 1 ? x[k] - x[k - s] : 0) + (j < n ? x[k] - x[k + s] : 0)) * ih2;
       }
     }
     dot(a, b) {
       let sum = 0;
-      for (let j = 1; j <= this.n; j++) for (let i = 1; i <= this.n; i++) { const k = i + this.s * j; sum += a[k] * b[k]; }
+      for (let j = 1; j <= this.n; j++) for (let i = 1; i <= this.nx; i++) { const k = i + this.s * j; sum += a[k] * b[k]; }
       return sum;
     }
     projection() {
-      const { n, s, h, dt, u, v, p, rhs, r, d, ad } = this;
+      const { n, nx, s, h, dt, u, v, p, rhs, r, d, ad } = this;
       this.beforeProjection = this.measure().divergence;
       let mean = 0;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) {
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j; rhs[k] = -((u[k] - u[k - 1]) + (v[k] - v[k - s])) / h / dt; mean += rhs[k];
       }
-      mean /= n * n; p.fill(0);
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) { const k = i + s * j; r[k] = d[k] = rhs[k] - mean; }
+      mean /= nx * n; p.fill(0);
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; r[k] = d[k] = rhs[k] - mean; }
       let rr = this.dot(r, r), tolerance = Math.max(1e-20, rr * 1e-14), iter = 0;
       // Mean-zero conjugate gradients for the same Neumann Poisson problem as the seminar.
-      while (rr > tolerance && iter < n * 6) {
+      while (rr > tolerance && iter < Math.max(nx, n) * 6) {
         this.negativeLaplacian(d, ad);
         const denom = this.dot(d, ad);
         if (!(denom > 0)) break;
         const alpha = rr / denom;
-        for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) { const k = i + s * j; p[k] += alpha * d[k]; r[k] -= alpha * ad[k]; }
+        for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; p[k] += alpha * d[k]; r[k] -= alpha * ad[k]; }
         const next = this.dot(r, r), beta = next / rr;
-        for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) { const k = i + s * j; d[k] = r[k] + beta * d[k]; }
+        for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; d[k] = r[k] + beta * d[k]; }
         rr = next; iter++;
       }
       mean = 0;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) mean += p[i + s * j];
-      mean /= n * n;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) p[i + s * j] -= mean;
-      for (let j = 1; j <= n; j++) for (let i = 1; i < n; i++) { const k = i + s * j; u[k] -= dt * (p[k + 1] - p[k]) / h; }
-      for (let j = 1; j < n; j++) for (let i = 1; i <= n; i++) { const k = i + s * j; v[k] -= dt * (p[k + s] - p[k]) / h; }
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) mean += p[i + s * j];
+      mean /= nx * n;
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) p[i + s * j] -= mean;
+      for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) { const k = i + s * j; u[k] -= dt * (p[k + 1] - p[k]) / h; }
+      for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) { const k = i + s * j; v[k] -= dt * (p[k + s] - p[k]) / h; }
       // Preserve the flux-compatible outlet during correction; refreshing it here would reintroduce divergence.
       this.boundary(false); this.iterations = iter; this.converged = rr <= tolerance;
       this.afterProjection = this.measure().divergence;
@@ -148,22 +145,22 @@
     }
     step() { do { this.stage(); } while (this.phase !== 0); }
     measure() {
-      const { n, s, h, u, v } = this; let energy = 0, div2 = 0, maxSpeed = 0;
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) {
+      const { n, nx, s, h, u, v } = this; let energy = 0, div2 = 0, maxSpeed = 0;
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, x = (u[k] + u[k - 1]) / 2, y = (v[k] + v[k - s]) / 2;
         energy += (x * x + y * y) / 2; maxSpeed = Math.max(maxSpeed, Math.hypot(x, y));
         div2 += (((u[k] - u[k - 1]) + (v[k] - v[k - s])) / h) ** 2;
       }
-      return { energy: energy / n ** 2, divergence: Math.sqrt(div2 / n ** 2), maxSpeed };
+      return { energy: energy / (nx * n), divergence: Math.sqrt(div2 / (nx * n)), maxSpeed };
     }
     snapshot() {
-      const { n, s, h } = this, u = new Float32Array(n * n), v = new Float32Array(n * n), p = new Float32Array(n * n), div = new Float32Array(n * n);
-      for (let j = 1; j <= n; j++) for (let i = 1; i <= n; i++) {
-        const k = i + s * j, a = i - 1 + n * (j - 1);
+      const { n, nx, s, h } = this, u = new Float32Array(nx * n), v = new Float32Array(nx * n), p = new Float32Array(nx * n), div = new Float32Array(nx * n);
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
+        const k = i + s * j, a = i - 1 + nx * (j - 1);
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, u, v, p, div, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: 1, u, v, p, div, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;
