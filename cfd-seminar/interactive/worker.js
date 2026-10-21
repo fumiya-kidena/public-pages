@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-flowview');
+importScripts('solver.js?v=20261022-flowview2');
 let solver = new FlowSolver();
 self.onmessage = ({ data }) => {
   try {

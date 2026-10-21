@@ -106,9 +106,8 @@ function draw() {
     const pixelScale = width / Math.max(1, canvas.getBoundingClientRect().width);
     const shafts = new Path2D(), heads = new Path2D();
     for (let j = 1; j < n; j += spacing) for (let i = 1; i < nx; i += spacing) {
-      const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < 1e-8) continue;
-      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.65), dx = u[k] / speed, dy = -v[k] / speed;
-      if (length < .6*pixelScale) continue;
+      const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < Math.max(1e-8, referenceSpeed*.01)) continue;
+      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, Math.max(4*pixelScale, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.65)), dx = u[k] / speed, dy = -v[k] / speed;
       const head = Math.min(4*pixelScale, length * .4), wing = head * .55;
       const ex = x + dx * length / 2, ey = y + dy * length / 2;
       shafts.moveTo(x - dx * length / 2, y - dy * length / 2); shafts.lineTo(ex, ey);
@@ -154,7 +153,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-flowview'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-flowview2'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
