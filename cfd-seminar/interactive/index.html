@@ -6,7 +6,7 @@
   <title>流れを組み立てる | CFD Lab</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-ns-form">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-profiles"></script><script defer src="app.js?v=20261022-ns-form"></script>
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-profiles"></script><script defer src="profile.js?v=20261022-profiles"></script><script defer src="app.js?v=20261022-batches"></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="../">CFD <b>Lab</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD seminar <span aria-hidden="true">↗</span></a></header>
@@ -34,7 +34,7 @@
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">
       <div class="view-toolbar"><div class="segmented" role="group" aria-label="表示する量"><button data-view="speed" aria-pressed="true">速さ</button><button data-view="pressure" aria-pressed="false">圧力</button><button data-view="divergence" aria-pressed="false">発散</button></div><label class="arrow-toggle"><input id="arrows" type="checkbox" checked>ベクトル</label><button class="icon-button" id="fullscreen" title="表示を拡大" aria-label="表示を拡大"><img src="icons/maximize.svg" alt=""></button></div>
-      <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><div class="time"><span>時刻 <output id="time">0.000 s</output></span><span>Δt <output id="dt">— s</output></span></div><label class="rate-label">計算/更新 <select id="rate"><option value="1" selected>1 step</option><option value="3">3 steps</option><option value="6">6 steps</option></select></label></div>
+      <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><div class="time"><span>時刻 <output id="time">0.000 s</output></span><span>Δt <output id="dt">— s</output></span></div><label class="rate-label">計算/更新 <select id="rate"><option value="1">1 step</option><option value="3">3 steps</option><option value="6" selected>6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option><option value="60">60 steps</option></select></label></div>
       <div class="visualization-grid">
       <div class="canvas-wrap" id="canvas-wrap">
         <div class="canvas-top"><span id="wall-label">Poiseuille flow</span><span id="run-state">読み込み中</span></div>

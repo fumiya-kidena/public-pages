@@ -59,6 +59,7 @@ function pressureOutline() {
   $('pressure-outline').querySelector('path').setAttribute('d', `M ${left} ${y} H ${right} V ${foot} H ${inner} V ${middle} H ${left} Z`);
 }
 function playState(value) {
+  if (!value && running && worker) worker.postMessage({ type: 'stop' });
   running = value;
   $('play-label').textContent = running ? '停止' : '再生';
   $('play-icon').hidden = running; $('pause-icon').hidden = !running;
@@ -157,7 +158,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-profiles'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-batches'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
