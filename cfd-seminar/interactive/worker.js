@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-profiles');
+importScripts('solver.js?v=20261022-white-10mm');
 let solver = new FlowSolver();
 let batch = null;
 function reply(request) {

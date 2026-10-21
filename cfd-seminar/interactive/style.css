@@ -13,6 +13,8 @@
 .time-settings output{display:block}
 .controls .time-settings{display:block}
 .canvas-top{flex-wrap:wrap}
+.canvas-wrap{background:var(--paper);color:var(--ink)}
+.colorbar{height:8px;border:1px solid #cbd5d9;background:linear-gradient(90deg,#fff,#badfeb,#2a9da4,#eaa644)}
 .canvas-bottom{max-width:440px}
 .domain-label{overflow-wrap:anywhere}
 @media(max-width:650px){.time{min-width:120px}.time output{font-size:14px}.canvas-bottom{font-size:10px}}
@@ -30,21 +32,21 @@
 .equation-system #continuity{color:inherit}
 .equation-system .press:has(:checked){border-color:transparent;background:transparent}
 .equation-system .equation-toggle{border-radius:0}
-.domain-label{text-align:center;font-size:11px;margin-top:8px;color:#c6d2db}
-#flow{image-rendering:pixelated}
+.domain-label{text-align:center;font-size:11px;margin-top:8px;color:var(--muted)}
+#flow{image-rendering:pixelated;background:white;border-color:#aebcc4}
 #flow.wide{width:100%;max-width:920px;aspect-ratio:2}
 .flow-domain{display:grid;grid-template-columns:64px minmax(0,1fr) 64px;grid-template-rows:auto auto auto;gap:6px;align-items:center;width:100%;max-width:1060px;margin:0 auto}
 .flow-domain[data-case="cavity"]{max-width:720px}
 .flow-domain #flow{grid-column:2;grid-row:2;width:100%;max-width:none}
-.boundary-top,.boundary-bottom{grid-column:2;text-align:center;font-size:12px;color:#e3edf2;line-height:1.6}
+.boundary-top,.boundary-bottom{grid-column:2;text-align:center;font-size:12px;color:var(--ink);line-height:1.6}
 .boundary-top{grid-row:1}.boundary-bottom{grid-row:3}
-.boundary-side{grid-row:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;text-align:center;font-size:11px;line-height:1.4;color:#b8c9d1}
+.boundary-side{grid-row:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0;text-align:center;font-size:11px;line-height:1.4;color:var(--muted)}
 .boundary-left{grid-column:1}.boundary-right{grid-column:3}
-.boundary-side strong{font-size:11px;font-weight:600;white-space:nowrap;color:#f0f8fc}
-.boundary-arrow{font-size:28px;line-height:1;color:#80e0d1}
+.boundary-side strong{font-size:11px;font-weight:600;white-space:nowrap;color:var(--ink)}
+.boundary-arrow{font-size:28px;line-height:1;color:var(--visc)}
 .boundary-arrow[hidden]{display:none}
 .boundary-side [hidden]{display:none}
-.scale-note{margin:6px 0 0;text-align:center;font-size:11px;color:#b8c9d1}
+.scale-note{margin:6px 0 0;text-align:center;font-size:11px;color:var(--muted)}
 .scale-note[hidden]{display:none}
 .canvas-wrap:fullscreen .flow-domain{max-width:calc(160vh + 140px)}
 .canvas-wrap:fullscreen .flow-domain[data-case="cavity"]{max-width:calc(70vh + 140px)}
@@ -55,7 +57,7 @@
 main{max-width:1600px}
 .workspace{grid-template-columns:220px minmax(0,1fr);gap:24px}
 .visualization-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
-.profile-pane{margin:0;padding:12px 0 0;min-width:0;border-top:1px solid var(--line)}
+.profile-pane{margin:0;padding:12px 12px 0;min-width:0;border-top:1px solid var(--line);background:var(--paper)}
 .profile-pane h2{font-size:15px;margin:0 0 4px}
 .profile-pane figcaption p,.profile-pane>p{font-size:11px;color:var(--muted);line-height:1.8;margin:0 0 10px}
 .profile-plot{position:relative;height:360px;min-width:0}

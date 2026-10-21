@@ -14,7 +14,7 @@ const FlowProfile = (() => {
       layout: { padding: { top: 8, right: 12 } },
       scales: {
         x: { type: 'linear', min: 0, max: 1.6, title: { display: true, text: 'u (mm/s)' }, ticks: { maxTicksLimit: 5 }, grid: { color: '#e6ebed' } },
-        y: { type: 'linear', min: 0, max: 20, title: { display: true, text: 'y (mm)' }, ticks: { maxTicksLimit: 6 }, grid: { color: '#e6ebed' } }
+        y: { type: 'linear', min: 0, max: 10, title: { display: true, text: 'y (mm)' }, ticks: { maxTicksLimit: 6 }, grid: { color: '#e6ebed' } }
       },
       plugins: {
         legend: { position: 'bottom', labels: { boxWidth: 22, boxHeight: 2, font: { size: 11 }, padding: 14, filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 } },

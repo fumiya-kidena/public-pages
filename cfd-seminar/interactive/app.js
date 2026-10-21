@@ -5,7 +5,7 @@ const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .001;
-const domainHeight = .02;
+const domainHeight = .01;
 const explanations = [
   '① 移流：速度の分布が、流れによって運ばれます。',
   '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
@@ -76,7 +76,7 @@ function reset() {
 }
 function color(t, signed) {
   t = Math.max(0, Math.min(1, t));
-  const stops = signed ? [[45, 107, 180], [223, 230, 234], [188, 61, 86]] : [[21, 39, 53], [23, 105, 121], [53, 180, 164], [237, 232, 174]];
+  const stops = signed ? [[45, 107, 180], [255, 255, 255], [188, 61, 86]] : [[255, 255, 255], [186, 223, 235], [42, 157, 164], [234, 166, 68]];
   const a = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(a)), f = a - i;
   return stops[i].map((x, c) => Math.round(x * (1 - f) + stops[i + 1][c] * f));
 }
@@ -99,7 +99,7 @@ function draw() {
     pixels.data.set([...rgb, 255], pixel);
   }
   fctx.putImageData(pixels, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(field, 0, 0, width, height);
-  ctx.strokeStyle = signed ? 'rgba(20,35,45,.24)' : 'rgba(230,242,248,.24)';
+  ctx.strokeStyle = 'rgba(32,42,48,.18)';
   ctx.lineWidth = 1; ctx.beginPath();
   for (let i = 1; i < nx; i++) { ctx.moveTo(i*cell,0); ctx.lineTo(i*cell,height); }
   for (let j = 1; j < n; j++) { ctx.moveTo(0,j*cell); ctx.lineTo(width,j*cell); }
@@ -119,9 +119,9 @@ function draw() {
       heads.lineTo(ex - head * dx - wing * dy, ey - head * dy + wing * dx); heads.closePath();
     }
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = 'rgba(8,22,30,.8)'; ctx.lineWidth = 2.4*pixelScale;
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2.4*pixelScale;
     ctx.stroke(shafts); ctx.stroke(heads);
-    ctx.strokeStyle = '#f5fcff'; ctx.fillStyle = '#f5fcff'; ctx.lineWidth = 1.1*pixelScale;
+    ctx.strokeStyle = '#202a30'; ctx.fillStyle = '#202a30'; ctx.lineWidth = 1.1*pixelScale;
     ctx.stroke(shafts); ctx.fill(heads);
   }
   const names = { speed: '速さ (mm/s)', pressure: o.case === 'channel' ? '圧力差 (Pa)' : '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
@@ -129,7 +129,7 @@ function draw() {
   $('legend-name').textContent = names[view]; $('scale-max').textContent = scaleLabel(displayMax);
   $('domain-label').textContent = `${scaleLabel(frame.lx*1000)} × ${scaleLabel(frame.ly*1000)} mm · ${nx} × ${n} セル · 格子幅 ${scaleLabel(frame.h*1000)} mm`;
   $('colorbar').previousElementSibling.textContent = signed ? scaleLabel(-displayMax) : '0';
-  $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#dfe6ea,#bc3d56)' : '';
+  $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#fff,#bc3d56)' : '';
   $('speed-scale-note').hidden = signed || o.case !== 'channel';
   $('speed-scale-note').textContent = `定常・十分発達した流れの理論最大値 ${(speedMax*1000).toFixed(1)} mm/s`;
 }
@@ -158,7 +158,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-batches'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-white-10mm'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
