@@ -6,7 +6,6 @@ let frame = null, running = false, pending = 0, view = 'speed', worker, counter 
 let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .01;
-const domainHeight = .01;
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
   '① 移流：速度の分布が、流れによって運ばれます。',
@@ -28,6 +27,7 @@ function controlState() {
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.pressure][i]));
   $('nu').disabled = !o.viscosity;
   const channel = o.case === 'channel', speed = channel ? o.inflow : o.lid;
+  const domainHeight = channel ? .005 : .01;
   $('nu-value').textContent = (o.nu*1e6).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
@@ -47,7 +47,7 @@ function controlState() {
   $('boundary-right-arrow').hidden = !channel;
   $('boundary-note').textContent = channel ? '左から一様に流入、右は自由流出・圧力指定。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 2*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
+  $('grid-info').textContent = `${channel ? 4*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
@@ -108,6 +108,9 @@ function draw() {
   const { n, nx, u, v, p, div, options: o } = frame;
   canvas.width = 720 * nx/n; canvas.height = 720;
   canvas.classList.toggle('wide', nx !== n);
+  canvas.style.aspectRatio = String(nx/n);
+  $('section-u').style.left = `${100*frame.profileX/frame.lx}%`;
+  $('section-v').style.top = `${100*(1-frame.profileY/frame.ly)}%`;
   const width = canvas.width, height = canvas.height, cell = height/n;
   field.width = nx; field.height = n;
   const pixels = fctx.createImageData(nx, n), signed = view !== 'speed';
@@ -186,7 +189,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-ghia-profiles'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-profile-history'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -227,6 +230,7 @@ document.addEventListener('fullscreenchange', () => {
   $('fullscreen').title = label; $('fullscreen').setAttribute('aria-label', label);
   $('fullscreen').setAttribute('aria-pressed', String(active));
   $('fullscreen').querySelector('img').src = `icons/${active ? 'minimize' : 'maximize'}.svg`;
+  FlowProfile.resize();
   if (!active) $('fullscreen').focus({ preventScroll: true });
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden) playState(false); });

@@ -34,10 +34,18 @@
 .equation-system .equation-toggle{border-radius:0}
 .domain-label{text-align:center;font-size:11px;margin-top:8px;color:var(--muted)}
 #flow{image-rendering:pixelated;background:white;border-color:#aebcc4}
-#flow.wide{width:100%;max-width:920px;aspect-ratio:2}
+#flow.wide{width:100%;max-width:920px;aspect-ratio:4}
 .flow-domain{display:grid;grid-template-columns:64px 34px minmax(0,1fr) 64px;grid-template-rows:auto auto 28px auto;gap:6px 0;align-items:center;width:100%;max-width:1060px;margin:0 auto}
 .flow-domain[data-case="cavity"]{max-width:720px}
 .flow-domain #flow{grid-column:3;grid-row:2;width:100%;max-width:none}
+.profile-sections{grid-column:3;grid-row:2;align-self:stretch;position:relative;pointer-events:none;min-width:0;min-height:0}
+.section-line{position:absolute;box-shadow:0 0 0 1px rgb(255 255 255 / 85%)}
+.section-u{left:100%;top:0;bottom:0;border-left:2px dashed var(--adv);color:var(--adv)}
+.section-v{top:50%;left:0;right:0;border-top:2px dashed var(--press);color:var(--press)}
+.section-line span{position:absolute;font-size:11px;line-height:18px;font-weight:700;background:rgb(255 255 255 / 95%);padding:0 4px}
+.section-u span{right:5px;top:4px}.section-v span{left:5px;top:1px;line-height:14px}
+.section-key{font-size:12px;display:inline-block;width:22px;font-weight:700}
+.key-u{color:var(--adv)}.key-v{color:var(--press)}
 .spatial-axis{position:relative;color:var(--muted);font-size:10px;line-height:14px;font-variant-numeric:tabular-nums;pointer-events:none}
 .spatial-axis .axis-ticks{position:absolute;inset:0}
 .spatial-axis .axis-title{position:absolute;white-space:nowrap}
