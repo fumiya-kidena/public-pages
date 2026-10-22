@@ -88,6 +88,24 @@ main{max-width:1600px}
 .discretization p,.dimensional p{font-size:13px;line-height:1.9}
 .discrete-row{border-top:1px solid var(--line);padding:24px 0}
 .discrete-formulas{max-width:900px;min-width:0}
+.grid-notation{display:grid;grid-template-columns:minmax(0,540px) minmax(280px,330px);gap:30px;align-items:center;max-width:900px}
+.grid-notation h3{font-size:14px;margin:12px 0}
+.mac-grid{margin:0;min-width:0;font-size:15px;text-align:center}
+.mac-cell{position:relative;width:120px;height:120px;border:1px solid #9aabb4;margin:40px auto;background:white}
+.mac-center{position:absolute;left:50%;top:50%;padding-left:10px;transform:translateY(-50%);color:var(--press)}
+.mac-center::before{content:"";position:absolute;left:0;top:50%;width:5px;height:5px;background:currentColor;border-radius:50%;transform:translate(-50%,-50%)}
+.mac-face{position:absolute;color:var(--adv);width:7px;height:7px;background:currentColor;border-radius:50%;transform:translate(-50%,-50%)}
+.mac-face>span{position:absolute;white-space:nowrap}
+.mac-left{left:0;top:50%}.mac-right{left:100%;top:50%}.mac-top{left:50%;top:0}.mac-bottom{left:50%;top:100%}
+.mac-left>span{right:15px;top:50%;transform:translateY(-50%)}.mac-right>span{left:15px;top:50%;transform:translateY(-50%)}
+.mac-top>span{left:50%;bottom:12px;transform:translateX(-50%)}.mac-bottom>span{left:50%;top:12px;transform:translateX(-50%)}
+.mac-grid figcaption{font-size:12px;color:var(--muted)}
+.time-notation{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));max-width:900px;gap:12px;margin:24px 0;border-block:1px solid var(--line);padding:14px 0}
+.time-notation dt{font-size:16px}.time-notation dd{font-size:12px;margin:6px 0 0;color:var(--muted)}
+.discretization .formula-condition{margin:6px 0 0;font-size:12px;color:var(--muted)}
+.time-step-details{--accent:var(--ink)}
+@media(max-width:360px){#time-step-equation{font-size:13px}}
+@media(max-width:800px){.grid-notation{grid-template-columns:minmax(0,1fr);gap:8px}.time-notation{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 12px}}
 .discrete-row h3{color:var(--accent);margin:0 0 14px}
 .discrete-row h3 small{color:var(--muted);font-size:12px;margin-left:12px;font-weight:400}
 .discrete-row h4{font-size:13px;font-weight:600;color:var(--muted);margin:20px 0 2px}
