@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-advection-modes');
+importScripts('solver.js?v=20261022-light-grid');
 let solver = new FlowSolver();
 let batch = null;
 const profileAges = [60, 120, 180];

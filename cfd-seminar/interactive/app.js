@@ -7,6 +7,7 @@ let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .01;
 const caseViscosity = { channel: 2, cavity: 1 };
+const caseGrid = { channel: 32, cavity: 64 };
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
   '① 移流：速度を運ぶ',
@@ -49,6 +50,7 @@ function controlState() {
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
   const n = +$('grid').value;
+  for (const item of $('grid').options) item.textContent = `${item.value}分割${+item.value === (channel ? 32 : 64) ? ' · 標準' : ''}`;
   $('grid-info').textContent = `${channel ? 5*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
@@ -194,9 +196,9 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-advection-modes'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-light-grid'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
-  send('snapshot');
+  send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
 $('play').onclick = () => { playState(!running); schedule(); };
 $('reset').onclick = () => { if (worker) reset(); };
@@ -208,7 +210,10 @@ for (const id of ['advection', 'viscosity', 'pressure', 'nu', 'scheme-upwind', '
   const stage = ['advection', 'viscosity', 'pressure'].indexOf(id);
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
 });
-$('grid').onchange = () => { controlState(); if (worker) reset(); };
+$('grid').onchange = () => {
+  caseGrid[$('case').value] = +$('grid').value;
+  controlState(); if (worker) reset();
+};
 $('dt-max').onchange = () => {
   if (!$('dt-max').value || !$('dt-max').reportValidity()) return;
   dtLimit = +$('dt-max').value;
@@ -216,6 +221,7 @@ $('dt-max').onchange = () => {
 };
 $('case').onchange = () => {
   $('nu').value = caseViscosity[$('case').value];
+  $('grid').value = caseGrid[$('case').value];
   controlState(); if (worker) reset();
 };
 $('arrows').onchange = draw;

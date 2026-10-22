@@ -6,7 +6,7 @@
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-compact-header">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-advection-modes"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-advection-modes"></script>
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-advection-modes"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-light-grid"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -32,7 +32,7 @@
         <label class="slider-label" for="nu">動粘性係数 (mm²/s) <output id="nu-value">2.0</output></label><input id="nu" type="range" min="0.5" max="10" step="0.1" value="2" disabled>
         <p class="muted">ρ = 1000 kg/m³</p>
       </div>
-      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="32">32分割 · 0.5倍</option><option value="64" selected>64分割 · 標準</option><option value="96">96分割 · 1.5倍</option><option value="128">128分割 · 2倍</option></select><p class="muted" id="grid-info"></p></div>
+      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="16">16分割</option><option value="32" selected>32分割 · 標準</option><option value="64">64分割</option><option value="96">96分割</option><option value="128">128分割</option></select><p class="muted" id="grid-info"></p></div>
       <div class="control-section time-settings"><label class="select-label" for="dt-max">Δt 上限 (s)</label><input id="dt-max" type="number" min="0.001" max="1" step="0.001" value="0.1" title="安定条件に応じて、この上限以下に自動調整"><output id="reynolds" class="muted"></output></div>
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">

@@ -2,8 +2,8 @@
 (function (root) {
   'use strict';
   class FlowSolver {
-    constructor(n = 64) {
-      if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
+    constructor(n = 32) {
+      if (!Number.isInteger(n) || n < 16 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.rho = 1000;
       this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 2e-6, lid: 0.01, inflow: 0.01, dtMax: 0.1 };
