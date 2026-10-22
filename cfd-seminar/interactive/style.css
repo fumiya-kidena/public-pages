@@ -8,10 +8,8 @@
 .time span{white-space:nowrap}
 .time span:last-child{font-size:11px}
 .time span:last-child output{font-size:12px}
-.time-settings input{width:100%;min-height:36px;padding:6px 8px;border:1px solid var(--line);border-radius:4px;color:var(--ink);background:white}
-.time-settings input:invalid{border-color:var(--adv)}
-.time-settings output{display:block}
-.controls .time-settings{display:block}
+.controls .control-section{display:block}
+.controls #grid{width:100%}
 .canvas-top{flex-wrap:wrap}
 .canvas-wrap{background:var(--paper);color:var(--ink)}
 .colorbar{height:8px;border:1px solid #cbd5d9;background:linear-gradient(90deg,#fff,#badfeb,#2a9da4,#eaa644)}

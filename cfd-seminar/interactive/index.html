@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-compact-header">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-advection-modes"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-light-grid"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-fixed-water">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-fixed-water"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-fixed-water"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -28,17 +28,18 @@
     <aside class="controls" aria-label="計算条件">
       <label class="select-label" for="case">計算ケース</label><select id="case"><option value="channel">Poiseuille flow</option><option value="cavity">Cavity flow</option></select>
       <p id="model-note" class="model-note">圧力補正OFF</p>
-      <div class="control-section"><h2>物性と境界</h2>
-        <label class="slider-label" for="nu">動粘性係数 (mm²/s) <output id="nu-value">2.0</output></label><input id="nu" type="range" min="0.5" max="10" step="0.1" value="2" disabled>
-        <p class="muted">ρ = 1000 kg/m³</p>
+      <div class="control-section"><h2>水（約20℃・近似値）</h2>
+        <p class="muted">密度 ρ = 1000 kg/m³</p>
+        <p class="muted">粘性係数 μ = 0.001 Pa·s</p>
+        <p class="muted">動粘性係数 ν = 1 mm²/s</p>
+        <output id="reynolds" class="muted"></output>
       </div>
       <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="16">16分割</option><option value="32" selected>32分割 · 標準</option><option value="64">64分割</option><option value="96">96分割</option><option value="128">128分割</option></select><p class="muted" id="grid-info"></p></div>
-      <div class="control-section time-settings"><label class="select-label" for="dt-max">Δt 上限 (s)</label><input id="dt-max" type="number" min="0.001" max="1" step="0.001" value="0.1" title="安定条件に応じて、この上限以下に自動調整"><output id="reynolds" class="muted"></output></div>
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">
       <div class="simulation-view" id="simulation-view">
       <div class="view-toolbar"><div class="segmented" role="group" aria-label="表示する量"><button data-view="speed" aria-pressed="true">速さ</button><button data-view="pressure" aria-pressed="false">圧力</button><button data-view="divergence" aria-pressed="false">発散</button></div><label class="arrow-toggle"><input id="arrows" type="checkbox" checked>ベクトル</label><button class="icon-button" id="fullscreen" title="全画面表示" aria-label="全画面表示" aria-pressed="false"><img src="icons/maximize.svg" alt=""></button></div>
-      <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><div class="time"><span>時刻 <output id="time">0.000 s</output></span><span>Δt <output id="dt">— s</output></span></div><label class="rate-label">計算/更新 <select id="rate"><option value="1">1 step</option><option value="3">3 steps</option><option value="6" selected>6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option><option value="60">60 steps</option></select></label></div>
+      <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><div class="time"><span>時刻 <output id="time">0.000 s</output></span><span>Δt（固定） <output id="dt">— s</output></span></div><label class="rate-label">計算/更新 <select id="rate"><option value="1">1 step</option><option value="3">3 steps</option><option value="6" selected>6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option><option value="60">60 steps</option></select></label></div>
       <p id="error" role="alert" hidden></p>
       <div class="visualization-grid">
       <div class="canvas-wrap" id="canvas-wrap">
@@ -168,14 +169,14 @@
         </details>
       </div>
     </article>
-    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="U_{\max}"></span> は境界用の仮想点を含む速度成分の最大絶対値です。移流OFFでは分母の速度項、粘性OFFでは拡散項を除きます。両方OFFなら上限の時間刻みを使います。</p></details>
+    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="U=0.01\,\mathrm{m/s}"></span>。格子幅ごとに上限以下の有効数字1桁へ切り下げて固定します。項のON/OFFや計算中の流速では変わりません。Poiseuille flowの標準32分割は0.0006 s、Cavity flowの標準64分割は0.0008 sです。</p></details>
   </section>
   <details class="dimensional"><summary>Reynolds数と有次元化</summary>
     <p>同じ形状・境界条件でレイノルズ数をそろえると、無次元の速度分布を換算できます。Ghiaらの参照解は2次元の定常解で、開始直後の過渡的な流れとは区別します。<a href="#ref-1">[1]</a></p>
     <div class="math-block" id="dimensional-equation"></div>
     <p>水の動粘性係数を約 <span data-math="10^{-6}\,\mathrm{m^2/s}"></span>、正方形の一辺を10 mmとした換算例：</p>
     <table class="water-table"><thead><tr><th>Re</th><th>上壁速度</th><th>時間の基準 L/U</th></tr></thead><tbody><tr><td>100</td><td>10 mm/s</td><td>1 s</td></tr><tr><td>400</td><td>40 mm/s</td><td>0.25 s</td></tr><tr><td>1000</td><td>100 mm/s</td><td>0.1 s</td></tr></tbody></table>
-    <p class="muted">速度は10 mm/sです。Poiseuille flowは高さ4 mm・ν = 2 mm²/sでRe = 20、Cavity flowは高さ10 mm・ν = 1 mm²/sでRe = 100です。領域寸法は固定で、格子数を変えると格子幅が変わります。表はキャビティの定常参照解と比較するための換算例です。実際の水槽の奥行き方向・自由表面・温度変化は含みません。</p>
+    <p class="muted">水の近似値としてρ = 1000 kg/m³、μ = 0.001 Pa·s、ν = μ/ρ = 1 mm²/sを使います。速度は10 mm/sです。Poiseuille flowは高さ4 mmでRe = 40、Cavity flowは高さ10 mmでRe = 100です。領域寸法は固定で、格子数を変えると格子幅が変わります。表はキャビティの定常参照解と比較するための換算例です。実際の水槽の奥行き方向・自由表面・温度変化は含みません。</p>
   </details>
   <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが10 × 10 mm、Poiseuille flowが20 × 4 mm。速度はmm/s、圧力はPa（Poiseuille flowは出口の基準圧力との差、Cavity flowは領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数は基準圧力との差を密度で割った値で、表示時にρ = 1000 kg/m³を掛けます。流入速度と上壁速度は10 mm/sに固定しています。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowの出口は自由流出とし、圧力を基準値に固定します。出口の予測速度は内側から外挿し、圧力補正で出口速度を決めます。流出流量は直接指定しません。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は1次風上（既定）または1次Godunovを選べます。Godunovは自己移流にBurgers流束、交差方向に1次風上差分を使います。圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>内部の速度ベクトルは向きを示します。低速でも向きを読めるよう最低表示長を設け、長さには上限もあります。駆動速度の1%未満のベクトルは省略します。速さは色で確認できます。周囲の矢印と速度は境界条件です。出口の流速は計算により決まります。速さの色の最大値はPoiseuille flowでは15 mm/s（十分に発達した平行平板間流れの理論最大値）、Cavity flowでは上壁速度の10 mm/sです。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは色の上限値より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。横方向速度uのグラフはPoiseuille flowではx = 18 mm（出口の2 mm手前）、Cavity flowでは中央の縦断面を用います。Poiseuille flowはu分布だけを表示します。Cavity flowは中央横断面のv分布も同じ図に重ねます。上軸がu、左軸がy、下軸がx、右軸がvで、速度ゼロの破線が中央で交わります。可視化上のu・vの線が断面位置です。MAC格子の速度を断面位置へ線形補間し、境界の値も含めます。Poiseuille flowの薄い実線は60・120・180ステップ前の速度分布です。履歴は完了した時間ステップの値だけを保存し、条件変更・リセットで消去します。Ghiaらの参照点（uは丸印、vは四角印）はRe = 100の定常参照値を上壁速度と領域寸法で有次元化したものです。Reが一致するときだけ表示し、異なるRe間の補間は行いません。計算値は現在の時刻の値なので、開始直後や一部の項がOFFのときに定常参照値とは一致しません。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
   <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p id="ref-7">[7] Ketcheson, LeVeque &amp; del Razo. <a href="https://www.clawpack.org/riemann_book/html/Burgers_approximate.html" target="_blank" rel="noopener">Riemann Problems and Jupyter Solutions: Burgers equation</a>（オンライン版、DOI表記なし）</p><p>Charts: <a href="../assets/chartjs.LICENSE.md">Chart.js / MIT</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>

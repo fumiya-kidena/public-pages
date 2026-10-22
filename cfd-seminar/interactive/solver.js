@@ -6,7 +6,7 @@
       if (!Number.isInteger(n) || n < 16 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.rho = 1000;
-      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 2e-6, lid: 0.01, inflow: 0.01, dtMax: 0.1 };
+      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 1e-6, lid: 0.01, inflow: 0.01 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
@@ -21,9 +21,8 @@
         if (!['upwind', 'godunov'].includes(options.advectionScheme)) throw new Error('Unsupported advection scheme');
         next.advectionScheme = options.advectionScheme;
       }
-      if (changedCase && !('nu' in options)) next.nu = next.case === 'channel' ? 2e-6 : 1e-6;
       for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) next[key] = !!options[key];
-      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.01], ['inflow', 0.0001, 0.01], ['dtMax', 0.001, 1]]) {
+      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.01], ['inflow', 0.0001, 0.01]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
@@ -62,6 +61,13 @@
       }
       for (let i = 1; i <= nx; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
     }
+    timeStep() {
+      // Reserve both operators and a 2U ghost-cell speed, independent of the toggles.
+      const speed = Math.max(.01, this.options.inflow, this.options.lid);
+      const limit = .35 / (4 * speed / this.h + 4 * this.options.nu / this.h ** 2);
+      const unit = 10 ** Math.floor(Math.log10(limit));
+      return Number((Math.floor(limit / unit) * unit).toPrecision(1));
+    }
     begin() {
       this.boundary(); this.un.set(this.u); this.vn.set(this.v);
       let speed = 0;
@@ -69,9 +75,10 @@
       const nu = this.options.viscosity ? this.options.nu : 0;
       const advectionRate = this.options.advection ? 2 * speed / this.h : 0;
       const diffusionRate = 4 * nu / this.h ** 2;
-      this.dt = Math.min(this.options.dtMax, 0.35 / (advectionRate + diffusionRate + 1e-30));
+      this.dt = this.timeStep();
       this.cfl = advectionRate * this.dt;
       this.diffusionNumber = diffusionRate * this.dt;
+      if (this.cfl + this.diffusionNumber > 1) throw new Error('固定の時間刻みで安定条件を超えました。リセットしてください。');
     }
     static burgersFlux(left, right) {
       const fl = left * left / 2, fr = right * right / 2;
@@ -206,7 +213,7 @@
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, fixedDt: this.timeStep(), cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;
