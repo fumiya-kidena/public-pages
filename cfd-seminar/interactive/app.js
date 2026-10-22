@@ -7,6 +7,7 @@ let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .001;
 const domainHeight = .01;
+const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
   '① 移流：速度の分布が、流れによって運ばれます。',
   '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
@@ -167,9 +168,13 @@ function receive({ data }) {
   $('dt').title = data.dt > 0 ? `Δt = ${data.dt.toPrecision(10)} s / 安定性の指標 ${(data.cfl+data.diffusionNumber).toFixed(3)} ≤ 0.35` : '';
   $('energy').textContent = scientific(data.stats.energy); $('divergence').textContent = scientific(data.stats.divergence);
   $('projection').textContent = data.options.pressure && data.projectionCount ? `${scientific(data.before)} → ${scientific(data.after)}` : '未実行';
-  document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('current', i === (data.phase + 2) % 3 && data.dt > 0));
-  if (data.dt > 0) $('stage-description').textContent = data.stage + '完了。' + explanations[(data.phase + 2) % 3];
-  else $('stage-description').textContent = explanations[0];
+  const completed = stageNames.findIndex(name => data.stage === name || data.stage === name + 'をスキップ');
+  document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('current', i === completed));
+  $('stage-description').textContent = completed < 0
+    ? (data.stage === '設定変更' ? '条件を変更しました。次の時間ステップから適用します。' : explanations[0])
+    : data.stage.endsWith('をスキップ')
+      ? `${['①', '②', '③'][completed]} ${stageNames[completed]}はOFFのためスキップしました。`
+      : `${stageNames[completed]}完了。${explanations[completed]}`;
   draw();
   FlowProfile.update(data);
   // Leave time for UI and paint; there is at most one automatic batch in flight.
@@ -207,12 +212,22 @@ $('arrows').onchange = draw;
 new ResizeObserver(() => { draw(); FlowProfile.resize(); }).observe(canvas);
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => {
   view = button.dataset.view;
-  document.querySelectorAll('[data-view]').forEach(el => el.setAttribute('aria-pressed', String(el === button))); draw();
+  document.querySelectorAll('[data-view]').forEach(el => el.setAttribute('aria-pressed', String(el === button)));
+  canvas.setAttribute('aria-label', `計算した${{speed: '速度', pressure: '圧力', divergence: '発散'}[view]}場。横軸x・縦軸yはmm単位、原点は左下。周囲に境界条件を表示。`);
+  draw();
 });
 document.querySelectorAll('[data-stage]').forEach(button => button.onclick = () => { $('stage-description').textContent = explanations[+button.dataset.stage]; });
 $('fullscreen').onclick = async () => {
-  try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('canvas-wrap').requestFullscreen(); }
-  catch { $('canvas-wrap').scrollIntoView({ block: 'center' }); }
+  try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('simulation-view').requestFullscreen(); }
+  catch { $('simulation-view').scrollIntoView({ block: 'start' }); }
 };
+document.addEventListener('fullscreenchange', () => {
+  const active = document.fullscreenElement === $('simulation-view');
+  const label = active ? '全画面を終了' : '全画面表示';
+  $('fullscreen').title = label; $('fullscreen').setAttribute('aria-label', label);
+  $('fullscreen').setAttribute('aria-pressed', String(active));
+  $('fullscreen').querySelector('img').src = `icons/${active ? 'minimize' : 'maximize'}.svg`;
+  if (!active) $('fullscreen').focus({ preventScroll: true });
+});
 document.addEventListener('visibilitychange', () => { if (document.hidden) playState(false); });
 window.addEventListener('pagehide', () => { if (worker) worker.terminate(); });

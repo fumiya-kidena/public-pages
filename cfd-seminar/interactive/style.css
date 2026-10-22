@@ -59,9 +59,6 @@
 .boundary-side [hidden]{display:none}
 .scale-note{margin:6px 0 0;text-align:center;font-size:11px;color:var(--muted)}
 .scale-note[hidden]{display:none}
-.canvas-wrap:fullscreen .flow-domain{max-width:calc(160vh + 140px)}
-.canvas-wrap:fullscreen .flow-domain[data-case="cavity"]{max-width:calc(70vh + 140px)}
-.canvas-wrap:fullscreen .flow-domain #flow{width:100%;max-width:none}
 @media(max-width:650px){.flow-domain{grid-template-columns:48px 32px minmax(0,1fr) 48px;gap:6px 0}.spatial-axis{font-size:9px}.boundary-side,.boundary-side strong{font-size:10px}.boundary-top,.boundary-bottom,.scale-note{font-size:10px}.boundary-arrow{font-size:24px}}
 .control-section:last-child{flex-wrap:wrap}
 #grid-info{flex-basis:100%;margin:8px 0 0;font-variant-numeric:tabular-nums}
@@ -78,25 +75,33 @@ main{max-width:1600px}
 .discretization,.dimensional{border-top:1px solid var(--line);padding:28px 0;margin-top:20px}
 .discretization>h2{font-size:24px;margin:4px 0 12px}
 .discretization p,.dimensional p{font-size:13px;line-height:1.9}
-.discrete-row{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:28px;border-top:1px solid var(--line);padding:24px 0}
+.discrete-row{border-top:1px solid var(--line);padding:24px 0}
+.discrete-formulas{max-width:900px;min-width:0}
 .discrete-row h3{color:var(--accent);margin:0 0 14px}
 .discrete-row h3 small{color:var(--muted);font-size:12px;margin-left:12px;font-weight:400}
+.discrete-row h4{font-size:13px;font-weight:600;color:var(--muted);margin:20px 0 2px}
+.formula-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 36px}
+.formula-pair>div{min-width:0}
+.formula-details{margin-top:20px;border-left:2px solid var(--line);padding:2px 0 2px 16px}
+.formula-details summary{font-size:13px;cursor:pointer;color:var(--accent);font-weight:600}
+.formula-details p{max-width:800px}
 .math-block{overflow-x:auto;max-width:100%;font-size:16px;padding:6px 0}
 .math-block .katex-display{margin:8px 0;text-align:left}
 .math-block .katex-display>.katex{text-align:left}
-.kernel-figure{margin:0;align-self:start;color:var(--accent)}
-.kernel-figure figcaption{font-size:12px;min-height:26px}
-.kernel-axis{font-size:11px;color:var(--muted);margin:4px 0;text-align:right}
-.stencil{display:grid;grid-template-columns:repeat(3,1fr);aspect-ratio:1;border-top:1px solid var(--line);border-left:1px solid var(--line)}
-.stencil>span{display:flex;align-items:center;justify-content:center;min-width:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:18px}
-.stencil .unused{color:#aeb9bf;background:#f4f6f7}
-.stencil .used{background:color-mix(in srgb,var(--accent) 7%,white)}
-.stencil .center{outline:2px solid var(--accent);outline-offset:-2px;font-weight:650}
 .water-table{border-collapse:collapse;width:100%;max-width:620px;font-size:13px;text-align:left}
 .water-table th,.water-table td{border-bottom:1px solid var(--line);padding:10px 12px}
-@media(max-width:900px){.discrete-row{grid-template-columns:minmax(0,1fr)}.kernel-figure{width:230px}.math-block{font-size:14px}}
+@media(max-width:900px){.math-block{font-size:14px}}
+@media(max-width:650px){.formula-pair{grid-template-columns:minmax(0,1fr);gap:0}}
 @media(max-width:650px){.equation-system{gap:6px 4px}.equation-system .continuity-row{padding:8px 4px;gap:8px;font-size:15px}.equation-system .equation-name{font-size:9px}.math-block{font-size:13px}.discretization>h2{font-size:21px}.canvas-top{font-size:10px;flex-wrap:wrap}.domain-label{font-size:10px}.equation-system .equation-toggle{min-height:72px}}
 @media(min-width:651px){canvas{width:min(100%,max(300px,calc(100svh - 420px)));max-width:580px}.canvas-wrap:fullscreen canvas{width:min(80vh,90vw)}}
 .transport{padding:0 0 12px}.select-label{flex-shrink:0}.equation-band{padding-top:12px;padding-bottom:8px}.heading{margin-bottom:14px}.equation-line{min-height:48px}.masthead{height:56px}main{padding-top:20px}.pipeline{margin-top:12px}
 .continuity-row{display:flex;align-items:center;justify-content:center;position:relative;min-height:44px;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:8px;font-size:19px}.equation-name{position:absolute;left:0;font-size:11px;color:var(--muted)}.equation-band .equation-caption{margin:0 0 4px}.equation-line{padding:5px 0 10px;gap:10px}.equation-toggle{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px solid transparent;border-radius:2px;padding:10px 12px;color:#b6bcc1;cursor:pointer;min-height:82px}.equation-toggle small{font-size:11px;line-height:1.3}.equation-toggle input{position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);margin:0}.equation-toggle:has(:checked){border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,white)}.equation-toggle:hover{background:#f1f3f5}.equation-toggle:focus-within{outline:3px solid #3882c8;outline-offset:3px}#case{width:100%}#continuity{color:var(--ink)}
 @media(max-width:650px){.controls{display:block}.controls>.select-label{margin-bottom:6px}.model-note{margin:12px 0}.continuity-row{font-size:16px;min-height:40px}.equation-name{font-size:10px}.equation-line{font-size:13px;gap:4px}.equation-toggle{padding:7px 4px;min-height:72px}.equation-toggle small{font-size:9px}.equation-caption{font-size:10px}.control-section:last-child{margin-top:10px}}
+.brand{white-space:nowrap;font-size:18px}
+.heading{flex-wrap:wrap}
+.simulation-view{min-width:0}
+.simulation-view:fullscreen{--field-height:max(100px,calc(100dvh - 360px));padding:20px;background:#f7f8f9;overflow:auto}
+.simulation-view:fullscreen .flow-domain{max-width:calc(2 * var(--field-height) + 162px)}
+.simulation-view:fullscreen .flow-domain[data-case="cavity"]{max-width:calc(var(--field-height) + 162px)}
+#fullscreen[aria-pressed=true]{background:#e7edf2;border-color:#9bafbf}
+@media(max-width:650px){.masthead{flex-wrap:wrap;gap:2px 12px;height:auto;min-height:56px;padding:10px 16px}.course{border:0;padding:0}.heading .local{margin-top:0}.math-block{font-size:14px}.simulation-view:fullscreen{padding:12px}}
