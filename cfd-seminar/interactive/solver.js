@@ -64,9 +64,9 @@
     timeStep() {
       // Reserve both operators and a 2U ghost-cell speed, independent of the toggles.
       const speed = Math.max(.01, this.options.case === 'channel' ? this.options.inflow : this.options.lid);
-      const limit = .35 / (4 * speed / this.h + 4 * this.options.nu / this.h ** 2);
-      const unit = 10 ** Math.floor(Math.log10(limit));
-      return Number((Math.floor(limit / unit) * unit).toPrecision(1));
+      const limit = .7 / (4 * speed / this.h + 4 * this.options.nu / this.h ** 2);
+      const unit = 10 ** (Math.floor(Math.log10(limit)) - 1);
+      return Number((Math.floor(limit / unit) * unit).toPrecision(2));
     }
     begin() {
       this.boundary(); this.un.set(this.u); this.vn.set(this.v);
