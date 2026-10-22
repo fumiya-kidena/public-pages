@@ -5,7 +5,7 @@ const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let axisLayoutKey = '';
 const boundarySpeed = .01;
-const caseGrid = { channel: 32, cavity: 64 };
+const caseGrid = { channel: 32, cavity: 32 };
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
   '① 移流：速度を運ぶ',
@@ -46,7 +46,7 @@ function controlState() {
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
   const n = +$('grid').value;
-  for (const item of $('grid').options) item.textContent = `${item.value}分割${+item.value === (channel ? 32 : 64) ? ' · 標準' : ''}`;
+  for (const item of $('grid').options) item.textContent = `${item.value}分割${+item.value === 32 ? ' · 標準' : ''}`;
   $('grid-info').textContent = `${channel ? 5*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }

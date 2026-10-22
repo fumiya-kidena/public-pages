@@ -6,7 +6,7 @@
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-fixed-water">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-fixed-water"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-fixed-water"></script>
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-fixed-water"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-advection-modes"></script><script defer src="app.js?v=20261022-cavity32"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -169,7 +169,7 @@
         </details>
       </div>
     </article>
-    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="U=0.01\,\mathrm{m/s}"></span>。格子幅ごとに上限以下の有効数字1桁へ切り下げて固定します。項のON/OFFや計算中の流速では変わりません。Poiseuille flowの標準32分割は0.0006 s、Cavity flowの標準64分割は0.0008 sです。</p></details>
+    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="U=0.01\,\mathrm{m/s}"></span>。格子幅ごとに上限以下の有効数字1桁へ切り下げて固定します。項のON/OFFや計算中の流速では変わりません。標準32分割ではPoiseuille flowが0.0006 s、Cavity flowが0.002 sです。</p></details>
   </section>
   <details class="dimensional"><summary>Reynolds数と有次元化</summary>
     <p>同じ形状・境界条件でレイノルズ数をそろえると、無次元の速度分布を換算できます。Ghiaらの参照解は2次元の定常解で、開始直後の過渡的な流れとは区別します。<a href="#ref-1">[1]</a></p>
