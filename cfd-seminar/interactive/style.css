@@ -82,6 +82,18 @@ main{max-width:1600px}
 .discrete-row h4{font-size:13px;font-weight:600;color:var(--muted);margin:20px 0 2px}
 .formula-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 36px}
 .formula-pair>div{min-width:0}
+.kernel-pair{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px 24px;margin:16px 0}
+.coefficient-kernel{margin:16px 0;max-width:100%;width:max-content;color:var(--accent)}
+.kernel-pair .coefficient-kernel{margin:0}
+.coefficient-kernel figcaption{font-size:13px;margin-bottom:8px}
+.kernel-expression{display:flex;align-items:center;gap:8px}
+.kernel-expression>span{flex-shrink:0;font-size:16px}
+.coefficient-kernel table{border-collapse:collapse;table-layout:fixed}
+.coefficient-kernel th{font-weight:400;font-size:11px;color:var(--muted);padding:3px 5px;min-width:36px}
+.coefficient-kernel tbody td{width:38px;min-width:38px;height:38px;text-align:center;border:1px solid var(--line);font-size:17px;background:white}
+.coefficient-kernel td.zero{color:#8a969e;background:#f4f6f7}
+.coefficient-kernel td.nonzero{background:color-mix(in srgb,var(--accent) 6%,white)}
+.coefficient-kernel td.center{outline:2px solid var(--accent);outline-offset:-2px}
 .formula-details{margin-top:20px;border-left:2px solid var(--line);padding:2px 0 2px 16px}
 .formula-details summary{font-size:13px;cursor:pointer;color:var(--accent);font-weight:600}
 .formula-details p{max-width:800px}

@@ -20,4 +20,35 @@
   };
   for (const [id, tex] of Object.entries(equations)) render(document.getElementById(id), tex, true);
   document.querySelectorAll('[data-math]').forEach(el => render(el, el.dataset.math));
+  const kernels = {
+    'upwind-x-back': { title: '\\delta_x q\\quad(a\\geq0)', factor: '\\frac1h', x: ['i-1', 'i', 'i+1'], y: ['j'], values: [[-1, 1, 0]] },
+    'upwind-x-forward': { title: '\\delta_x q\\quad(a<0)', factor: '\\frac1h', x: ['i-1', 'i', 'i+1'], y: ['j'], values: [[0, -1, 1]] },
+    'upwind-y-back': { title: '\\delta_y q\\quad(b\\geq0)', factor: '\\frac1h', x: ['i'], y: ['j+1', 'j', 'j-1'], values: [[0], [1], [-1]] },
+    'upwind-y-forward': { title: '\\delta_y q\\quad(b<0)', factor: '\\frac1h', x: ['i'], y: ['j+1', 'j', 'j-1'], values: [[1], [-1], [0]] },
+    laplacian: { title: '\\Delta_h', factor: '\\frac1{h^2}', x: ['i-1', 'i', 'i+1'], y: ['j+1', 'j', 'j-1'], values: [[0, 1, 0], [1, -4, 1], [0, 1, 0]] }
+  };
+  const mathElement = (tag, tex) => {
+    const el = document.createElement(tag); render(el, tex); return el;
+  };
+  document.querySelectorAll('[data-kernel]').forEach(figure => {
+    const kernel = kernels[figure.dataset.kernel];
+    figure.appendChild(mathElement('figcaption', kernel.title));
+    const expression = document.createElement('div'); expression.className = 'kernel-expression';
+    expression.appendChild(mathElement('span', kernel.factor));
+    const table = document.createElement('table');
+    const head = table.createTHead().insertRow();
+    head.appendChild(document.createElement('td'));
+    kernel.x.forEach(x => { const th = mathElement('th', x); th.scope = 'col'; head.appendChild(th); });
+    const body = table.createTBody();
+    kernel.values.forEach((values, j) => {
+      const row = body.insertRow(), th = mathElement('th', kernel.y[j]); th.scope = 'row'; row.appendChild(th);
+      values.forEach((value, i) => {
+        const td = mathElement('td', value > 0 ? '+' + value : String(value));
+        td.className = value === 0 ? 'zero' : 'nonzero';
+        if (kernel.x[i] === 'i' && kernel.y[j] === 'j') td.classList.add('center');
+        row.appendChild(td);
+      });
+    });
+    expression.appendChild(table); figure.appendChild(expression);
+  });
 })();

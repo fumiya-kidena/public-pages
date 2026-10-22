@@ -5,7 +5,7 @@ const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
-const boundarySpeed = .001;
+const boundarySpeed = .01;
 const domainHeight = .01;
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
@@ -186,7 +186,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-white-10mm'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-coefficients-re100'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

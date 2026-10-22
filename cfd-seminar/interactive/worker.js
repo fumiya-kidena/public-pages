@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261022-white-10mm');
+importScripts('solver.js?v=20261022-coefficients-re100');
 let solver = new FlowSolver();
 let batch = null;
 function reply(request) {

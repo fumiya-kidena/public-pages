@@ -6,7 +6,7 @@
       if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.ly = 0.01; this.h = this.ly / n; this.rho = 1000;
-      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.001, inflow: 0.001, dtMax: 0.1 };
+      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.01, inflow: 0.01, dtMax: 0.1 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
