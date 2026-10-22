@@ -186,7 +186,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-coefficients-re100'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-ghia-profiles'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

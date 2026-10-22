@@ -174,12 +174,16 @@
       const profileU = new Float32Array(n+2), left = Math.floor(section), right = Math.ceil(section);
       for (let j = 1; j <= n; j++) profileU[j] = (this.u[left+s*j]+this.u[right+s*j])/2;
       profileU[n+1] = !channel && this.dt > 0 ? this.options.lid : 0;
+      const sectionY = n/2, bottom = Math.floor(sectionY), top = Math.ceil(sectionY);
+      const profileV = new Float32Array(nx+2);
+      for (let i = 1; i <= nx; i++) profileV[i] = (this.v[i+s*bottom]+this.v[i+s*top])/2;
+      profileV[nx+1] = channel ? profileV[nx] : 0;
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, a = i - 1 + nx * (j - 1);
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, profileU, profileX: section*h, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, profileU, profileX: section*h, profileV, profileY: sectionY*h, time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;

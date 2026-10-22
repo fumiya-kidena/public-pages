@@ -1,10 +1,10 @@
 'use strict';
-importScripts('solver.js?v=20261022-coefficients-re100');
+importScripts('solver.js?v=20261022-ghia-profiles');
 let solver = new FlowSolver();
 let batch = null;
 function reply(request) {
   const state = solver.snapshot();
-  self.postMessage({ ...state, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.profileU.buffer]);
+  self.postMessage({ ...state, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.profileU.buffer, state.profileV.buffer]);
 }
 function finishBatch(error) {
   if (!batch) return;

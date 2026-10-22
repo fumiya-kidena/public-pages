@@ -65,13 +65,16 @@
 main{max-width:1600px}
 .workspace{grid-template-columns:220px minmax(0,1fr);gap:24px}
 .visualization-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
+.profiles{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;min-width:0}
 .profile-pane{margin:0;padding:12px 12px 0;min-width:0;border-top:1px solid var(--line);background:var(--paper)}
 .profile-pane h2{font-size:15px;margin:0 0 4px}
 .profile-pane figcaption p,.profile-pane>p{font-size:11px;color:var(--muted);line-height:1.8;margin:0 0 10px}
-.profile-plot{position:relative;height:360px;min-width:0}
-#profile-chart{width:100%!important;height:100%!important;max-width:none;aspect-ratio:auto;background:transparent;border:0;margin:0}
-@media(max-width:1100px){.visualization-grid{grid-template-columns:minmax(0,1fr)}.profile-plot{height:300px}}
-@media(max-width:650px){.workspace{gap:16px}.profile-plot{height:300px}}
+.profile-plot{position:relative;height:180px;min-width:0}
+.profile-plot canvas{width:100%!important;height:100%!important;max-width:none;aspect-ratio:auto;background:transparent;border:0;margin:0}
+.profile-notes{grid-column:1/-1;font-size:11px;color:var(--muted);line-height:1.8}
+.profile-notes p{margin:0 12px 4px}
+@media(max-width:1100px){.visualization-grid{grid-template-columns:minmax(0,1fr)}.profiles{grid-template-columns:repeat(2,minmax(0,1fr))}.profile-plot{height:280px}}
+@media(max-width:650px){.workspace{gap:16px}.profiles{grid-template-columns:minmax(0,1fr)}}
 .discretization,.dimensional{border-top:1px solid var(--line);padding:28px 0;margin-top:20px}
 .discretization>h2{font-size:24px;margin:4px 0 12px}
 .discretization p,.dimensional p{font-size:13px;line-height:1.9}
