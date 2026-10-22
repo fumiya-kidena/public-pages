@@ -8,9 +8,9 @@ let dtLimit = +$('dt-max').value;
 const boundarySpeed = .01;
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
-  '① 移流：速度の分布が、流れによって運ばれます。',
-  '② 粘性：流速の違いをならし、壁と流体の間で運動を伝えます。静止壁は流れを遅くし、動く壁は流れを駆動します。',
-  '③ 圧力補正：仮の速度に生じた流入・流出の不釣り合いを、圧力を使って取り除きます。'
+  '① 移流：速度を運ぶ',
+  '② 粘性：速度差をならす',
+  '③ 圧力補正：流入・流出を釣り合わせる'
 ];
 const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, inflow: boundarySpeed, lid: boundarySpeed });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
@@ -30,9 +30,8 @@ function controlState() {
   const domainHeight = channel ? .005 : .01;
   $('nu-value').textContent = (o.nu*1e6).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
-  $('model-note').textContent = count === 3 ? '3つの作用がそろいました。非圧縮流れのフラクショナルステップ法です。' : !o.pressure ? '圧力補正なし：非圧縮条件を満たさない途中モデルです。' : '圧力補正は有効。移流・粘性の一部を省いたモデルです。';
-  if (channel && o.advection && !o.viscosity && !o.pressure) $('model-note').textContent += ' この差分式では、内部速度ゼロから移流だけでは流入の変化が伝わりません。';
-  if (!channel && !o.viscosity) $('model-note').textContent += ' 粘性OFFでは、静止した内部へ上壁の運動は伝わりません。';
+  $('model-note').textContent = count === 3 ? '全項ON' : !o.pressure ? '圧力補正OFF · 非圧縮条件なし' : '一部の項がOFF';
+  if ((channel && o.advection && !o.viscosity && !o.pressure) || (!channel && !o.viscosity)) $('model-note').textContent += ' / ゼロ初期場では内部静止';
   $('model-note').classList.toggle('complete', count === 3);
   $('wall-label').textContent = channel ? 'Poiseuille flow' : 'Cavity flow';
   $('flow-domain').dataset.case = o.case;
@@ -45,7 +44,6 @@ function controlState() {
   $('boundary-pressure').hidden = !channel;
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
-  $('boundary-note').textContent = channel ? '左から一様に流入、右は自由流出・圧力指定。上下の壁は静止しています。' : '上壁だけが右へ動く閉じた箱。他の3辺は静止壁です。';
   const n = +$('grid').value;
   $('grid-info').textContent = `${channel ? 4*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
@@ -111,6 +109,7 @@ function draw() {
   canvas.style.aspectRatio = String(nx/n);
   $('section-u').style.left = `${100*frame.profileX/frame.lx}%`;
   $('section-v').style.top = `${100*(1-frame.profileY/frame.ly)}%`;
+  $('section-v').hidden = o.case === 'channel';
   const width = canvas.width, height = canvas.height, cell = height/n;
   field.width = nx; field.height = n;
   const pixels = fctx.createImageData(nx, n), signed = view !== 'speed';
@@ -157,7 +156,7 @@ function draw() {
   $('colorbar').previousElementSibling.textContent = signed ? scaleLabel(-displayMax) : '0';
   $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#fff,#bc3d56)' : '';
   $('speed-scale-note').hidden = signed || o.case !== 'channel';
-  $('speed-scale-note').textContent = `定常・十分発達した流れの理論最大値 ${(speedMax*1000).toFixed(1)} mm/s`;
+  $('speed-scale-note').textContent = `理論最大 ${(speedMax*1000).toFixed(1)} mm/s`;
   spatialAxes();
 }
 function receive({ data }) {
@@ -174,10 +173,10 @@ function receive({ data }) {
   const completed = stageNames.findIndex(name => data.stage === name || data.stage === name + 'をスキップ');
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('current', i === completed));
   $('stage-description').textContent = completed < 0
-    ? (data.stage === '設定変更' ? '条件を変更しました。次の時間ステップから適用します。' : explanations[0])
+    ? (data.stage === '設定変更' ? '条件変更' : explanations[0])
     : data.stage.endsWith('をスキップ')
-      ? `${['①', '②', '③'][completed]} ${stageNames[completed]}はOFFのためスキップしました。`
-      : `${stageNames[completed]}完了。${explanations[completed]}`;
+      ? `${['①', '②', '③'][completed]} ${stageNames[completed]} OFF`
+      : `${['①', '②', '③'][completed]} ${stageNames[completed]} 完了`;
   draw();
   FlowProfile.update(data);
   // Leave time for UI and paint; there is at most one automatic batch in flight.

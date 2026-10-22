@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-uvp-equations">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-uvp-equations"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-profile-history"></script><script defer src="app.js?v=20261022-profile-history"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-cross-profiles">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261022-uvp-equations"></script><script defer src="ghia.js?v=20261022-ghia-profiles"></script><script defer src="profile.js?v=20261022-cross-profiles"></script><script defer src="app.js?v=20261022-cross-profiles"></script>
 </head>
 <body>
 <header class="masthead"><a class="brand" href="./">CFD Seminar <b>Mini</b></a><span class="course">総合機械工学 / 流体の運動</span><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -24,13 +24,13 @@
   <div class="workspace">
     <aside class="controls" aria-label="計算条件">
       <label class="select-label" for="case">計算ケース</label><select id="case"><option value="channel">Poiseuille flow</option><option value="cavity">Cavity flow</option></select>
-      <p id="model-note" class="model-note">圧力補正なし：非圧縮条件を満たさない途中モデルです。</p>
+      <p id="model-note" class="model-note">圧力補正OFF</p>
       <div class="control-section"><h2>物性と境界</h2>
         <label class="slider-label" for="nu">動粘性係数 (mm²/s) <output id="nu-value">1.0</output></label><input id="nu" type="range" min="0.5" max="10" step="0.1" value="1" disabled>
-        <p class="muted">既定値は水の概数：ν = 1 mm²/s、ρ = 1000 kg/m³。</p><p class="muted" id="boundary-note">左から一様に流入、右へ流出。上下の壁は静止しています。</p>
+        <p class="muted">ρ = 1000 kg/m³</p>
       </div>
       <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="32">32分割 · 0.5倍</option><option value="64" selected>64分割 · 標準</option><option value="96">96分割 · 1.5倍</option><option value="128">128分割 · 2倍</option></select><p class="muted" id="grid-info"></p></div>
-      <div class="control-section time-settings"><label class="select-label" for="dt-max">時間刻みの上限 (s)</label><input id="dt-max" type="number" min="0.001" max="1" step="0.001" value="0.1"><p class="muted">移流・拡散の安定条件により、実際のΔtはこの上限以下に自動調整します。</p><output id="reynolds" class="muted"></output></div>
+      <div class="control-section time-settings"><label class="select-label" for="dt-max">Δt 上限 (s)</label><input id="dt-max" type="number" min="0.001" max="1" step="0.001" value="0.1" title="安定条件に応じて、この上限以下に自動調整"><output id="reynolds" class="muted"></output></div>
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">
       <div class="simulation-view" id="simulation-view">
@@ -45,41 +45,38 @@
           <div class="boundary-side boundary-left"><span id="boundary-left-kind">流入</span><strong id="boundary-left-speed">10.0 mm/s</strong><span class="boundary-arrow" id="boundary-left-arrow" aria-hidden="true">→</span></div>
           <div class="spatial-axis axis-y" id="axis-y" role="group" aria-label="縦座標 y、単位mm"><span class="axis-title">y (mm)</span><div class="axis-ticks"></div></div>
           <canvas id="flow" width="2880" height="720" aria-label="計算した速度場。横軸x・縦軸yはmm単位、原点は左下。周囲に境界条件を表示。"></canvas>
-          <div class="profile-sections" aria-hidden="true"><div class="section-line section-u" id="section-u"><span>A</span></div><div class="section-line section-v" id="section-v"><span>B</span></div></div>
+          <div class="profile-sections" aria-hidden="true"><div class="section-line section-u" id="section-u"><span>u</span></div><div class="section-line section-v" id="section-v" hidden><span>v</span></div></div>
           <div class="spatial-axis axis-x" id="axis-x" role="group" aria-label="横座標 x、単位mm"><span class="axis-title">x (mm)</span><div class="axis-ticks"></div></div>
           <div class="boundary-side boundary-right"><span class="boundary-arrow" id="boundary-right-arrow" aria-hidden="true">→</span><span id="boundary-right-kind">自由流出</span><strong id="boundary-right-speed" hidden>0 mm/s</strong><span id="boundary-pressure" title="出口圧力のDirichlet条件。圧力表示はこの基準圧力との差です。"></span></div>
           <div class="boundary-bottom">静止壁 0 mm/s</div>
         </div>
         <div class="domain-label" id="domain-label"></div>
         <div class="canvas-bottom"><span>0</span><div id="colorbar" class="colorbar"></div><span id="scale-max">15</span><b id="legend-name">速さ (mm/s)</b></div>
-        <p class="scale-note" id="speed-scale-note">定常・十分発達した流れの理論最大値 15 mm/s</p>
+        <p class="scale-note" id="speed-scale-note">理論最大 15 mm/s</p>
       </div>
       <div class="profiles">
       <figure class="profile-pane" aria-labelledby="profile-title">
-        <figcaption><h2 id="profile-title"><span class="section-key key-u">A</span>横方向速度 u</h2><p id="profile-section">出口断面 · x = 20 mm</p></figcaption>
+        <figcaption><h2 id="profile-title">u · 出口断面</h2><p id="profile-section">x = 20 mm</p></figcaption>
         <div class="profile-plot"><canvas id="profile-chart" role="img" aria-label="高さyに対する横方向流速u。横軸mm/s、縦軸mm。"></canvas></div>
       </figure>
-      <figure class="profile-pane" aria-labelledby="profile-v-title">
-        <figcaption><h2 id="profile-v-title"><span class="section-key key-v">B</span>縦方向速度 v</h2><p id="profile-v-section">中央の横断面 · y = 2.5 mm</p></figcaption>
-        <div class="profile-plot"><canvas id="profile-v-chart" role="img" aria-label="位置xに対する縦方向流速v。横軸mm、縦軸mm/s。"></canvas></div>
-      </figure>
-      <div class="profile-notes"><p><span id="profile-reference">破線は十分に発達した流れの定常理論。</span> <a id="profile-citation" class="cite" href="#ref-1" title="Ghia, Ghia &amp; Shin (1982), Tables I–II, Re=100. doi:10.1016/0021-9991(82)90058-4" hidden>[1]</a></p><p id="profile-model-note">参照値は全項ONの定常状態に対応します。現在は一部の項がOFFです。</p></div>
+      <div class="profile-notes"><p id="profile-reference-row" hidden><span id="profile-reference"></span> <a id="profile-citation" class="cite" href="#ref-1" title="Ghia, Ghia &amp; Shin (1982), Tables I–II, Re=100. doi:10.1016/0021-9991(82)90058-4" hidden>[1]</a></p><p id="profile-model-note">一部の項がOFF</p></div>
       </div>
       </div>
       </div>
       <div class="pipeline" aria-label="計算の順番"><button class="stage adv" data-stage="0"><small>①</small>移流</button><span>→</span><button class="stage visc" data-stage="1"><small>②</small>粘性</button><span>→</span><button class="stage press" data-stage="2"><small>③</small>圧力補正</button><button id="stage-step" class="stage-step" title="次の処理だけ進める">処理を1つ進める<img src="icons/step-forward.svg" alt=""></button></div>
-      <p class="stage-description" id="stage-description">① 移流：速度の分布が、流れによって運ばれます。</p>
+      <p class="stage-description" id="stage-description">① 移流：速度を運ぶ</p>
       <div class="metrics"><div><span>平均比運動エネルギー (J/kg)</span><output id="energy">—</output></div><div><span>流れの発散 RMS (s⁻¹)</span><output id="divergence">—</output></div><div><span>圧力補正 前 → 後 (s⁻¹)</span><output id="projection">未実行</output></div></div>
     </section>
   </div>
   <section class="discretization" aria-labelledby="discrete-title">
     <p class="eyebrow">FRACTIONAL STEP</p><h2 id="discrete-title">Fractional Step</h2>
-    <p class="notation">横方向の速度 <span data-math="u"></span>、縦方向の速度 <span data-math="v"></span>、圧力 <span data-math="p"></span> を求めます。①移流、②粘性、③圧力補正を順に計算すると、時間が <span data-math="\Delta t"></span> だけ進みます。</p>
+    <p class="notation"><span data-math="u"></span>：横速度 ／ <span data-math="v"></span>：縦速度 ／ <span data-math="p"></span>：圧力</p>
+    <details class="formula-details notation-details"><summary>記号・格子・単位</summary>
     <div class="grid-notation">
       <div>
         <h3>添字と値を置く位置</h3>
-        <p><span data-math="i"></span> は右へ、<span data-math="j"></span> は上へ増える格子番号です。<span data-math="u_{i-1,j}"></span> は <span data-math="u_{i,j}"></span> の左隣、<span data-math="u_{i,j+1}"></span> は上隣です。同じ成分の隣接点の間隔は <span data-math="h=\Delta x=\Delta y"></span> です。</p>
-        <p>圧力はセル中心、速度はセルの面に置きます（MAC格子）。ここでは、セル <span data-math="(i,j)"></span> の右面の速度を <span data-math="u_{i,j}"></span>、上面の速度を <span data-math="v_{i,j}"></span> と書きます。<strong>同じ添字でも、圧力と各速度の位置は異なります。</strong></p>
+        <p><span data-math="i"></span> は右へ、<span data-math="j"></span> は上へ増える格子番号。格子幅は <span data-math="h=\Delta x=\Delta y"></span>。</p>
+        <p><span data-math="p_{i,j}"></span> はセル中心、<span data-math="u_{i,j}"></span> は右面、<span data-math="v_{i,j}"></span> は上面の値です（MAC格子）。</p>
       </div>
       <figure class="mac-grid" aria-label="セル中心にp i,j、右面にu i,j、左面にu i-1,j、上面にv i,j、下面にv i,j-1を置くMAC格子">
         <div class="mac-cell"><span class="mac-center" data-math="p_{i,j}"></span><span class="mac-face mac-left"><span data-math="u_{i-1,j}"></span></span><span class="mac-face mac-right"><span data-math="u_{i,j}"></span></span><span class="mac-face mac-top"><span data-math="v_{i,j}"></span></span><span class="mac-face mac-bottom"><span data-math="v_{i,j-1}"></span></span></div>
@@ -92,19 +89,21 @@
       <div><dt data-math="u^*,\ v^*"></dt><dd>②粘性も加えた予測速度</dd></div>
       <div><dt data-math="u^{n+1},\ v^{n+1}"></dt><dd>③圧力補正後の次の時刻の速度</dd></div>
     </dl>
-    <p class="muted">右上の <span data-math="n"></span> は累乗ではなく時刻の番号です。<span data-math="n+1"></span> は <span data-math="\Delta t"></span> 秒後、右下の <span data-math="i,j"></span> は位置を表します。</p>
-    <p class="muted">以下は内部点の式です。速度はm/s、圧力はPa、格子幅はm、時間はsで計算します。<span data-math="\nu"></span> は動粘性係数 (m²/s)、<span data-math="\rho"></span> は密度 (kg/m³) です。上の可視化では長さと速度をmm単位に換算しています。</p>
+    <p class="muted"><span data-math="n"></span>：時刻番号、<span data-math="n+1"></span>：<span data-math="\Delta t"></span> 秒後。以下は内部点の式です。</p>
+    <p class="muted">式はSI単位系。<span data-math="\nu"></span>：動粘性係数 (m²/s)、<span data-math="\rho"></span>：密度 (kg/m³)。</p>
+    </details>
     <article class="discrete-row adv">
       <div class="discrete-formulas"><h3>① 移流項 <small>1次風上差分</small></h3>
-        <p><strong>右向き・上向きに流れている点での例</strong>です。傾きは「今の点の速度 − 上流側の隣の速度」を <span data-math="h"></span> で割って求めます。移流項は左辺にあるので、時間を進める式ではその分を引きます。</p>
+        <p>右向き・上向きの流れの場合：</p>
         <div class="formula-pair">
           <div><h4>横方向の速度 <span data-math="u"></span> を更新</h4><p class="formula-condition"><span data-math="u^n_{i,j}\geq0,\ \bar v^n_{i,j}\geq0"></span> の場合</p><div class="math-block" id="disc-advection-u"></div></div>
           <div><h4>縦方向の速度 <span data-math="v"></span> を更新</h4><p class="formula-condition"><span data-math="\bar u^n_{i,j}\geq0,\ v^n_{i,j}\geq0"></span> の場合</p><div class="math-block" id="disc-advection-v"></div></div>
         </div>
-        <p>それぞれ、2行目が横方向の移流、3行目が縦方向の移流です。右辺はすべて今の時刻 <span data-math="n"></span> の値を使います。</p>
-        <h4>上線の付いた速度は、周囲4点の平均</h4>
-        <p><span data-math="u"></span> と <span data-math="v"></span> は別の位置にあるため、<span data-math="u"></span> の位置で必要な縦速度を <span data-math="\bar v"></span>、<span data-math="v"></span> の位置で必要な横速度を <span data-math="\bar u"></span> として求めます。</p>
+
+        <details class="formula-details"><summary>平均速度</summary>
+        <p><span data-math="\bar v"></span> は <span data-math="u"></span> の位置の縦速度、<span data-math="\bar u"></span> は <span data-math="v"></span> の位置の横速度。周囲4点から求めます。</p>
         <div class="formula-pair"><div><div class="math-block" id="disc-average-v"></div></div><div><div class="math-block" id="disc-average-u"></div></div></div>
+        </details>
         <details class="formula-details"><summary>左向き・下向きに流れる場合の差分</summary>
           <p>風上差分では、流れが来る側の点を使います。横速度が負なら右隣、縦速度が負なら上隣との差分に変えます。上の更新式の差分だけを、次の式に置き換えます。差分に掛ける速度の符号はそのままです。</p>
           <div class="formula-pair"><div><h4><span data-math="u"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-ux"></div><h4><span data-math="u"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-uy"></div></div><div><h4><span data-math="v"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-vx"></div><h4><span data-math="v"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-vy"></div></div></div>
@@ -113,37 +112,37 @@
           <p>各位置の <span data-math="u^n"></span> に表の係数を掛けて足し、全体を <span data-math="h"></span> で割ると速度の傾きになります。<span data-math="v^n"></span> にも同じ係数を使い、流れの向きは上の条件で選びます。</p>
           <div class="formula-pair"><div><h4>横方向の差分</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-x-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-x-forward"></figure></div></div><div><h4>縦方向の差分</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-y-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-y-forward"></figure></div></div></div>
         </details>
-        <p class="muted">移流OFFでは <span data-math="u'=u^n,\ v'=v^n"></span> として②へ進みます。</p>
-        <p class="muted">この非保存形の差分では、内部速度がゼロだと移流の更新量もゼロになり、流入の変化は移流だけでは内部へ伝わりません。初期場はゼロのままです。これは移流一般の性質ではなく、この初期条件と離散化の組み合わせによる挙動です。</p>
+        <p class="muted">OFF：<span data-math="u'=u^n,\ v'=v^n"></span></p>
+        <details class="formula-details"><summary>ゼロ初期場での挙動</summary><p>この非保存形の差分では、内部速度がゼロだと移流の更新量もゼロです。流入の変化は移流だけでは内部へ伝わりません。</p></details>
       </div>
     </article>
     <article class="discrete-row visc">
       <div class="discrete-formulas"><h3>② 粘性項 <small>2次中心差分</small></h3>
-        <p>①の結果に、周囲との速度差による変化を加えます。横方向は「右隣 − 中心の2倍 ＋ 左隣」、縦方向は「上隣 − 中心の2倍 ＋ 下隣」を使います。</p>
+
         <div class="formula-pair"><div><h4>横方向の速度 <span data-math="u"></span></h4><div class="math-block" id="disc-diffusion-u"></div></div><div><h4>縦方向の速度 <span data-math="v"></span></h4><div class="math-block" id="disc-diffusion-v"></div></div></div>
-        <p><strong>差分の中は <span data-math="u^n,\ v^n"></span> のままです。</strong>移流と粘性の変化量は、どちらも同じ時刻の速度から計算します。①で更新した速度の傾きで計算し直すわけではありません。</p>
+        <p>差分には①の前の <span data-math="u^n,\ v^n"></span> を使います。</p>
         <details class="formula-details"><summary>粘性項の係数を格子に並べる</summary>
           <figure class="coefficient-kernel" data-kernel="laplacian-u"></figure>
           <p>各位置の <span data-math="u^n"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ります。中心の係数が <span data-math="-4"></span> なのは、横・縦の差分に <span data-math="-2"></span> ずつあるためです。さらに <span data-math="\nu\Delta t"></span> を掛けると、粘性による速度の変化量になります。<span data-math="v^n"></span> も同じ係数です。</p>
         </details>
-        <p class="muted">粘性OFFでは <span data-math="u^*=u',\ v^*=v'"></span> として③へ進みます。</p>
+        <p class="muted">OFF：<span data-math="u^*=u',\ v^*=v'"></span></p>
       </div>
     </article>
     <article class="discrete-row press">
       <div class="discrete-formulas"><h3>③ 圧力Poisson <small>2次中心差分</small></h3>
-        <p>②までの速度では、セルに入る流量と出る流量が一致するとは限りません。流量が釣り合うように圧力 <span data-math="p"></span> を求め、速度を補正します。<a class="cite" href="#ref-3" title="Chorin (1968), Numerical solution of the Navier–Stokes equations. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a></p>
+        <p>流量が釣り合う圧力 <span data-math="p"></span> を求め、速度を補正します。<a class="cite" href="#ref-3" title="Chorin (1968), Numerical solution of the Navier–Stokes equations. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a></p>
         <h4>まず、各セルの圧力 <span data-math="p_{i,j}"></span> を求める</h4>
         <div class="math-block" id="disc-poisson"></div>
-        <p>右辺の括弧内は「右面の速度 − 左面の速度」と「上面の速度 − 下面の速度」を、それぞれ <span data-math="h"></span> で割った和です。これがゼロでない分を圧力で補正します。左辺には隣のセルの圧力もあるため、全セルの式と境界条件をまとめて解きます。</p>
+        <p>全セルの式と境界条件をまとめて解きます。</p>
         <details class="formula-details"><summary>圧力Poisson方程式の係数を格子に並べる</summary>
           <figure class="coefficient-kernel" data-kernel="laplacian-p"></figure>
           <p>各位置の圧力 <span data-math="p"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ると左辺になります。境界点では境界条件に合わせて式を変えます。</p>
         </details>
         <h4>次に、圧力差で速度を補正する</h4>
         <div class="formula-pair"><div><div class="math-block" id="disc-correction-u"></div></div><div><div class="math-block" id="disc-correction-v"></div></div></div>
-        <p><span data-math="u"></span> は左右の圧力差、<span data-math="v"></span> は上下の圧力差で補正します。これで次の時刻の速度が求まり、連続の式を計算精度の範囲で満たします。</p>
+        <h4>連続の式</h4>
         <div class="math-block" id="disc-continuity"></div>
-        <p class="muted">圧力OFFでは <span data-math="u^{n+1}=u^*,\ v^{n+1}=v^*"></span> とします。この場合、流量の釣り合いは保証されません。</p>
+        <p class="muted">OFF：<span data-math="u^{n+1}=u^*,\ v^{n+1}=v^*"></span>（非圧縮条件なし）</p>
         <details class="formula-details"><summary>出口と壁の境界条件</summary>
         <p>Poiseuille flowは出口で <span data-math="p=p_0"></span>（圧力の値を固定するDirichlet条件）とします。最後のセルの番号を <span data-math="N_x"></span> とすると、出口の速度は <span data-math="u_{N_x,j}"></span> です。出口面は最後の圧力点から <span data-math="h/2"></span> だけ離れています。</p>
         <div class="math-block" id="disc-outlet"></div>
@@ -154,14 +153,14 @@
     </article>
     <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="U_{\max}"></span> は境界用の仮想点を含む速度成分の最大絶対値です。移流OFFでは分母の速度項、粘性OFFでは拡散項を除きます。両方OFFなら上限の時間刻みを使います。</p></details>
   </section>
-  <section class="dimensional"><h2>水の条件とReynolds数</h2>
+  <details class="dimensional"><summary>Reynolds数と有次元化</summary>
     <p>同じ形状・境界条件でレイノルズ数をそろえると、無次元の速度分布を換算できます。Ghiaらの参照解は2次元の定常解で、開始直後の過渡的な流れとは区別します。<a href="#ref-1">[1]</a></p>
     <div class="math-block" id="dimensional-equation"></div>
     <p>水の動粘性係数を約 <span data-math="10^{-6}\,\mathrm{m^2/s}"></span>、正方形の一辺を10 mmとした換算例：</p>
     <table class="water-table"><thead><tr><th>Re</th><th>上壁速度</th><th>時間の基準 L/U</th></tr></thead><tbody><tr><td>100</td><td>10 mm/s</td><td>1 s</td></tr><tr><td>400</td><td>40 mm/s</td><td>0.25 s</td></tr><tr><td>1000</td><td>100 mm/s</td><td>0.1 s</td></tr></tbody></table>
     <p class="muted">既定の動粘性係数はν = 1 mm²/s、速度は10 mm/sです。Poiseuille flowは高さ5 mmでRe = 50、Cavity flowは高さ10 mmでRe = 100です。領域寸法は固定で、格子数を変えると格子幅が変わります。表はキャビティの定常参照解と比較するための換算例です。実際の水槽の奥行き方向・自由表面・温度変化は含みません。</p>
-  </section>
-  <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが10 × 10 mm、Poiseuille flowが20 × 5 mm。速度はmm/s、圧力はPa（Poiseuille flowは出口の基準圧力との差、Cavity flowは領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数は基準圧力との差を密度で割った値で、表示時にρ = 1000 kg/m³を掛けます。流入速度と上壁速度は10 mm/sに固定しています。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowの出口は自由流出とし、圧力を基準値に固定します。出口の予測速度は内側から外挿し、圧力補正で出口速度を決めます。流出流量は直接指定しません。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は安定性を優先した1次風上、圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>内部の速度ベクトルは向きを示します。低速でも向きを読めるよう最低表示長を設け、長さには上限もあります。駆動速度の1%未満のベクトルは省略します。速さは色で確認できます。周囲の矢印と速度は境界条件です。出口の流速は計算により決まります。速さの色の最大値はPoiseuille flowでは15 mm/s（十分に発達した平行平板間流れの理論最大値）、Cavity flowでは上壁速度の10 mm/sです。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは色の上限値より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。横方向速度uのグラフはPoiseuille flowでは出口、Cavity flowでは中央の縦断面を用います。縦方向速度vのグラフは両ケースとも中央の横断面です。可視化上のA・Bの線が、それぞれのグラフの断面位置です。MAC格子の速度を断面位置へ線形補間し、境界の値も含めます。Poiseuille flowの薄い実線は6・12・18ステップ前の速度分布です。履歴は完了した時間ステップの値だけを保存し、条件変更・リセットで消去します。Ghiaらの丸印はRe = 100の定常参照値を上壁速度と領域寸法で有次元化したものです。Reが一致するときだけ表示し、異なるRe間の補間は行いません。計算値は現在の時刻の値なので、開始直後や一部の項がOFFのときに定常参照値とは一致しません。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
+  </details>
+  <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが10 × 10 mm、Poiseuille flowが20 × 5 mm。速度はmm/s、圧力はPa（Poiseuille flowは出口の基準圧力との差、Cavity flowは領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数は基準圧力との差を密度で割った値で、表示時にρ = 1000 kg/m³を掛けます。流入速度と上壁速度は10 mm/sに固定しています。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowの出口は自由流出とし、圧力を基準値に固定します。出口の予測速度は内側から外挿し、圧力補正で出口速度を決めます。流出流量は直接指定しません。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は安定性を優先した1次風上、圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>内部の速度ベクトルは向きを示します。低速でも向きを読めるよう最低表示長を設け、長さには上限もあります。駆動速度の1%未満のベクトルは省略します。速さは色で確認できます。周囲の矢印と速度は境界条件です。出口の流速は計算により決まります。速さの色の最大値はPoiseuille flowでは15 mm/s（十分に発達した平行平板間流れの理論最大値）、Cavity flowでは上壁速度の10 mm/sです。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは色の上限値より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。横方向速度uのグラフはPoiseuille flowでは出口、Cavity flowでは中央の縦断面を用います。Poiseuille flowはu分布だけを表示します。Cavity flowは中央横断面のv分布も同じ図に重ねます。上軸がu、左軸がy、下軸がx、右軸がvで、速度ゼロの破線が中央で交わります。可視化上のu・vの線が断面位置です。MAC格子の速度を断面位置へ線形補間し、境界の値も含めます。Poiseuille flowの薄い実線は6・12・18ステップ前の速度分布です。履歴は完了した時間ステップの値だけを保存し、条件変更・リセットで消去します。Ghiaらの参照点（uは丸印、vは四角印）はRe = 100の定常参照値を上壁速度と領域寸法で有次元化したものです。Reが一致するときだけ表示し、異なるRe間の補間は行いません。計算値は現在の時刻の値なので、開始直後や一部の項がOFFのときに定常参照値とは一致しません。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
   <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p>Charts: <a href="../assets/chartjs.LICENSE.md">Chart.js / MIT</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
 </main>
 </body></html>
