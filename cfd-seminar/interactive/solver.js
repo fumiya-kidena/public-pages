@@ -62,9 +62,10 @@
       for (let i = 1; i <= nx; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
     }
     timeStep() {
-      // Reserve both operators and a 2U ghost-cell speed, independent of the toggles.
+      // Share one step across UI grids; reserve both operators even when disabled.
+      const h = this.ly / Math.max(128, this.n);
       const speed = Math.max(.01, this.options.case === 'channel' ? this.options.inflow : this.options.lid);
-      const limit = .7 / (4 * speed / this.h + 4 * this.options.nu / this.h ** 2);
+      const limit = .7 / (4 * speed / h + 4 * this.options.nu / h ** 2);
       const unit = 10 ** (Math.floor(Math.log10(limit)) - 1);
       return Number((Math.floor(limit / unit) * unit).toPrecision(2));
     }

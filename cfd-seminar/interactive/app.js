@@ -169,9 +169,10 @@ function receive({ data }) {
   frame = data;
   $('run-state').textContent = running ? '計算中' : '停止中';
   $('play').disabled = false; $('step').disabled = false; $('stage-step').disabled = false;
-  $('time').textContent = data.time.toFixed(3) + ' s' + (data.phase ? '（途中）' : '');
+  const timeDigits = Math.max(3, 1 - Math.floor(Math.log10(data.fixedDt)));
+  $('time').textContent = data.time.toFixed(timeDigits) + ' s' + (data.phase ? '（途中）' : '');
   $('dt').textContent = data.fixedDt + ' s';
-  $('dt').title = 'この格子で固定';
+  $('dt').title = '16〜128分割で共通。移流・粘性の両方で制限';
   const speed = data.options.case === 'channel' ? data.options.inflow : data.options.lid;
   $('cfl').textContent = `CFL（境界速度）= ${(speed * data.fixedDt / data.h).toFixed(4)}`;
   $('energy').textContent = scientific(data.stats.energy); $('divergence').textContent = scientific(data.stats.divergence);
@@ -194,7 +195,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-faster-step'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261023-common-step'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
