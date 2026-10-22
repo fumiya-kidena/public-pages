@@ -6,24 +6,31 @@
       if (!Number.isInteger(n) || n < 20 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.rho = 1000;
-      this.options = { case: 'channel', advection: true, viscosity: false, pressure: false, nu: 1e-6, lid: 0.01, inflow: 0.01, dtMax: 0.1 };
+      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 2e-6, lid: 0.01, inflow: 0.01, dtMax: 0.1 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
     configure(options) {
+      const next = { ...this.options };
       const changedCase = 'case' in options && options.case !== this.options.case;
       if ('case' in options) {
         if (!['channel', 'cavity'].includes(options.case)) throw new Error('Unsupported case');
-        this.options.case = options.case;
+        next.case = options.case;
       }
-      for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) this.options[key] = !!options[key];
+      if ('advectionScheme' in options) {
+        if (!['upwind', 'godunov'].includes(options.advectionScheme)) throw new Error('Unsupported advection scheme');
+        next.advectionScheme = options.advectionScheme;
+      }
+      if (changedCase && !('nu' in options)) next.nu = next.case === 'channel' ? 2e-6 : 1e-6;
+      for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) next[key] = !!options[key];
       for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.01], ['inflow', 0.0001, 0.01], ['dtMax', 0.001, 1]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
-          this.options[key] = Math.max(lo, Math.min(hi, x));
+          next[key] = Math.max(lo, Math.min(hi, x));
         }
       }
+      this.options = next;
       if (changedCase) { this.reset(); return; }
       // Parameter changes start a new complete step, not half of the old operator sequence.
       if (this.phase) { this.u.set(this.un); this.v.set(this.vn); this.phase = 0; }
@@ -32,8 +39,8 @@
     }
     reset() {
       const channel = this.options.case === 'channel';
-      this.ly = channel ? .005 : .01; this.h = this.ly / this.n;
-      this.nx = channel ? 4 * this.n : this.n;
+      this.ly = channel ? .004 : .01; this.h = this.ly / this.n;
+      this.nx = channel ? 5 * this.n : this.n;
       this.s = this.nx + 2;
       for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
       this.time = 0; this.steps = 0; this.phase = 0; this.dt = 0;
@@ -66,17 +73,26 @@
       this.cfl = advectionRate * this.dt;
       this.diffusionNumber = diffusionRate * this.dt;
     }
+    static burgersFlux(left, right) {
+      const fl = left * left / 2, fr = right * right / 2;
+      if (left > right) return Math.max(fl, fr);
+      return left <= 0 && right >= 0 ? 0 : Math.min(fl, fr);
+    }
     advection() {
       const { n, nx, s, un, vn, u, v, dt, h } = this;
       // cfd-seminar/advection.f90 MAC interpolation; first-order upwind from advection2.html.
       const diff = (a, k, stride, speed) => speed >= 0 ? (a[k] - a[k - stride]) / h : (a[k + stride] - a[k]) / h;
+      // Godunov for self-advection (Burgers); cross-advection retains MAC upwinding.
+      const flux = FlowSolver.burgersFlux, godunov = this.options.advectionScheme === 'godunov';
       for (let j = 1; j <= n; j++) for (let i = 1; i < nx; i++) {
         const k = i + s * j, va = (vn[k] + vn[k + 1] + vn[k - s] + vn[k + 1 - s]) / 4;
-        u[k] -= dt * (un[k] * diff(un, k, 1, un[k]) + va * diff(un, k, s, va));
+        const self = godunov ? (flux(un[k], un[k + 1]) - flux(un[k - 1], un[k])) / h : un[k] * diff(un, k, 1, un[k]);
+        u[k] -= dt * (self + va * diff(un, k, s, va));
       }
       for (let j = 1; j < n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, ua = (un[k] + un[k - 1] + un[k + s] + un[k - 1 + s]) / 4;
-        v[k] -= dt * (ua * diff(vn, k, 1, ua) + vn[k] * diff(vn, k, s, vn[k]));
+        const self = godunov ? (flux(vn[k], vn[k + s]) - flux(vn[k - s], vn[k])) / h : vn[k] * diff(vn, k, s, vn[k]);
+        v[k] -= dt * (ua * diff(vn, k, 1, ua) + self);
       }
       this.boundary();
     }
@@ -172,9 +188,10 @@
     }
     profiles() {
       const { n, nx, s, h } = this;
-      const channel = this.options.case === 'channel', section = channel ? nx : nx/2;
+      const channel = this.options.case === 'channel', section = channel ? .9*nx : nx/2;
       const profileU = new Float32Array(n+2), left = Math.floor(section), right = Math.ceil(section);
-      for (let j = 1; j <= n; j++) profileU[j] = (this.u[left+s*j]+this.u[right+s*j])/2;
+      const weight = section-left;
+      for (let j = 1; j <= n; j++) profileU[j] = (1-weight)*this.u[left+s*j]+weight*this.u[right+s*j];
       profileU[n+1] = !channel && this.dt > 0 ? this.options.lid : 0;
       const sectionY = n/2, bottom = Math.floor(sectionY), top = Math.ceil(sectionY);
       const profileV = new Float32Array(nx+2);

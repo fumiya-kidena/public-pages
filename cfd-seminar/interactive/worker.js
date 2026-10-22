@@ -1,17 +1,18 @@
 'use strict';
-importScripts('solver.js?v=20261022-profile-history');
+importScripts('solver.js?v=20261022-advection-modes');
 let solver = new FlowSolver();
 let batch = null;
+const profileAges = [60, 120, 180];
 let profileHistory = [];
 function recordProfile() {
   if (solver.options.case !== 'channel' || solver.phase || profileHistory.at(-1)?.steps === solver.steps) return;
   profileHistory.push({ steps: solver.steps, time: solver.time, ...solver.profiles() });
-  if (profileHistory.length > 19) profileHistory.shift();
+  if (profileHistory.length > profileAges.at(-1) + 1) profileHistory.shift();
 }
 recordProfile();
 function reply(request) {
   const state = solver.snapshot();
-  const history = [6, 12, 18].map(age => profileHistory.find(item => item.steps === state.steps-age)).filter(Boolean);
+  const history = profileAges.map(age => profileHistory.find(item => item.steps === state.steps-age)).filter(Boolean);
   // History buffers stay in the worker; cloning these small profiles preserves the ring.
   self.postMessage({ ...state, profileHistory: history, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.profileU.buffer, state.profileV.buffer]);
 }

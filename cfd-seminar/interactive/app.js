@@ -6,13 +6,14 @@ let frame = null, running = false, pending = 0, view = 'speed', worker, counter 
 let axisLayoutKey = '';
 let dtLimit = +$('dt-max').value;
 const boundarySpeed = .01;
+const caseViscosity = { channel: 2, cavity: 1 };
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
   '① 移流：速度を運ぶ',
   '② 粘性：速度差をならす',
   '③ 圧力補正：流入・流出を釣り合わせる'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, inflow: boundarySpeed, lid: boundarySpeed });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: +$('nu').value * 1e-6, dtMax: dtLimit, inflow: boundarySpeed, lid: boundarySpeed });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
@@ -26,12 +27,15 @@ function controlState() {
   const o = options();
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.pressure][i]));
   $('nu').disabled = !o.viscosity;
+  $('advection-schemes').disabled = !o.advection;
+  document.querySelectorAll('[data-advection-scheme]').forEach(el => { el.hidden = el.dataset.advectionScheme !== o.advectionScheme; });
+  $('advection-method').textContent = o.advectionScheme === 'godunov' ? '1次Godunov' : '1次風上差分';
   const channel = o.case === 'channel', speed = channel ? o.inflow : o.lid;
-  const domainHeight = channel ? .005 : .01;
+  const domainHeight = channel ? .004 : .01;
   $('nu-value').textContent = (o.nu*1e6).toFixed(1);
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '全項ON' : !o.pressure ? '圧力補正OFF · 非圧縮条件なし' : '一部の項がOFF';
-  if ((channel && o.advection && !o.viscosity && !o.pressure) || (!channel && !o.viscosity)) $('model-note').textContent += ' / ゼロ初期場では内部静止';
+  if ((channel && o.advection && o.advectionScheme === 'upwind' && !o.viscosity && !o.pressure) || (!channel && !o.viscosity)) $('model-note').textContent += ' / ゼロ初期場では内部静止';
   $('model-note').classList.toggle('complete', count === 3);
   $('wall-label').textContent = channel ? 'Poiseuille flow' : 'Cavity flow';
   $('flow-domain').dataset.case = o.case;
@@ -45,7 +49,7 @@ function controlState() {
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
   const n = +$('grid').value;
-  $('grid-info').textContent = `${channel ? 4*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
+  $('grid-info').textContent = `${channel ? 5*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
 function pressureOutline() {
@@ -83,13 +87,15 @@ function color(t, signed) {
 function spatialAxes() {
   const { width, height } = canvas.getBoundingClientRect();
   if (!width || !height) return;
+  $('axis-y').style.height = height + 'px';
+  document.querySelector('.profile-sections').style.height = height + 'px';
   const key = [frame.lx, frame.ly, Math.round(width), Math.round(height)].join('/');
   if (key === axisLayoutKey) return;
   axisLayoutKey = key;
   for (const [axis, length, pixels, spacing] of [['x', frame.lx*1000, width, 60], ['y', frame.ly*1000, height, 48]]) {
     const rough = length / Math.max(1, Math.floor(pixels / spacing));
     const magnitude = 10 ** Math.floor(Math.log10(rough));
-    const step = [1, 2, 5, 10].find(value => value*magnitude >= rough) * magnitude;
+    const step = Math.min(length, [1, 2, 5, 10].find(value => value*magnitude >= rough) * magnitude);
     const ticks = document.createDocumentFragment();
     for (let i = 0; i <= Math.floor(length/step + 1e-8); i++) {
       const value = Number((i*step).toPrecision(8));
@@ -188,7 +194,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-profile-history'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-advection-modes'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('snapshot');
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -196,7 +202,8 @@ $('play').onclick = () => { playState(!running); schedule(); };
 $('reset').onclick = () => { if (worker) reset(); };
 $('step').onclick = () => { playState(false); send('advance'); };
 $('stage-step').onclick = () => { playState(false); send('stage'); };
-for (const id of ['advection', 'viscosity', 'pressure', 'nu']) $(id).addEventListener('input', () => {
+for (const id of ['advection', 'viscosity', 'pressure', 'nu', 'scheme-upwind', 'scheme-godunov']) $(id).addEventListener('input', () => {
+  if (id === 'nu') caseViscosity[$('case').value] = +$('nu').value;
   controlState(); if (worker) send('configure', { options: options() });
   const stage = ['advection', 'viscosity', 'pressure'].indexOf(id);
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
@@ -208,6 +215,7 @@ $('dt-max').onchange = () => {
   controlState(); if (worker) send('configure', { options: options() });
 };
 $('case').onchange = () => {
+  $('nu').value = caseViscosity[$('case').value];
   controlState(); if (worker) reset();
 };
 $('arrows').onchange = draw;

@@ -111,7 +111,7 @@ const FlowProfile = (() => {
     scales.xPosition.min = 0; scales.xPosition.max = frame.lx * 1000;
     scales.yVelocity.min = -extent; scales.yVelocity.max = extent;
     const mm = x => Number((x * 1000).toPrecision(4));
-    document.getElementById('profile-title').textContent = channel ? 'u · 出口断面' : 'u・v · 中央断面';
+    document.getElementById('profile-title').textContent = channel ? 'u · 下流断面' : 'u・v · 中央断面';
     document.getElementById('profile-section').textContent = channel
       ? 'x = ' + mm(frame.profileX) + ' mm' : 'x = ' + mm(frame.profileX) + ' mm / y = ' + mm(frame.profileY) + ' mm';
     document.getElementById('profile-reference-row').hidden = channel;
@@ -121,7 +121,7 @@ const FlowProfile = (() => {
     document.getElementById('profile-model-note').hidden = (!channel && !ref)
       || (frame.options.advection && frame.options.viscosity && frame.options.pressure);
     plot.canvas.setAttribute('aria-label', channel
-      ? '出口のu分布。横軸u (mm/s)、縦軸y (mm)。定常理論と6・12・18ステップ前の履歴。'
+      ? '出口の2 mm手前のu分布。横軸u (mm/s)、縦軸y (mm)。定常理論と60・120・180ステップ前の履歴。'
       : '中央断面のuとvの速度分布。上軸u (mm/s)、左軸y (mm)、下軸x (mm)、右軸v (mm/s)。破線は速度ゼロ。Ghia参照値はuが丸印、vが四角印。');
     resize(); plot.update('none');
   }

@@ -23,6 +23,11 @@
 .equation-system .equation-name{position:static;color:inherit}
 .equation-system .equation-caption{grid-column:1/6;grid-row:2;margin:0}
 .equation-system .equation-line{display:contents}
+.advection-schemes{grid-column:2;grid-row:4;border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:11px}
+.advection-schemes label{display:flex;align-items:center;gap:4px;min-height:24px;cursor:pointer;white-space:nowrap}
+.advection-schemes input{margin:0;width:14px;height:14px;accent-color:var(--adv)}
+.advection-schemes:disabled{opacity:.45}
+[data-advection-scheme][hidden]{display:none}
 .equation-line>span,.equation-line>label{grid-row:3;align-self:center}
 .equation-system>.continuity-row,.equation-system>.equation-caption,.equation-line>*{position:relative;z-index:1}
 #pressure-outline{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;visibility:hidden;overflow:visible}
@@ -34,13 +39,13 @@
 .equation-system .equation-toggle{border-radius:0}
 .domain-label{text-align:center;font-size:11px;margin-top:8px;color:var(--muted)}
 #flow{image-rendering:pixelated;background:white;border-color:#aebcc4}
-#flow.wide{width:100%;max-width:920px;aspect-ratio:4}
+#flow.wide{width:100%;max-width:920px;aspect-ratio:5}
 .flow-domain{display:grid;grid-template-columns:64px 34px minmax(0,1fr) 64px;grid-template-rows:auto auto 28px auto;gap:6px 0;align-items:center;width:100%;max-width:1060px;margin:0 auto}
 .flow-domain[data-case="cavity"]{max-width:720px}
 .flow-domain #flow{grid-column:3;grid-row:2;width:100%;max-width:none}
-.profile-sections{grid-column:3;grid-row:2;align-self:stretch;position:relative;pointer-events:none;min-width:0;min-height:0}
+.profile-sections{grid-column:3;grid-row:2;align-self:center;position:relative;pointer-events:none;min-width:0;min-height:0}
 .section-line{position:absolute;box-shadow:0 0 0 1px rgb(255 255 255 / 85%)}
-.section-u{left:100%;top:0;bottom:0;border-left:2px dashed var(--adv);color:var(--adv)}
+.section-u{left:90%;top:0;bottom:0;border-left:2px dashed var(--adv);color:var(--adv)}
 .section-v{top:50%;left:0;right:0;border-top:2px dashed var(--press);color:var(--press)}
 .section-line span{position:absolute;font-size:11px;line-height:18px;font-weight:700;background:rgb(255 255 255 / 95%);padding:0 4px}
 .section-u span{right:5px;top:4px}.section-v span{left:5px;top:1px;line-height:14px}
@@ -148,3 +153,15 @@ main{max-width:1600px}
 .simulation-view:fullscreen .flow-domain[data-case="cavity"]{max-width:calc(var(--field-height) + 162px)}
 #fullscreen[aria-pressed=true]{background:#e7edf2;border-color:#9bafbf}
 @media(max-width:650px){.masthead{flex-wrap:wrap;gap:2px 12px;height:auto;min-height:56px;padding:10px 16px}.course{border:0;padding:0}.heading .local{margin-top:0}.math-block{font-size:14px}.simulation-view:fullscreen{padding:12px}}
+@media(max-width:650px){
+  .flow-domain[data-case="channel"]{grid-template-columns:32px minmax(0,1fr);grid-template-rows:auto auto auto 28px auto}
+  .flow-domain[data-case="channel"] .boundary-side{grid-column:2;grid-row:1;flex-direction:row;padding:0;gap:3px;font-size:9px}
+  .flow-domain[data-case="channel"] .boundary-left{justify-self:start}
+  .flow-domain[data-case="channel"] .boundary-right{justify-self:end}
+  .flow-domain[data-case="channel"] .boundary-arrow{font-size:18px}
+  .flow-domain[data-case="channel"] .boundary-top{grid-column:2;grid-row:2}
+  .flow-domain[data-case="channel"] #flow,.flow-domain[data-case="channel"] .profile-sections{grid-column:2;grid-row:3}
+  .flow-domain[data-case="channel"] .axis-y{grid-column:1;grid-row:3}
+  .flow-domain[data-case="channel"] .axis-x{grid-column:2;grid-row:4}
+  .flow-domain[data-case="channel"] .boundary-bottom{grid-column:2;grid-row:5}
+}
