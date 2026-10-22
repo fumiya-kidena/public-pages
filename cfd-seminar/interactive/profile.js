@@ -115,9 +115,12 @@ const FlowProfile = (() => {
     document.getElementById('profile-section').textContent = channel
       ? 'x = ' + mm(frame.profileX) + ' mm' : 'x = ' + mm(frame.profileX) + ' mm / y = ' + mm(frame.profileY) + ' mm';
     document.getElementById('profile-reference-row').hidden = channel;
-    document.getElementById('profile-reference').textContent = ref ? 'Ghia · Re=100（定常）'
+    document.getElementById('profile-reference').textContent = ref ? `Ghia · Re=${ref.re}（定常）`
       : 'Re=' + Number((frame.options.lid * frame.ly / frame.options.nu).toPrecision(4)) + '：参照値なし';
     document.getElementById('profile-citation').hidden = !ref;
+    document.getElementById('profile-citation').title = ref
+      ? `Ghia, Ghia & Shin (1982), Tables I–II, Re=${ref.re}.` + (ref.re === 400 ? ' x/L=0.9063のvも原表値（−0.23827）を使用。' : '')
+      : '';
     document.getElementById('profile-model-note').hidden = (!channel && !ref)
       || (frame.options.advection && frame.options.viscosity && frame.options.pressure);
     plot.canvas.setAttribute('aria-label', channel

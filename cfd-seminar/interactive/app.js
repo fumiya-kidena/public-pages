@@ -4,7 +4,7 @@ const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let axisLayoutKey = '';
-const boundarySpeed = .01;
+const inflowSpeed = .01, lidSpeed = .04;
 const caseGrid = { channel: 32, cavity: 32 };
 const stageNames = ['移流', '粘性', '圧力補正'];
 const explanations = [
@@ -12,7 +12,7 @@ const explanations = [
   '② 粘性：速度差をならす',
   '③ 圧力補正：流入・流出を釣り合わせる'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: boundarySpeed, lid: boundarySpeed });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: inflowSpeed, lid: lidSpeed });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
@@ -140,8 +140,8 @@ function draw() {
     const shafts = new Path2D(), heads = new Path2D();
     for (let j = 1; j < n; j += spacing) for (let i = 1; i < nx; i += spacing) {
       const k = i + nx * j, speed = Math.hypot(u[k], v[k]); if (speed < Math.max(1e-8, referenceSpeed*.01)) continue;
-      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*.8, Math.max(4*pixelScale, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.65)), dx = u[k] / speed, dy = -v[k] / speed;
-      const head = Math.min(4*pixelScale, length * .4), wing = head * .55;
+      const x = (i + .5)*cell, y = height - (j + .5)*cell, length = Math.min(cell*spacing*1.05, Math.max(5*pixelScale, speed / Math.max(referenceSpeed, 1e-6) * cell*spacing*.9)), dx = u[k] / speed, dy = -v[k] / speed;
+      const head = Math.min(4.5*pixelScale, length * .4), wing = head * .55;
       const ex = x + dx * length / 2, ey = y + dy * length / 2;
       shafts.moveTo(x - dx * length / 2, y - dy * length / 2); shafts.lineTo(ex, ey);
       heads.moveTo(ex, ey); heads.lineTo(ex - head * dx + wing * dy, ey - head * dy - wing * dx);
@@ -172,6 +172,8 @@ function receive({ data }) {
   $('time').textContent = data.time.toFixed(3) + ' s' + (data.phase ? '（途中）' : '');
   $('dt').textContent = data.fixedDt + ' s';
   $('dt').title = 'この格子で固定';
+  const speed = data.options.case === 'channel' ? data.options.inflow : data.options.lid;
+  $('cfl').textContent = `CFL（境界速度）= ${(speed * data.fixedDt / data.h).toFixed(4)}`;
   $('energy').textContent = scientific(data.stats.energy); $('divergence').textContent = scientific(data.stats.divergence);
   $('projection').textContent = data.options.pressure && data.projectionCount ? `${scientific(data.before)} → ${scientific(data.after)}` : '未実行';
   const completed = stageNames.findIndex(name => data.stage === name || data.stage === name + 'をスキップ');
@@ -192,7 +194,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261022-fixed-water'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261022-cavity400'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

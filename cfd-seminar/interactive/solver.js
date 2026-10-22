@@ -6,7 +6,7 @@
       if (!Number.isInteger(n) || n < 16 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.rho = 1000;
-      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 1e-6, lid: 0.01, inflow: 0.01 };
+      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 1e-6, lid: 0.04, inflow: 0.01 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
@@ -22,7 +22,7 @@
         next.advectionScheme = options.advectionScheme;
       }
       for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) next[key] = !!options[key];
-      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.01], ['inflow', 0.0001, 0.01]]) {
+      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.04], ['inflow', 0.0001, 0.01]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
@@ -63,7 +63,7 @@
     }
     timeStep() {
       // Reserve both operators and a 2U ghost-cell speed, independent of the toggles.
-      const speed = Math.max(.01, this.options.inflow, this.options.lid);
+      const speed = Math.max(.01, this.options.case === 'channel' ? this.options.inflow : this.options.lid);
       const limit = .35 / (4 * speed / this.h + 4 * this.options.nu / this.h ** 2);
       const unit = 10 ** Math.floor(Math.log10(limit));
       return Number((Math.floor(limit / unit) * unit).toPrecision(1));
