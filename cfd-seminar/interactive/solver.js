@@ -6,7 +6,7 @@
       if (!Number.isInteger(n) || n < 16 || n > 200) throw new Error('Unsupported grid');
       // SI throughout. Pressure storage is (p-p0)/rho, with p0=0 as the gauge.
       this.n = n; this.rho = 1000;
-      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 1e-6, lid: 0.04, inflow: 0.01 };
+      this.options = { case: 'channel', advection: true, advectionScheme: 'upwind', viscosity: false, pressure: false, nu: 1e-6, lid: 0.04, inflow: 0.01, cfl: .09 };
       this.reset();
     }
     index(i, j) { return i + this.s * j; }
@@ -22,13 +22,14 @@
         next.advectionScheme = options.advectionScheme;
       }
       for (const key of ['advection', 'viscosity', 'pressure']) if (key in options) next[key] = !!options[key];
-      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.04], ['inflow', 0.0001, 0.01]]) {
+      for (const [key, lo, hi] of [['nu', 5e-7, 1e-5], ['lid', 0, 0.04], ['inflow', 0.0001, 0.01], ['cfl', .001, .5]]) {
         if (key in options) {
           const x = Number(options[key]);
           if (!Number.isFinite(x)) throw new Error('Invalid parameter');
           next[key] = Math.max(lo, Math.min(hi, x));
         }
       }
+      next.cfl = Math.min(next.cfl, this.cflLimit(next));
       this.options = next;
       if (changedCase) { this.reset(); return; }
       // Parameter changes start a new complete step, not half of the old operator sequence.
@@ -37,6 +38,7 @@
       this.lastStage = '設定変更'; this.stats = this.measure();
     }
     reset() {
+      this.options.cfl = Math.min(this.options.cfl, this.cflLimit());
       const channel = this.options.case === 'channel';
       this.ly = channel ? .004 : .01; this.h = this.ly / this.n;
       this.nx = channel ? 5 * this.n : this.n;
@@ -61,13 +63,16 @@
       }
       for (let i = 1; i <= nx; i++) { v[i] = 0; v[i + s * n] = 0; u[i] = -u[i + s]; u[i + s * (n + 1)] = 2 * (channel ? 0 : this.options.lid) - u[i + s * n]; }
     }
+    cflLimit(options = this.options) {
+      // Reserve both operators and ghost-cell speeds even when terms are disabled.
+      const h = (options.case === 'channel' ? .004 : .01) / this.n;
+      const speed = Math.max(.01, options.case === 'channel' ? options.inflow : options.lid);
+      const limit = .95 / (4 + 4 * options.nu / (speed * h));
+      return Math.floor(limit * 1000) / 1000;
+    }
     timeStep() {
-      // Share one step across UI grids; reserve both operators even when disabled.
-      const h = this.ly / Math.max(128, this.n);
       const speed = Math.max(.01, this.options.case === 'channel' ? this.options.inflow : this.options.lid);
-      const limit = .7 / (4 * speed / h + 4 * this.options.nu / h ** 2);
-      const unit = 10 ** (Math.floor(Math.log10(limit)) - 1);
-      return Number((Math.floor(limit / unit) * unit).toPrecision(2));
+      return Number((Math.min(this.options.cfl, this.cflLimit()) * this.h / speed).toPrecision(12));
     }
     begin() {
       this.boundary(); this.un.set(this.u); this.vn.set(this.v);
@@ -214,7 +219,7 @@
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, fixedDt: this.timeStep(), cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, fixedDt: this.timeStep(), cflLimit: this.cflLimit(), cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;

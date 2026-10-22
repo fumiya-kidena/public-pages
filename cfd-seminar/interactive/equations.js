@@ -4,7 +4,7 @@
   "disc-godunov-u": String.raw`\begin{aligned}u'_{i,j}={}&u^n_{i,j}\\&-\frac{\Delta t}h F(u^n_{i,j},u^n_{i+1,j})\\&+\frac{\Delta t}h F(u^n_{i-1,j},u^n_{i,j})\\&-\Delta t\,\bar v^n_{i,j}\frac{u^n_{i,j}-u^n_{i,j-1}}h\end{aligned}`,
   "disc-godunov-v": String.raw`\begin{aligned}v'_{i,j}={}&v^n_{i,j}\\&-\Delta t\,\bar u^n_{i,j}\frac{v^n_{i,j}-v^n_{i-1,j}}h\\&-\frac{\Delta t}h F(v^n_{i,j},v^n_{i,j+1})\\&+\frac{\Delta t}h F(v^n_{i,j-1},v^n_{i,j})\end{aligned}`,
   "disc-godunov-flux": String.raw`\begin{gathered}F(u_L,u_R)=\\\begin{cases}\max(u_L^2,u_R^2)/2&u_L>u_R\\[5pt]0&u_L\leq0\leq u_R\\[5pt]\min(u_L^2,u_R^2)/2&\text{otherwise}\end{cases}\end{gathered}`,
-  "time-step-equation": "\\begin{aligned}h_{\\min}&=\\frac{H}{128}\\\\\\Delta t&\\leq\\frac{0.7}{4U/h_{\\min}+4\\nu/h_{\\min}^2}\\\\t^{n+1}&=t^n+\\Delta t\\end{aligned}",
+  "time-step-equation": "\\begin{aligned}C&=\\frac{U\\Delta t}{h}\\\\C_{\\max}&\\leq\\frac{0.95}{4+4\\nu/(Uh)}\\\\\\Delta t&=\\frac{Ch}{U}\\end{aligned}",
   "disc-advection-u": String.raw`\begin{aligned}u'_{i,j}={}&u^n_{i,j}\\&-\Delta t\,u^n_{i,j}\frac{u^n_{i,j}-u^n_{i-1,j}}h\\&-\Delta t\,\bar v^n_{i,j}\frac{u^n_{i,j}-u^n_{i,j-1}}h\end{aligned}`,
   "disc-advection-v": String.raw`\begin{aligned}v'_{i,j}={}&v^n_{i,j}\\&-\Delta t\,\bar u^n_{i,j}\frac{v^n_{i,j}-v^n_{i-1,j}}h\\&-\Delta t\,v^n_{i,j}\frac{v^n_{i,j}-v^n_{i,j-1}}h\end{aligned}`,
   "disc-average-v": String.raw`\begin{aligned}\bar v^n_{i,j}={}&\tfrac14\bigl(v^n_{i,j}+v^n_{i+1,j}\\&\quad+v^n_{i,j-1}+v^n_{i+1,j-1}\bigr)\end{aligned}`,

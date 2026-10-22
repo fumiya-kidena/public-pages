@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・圧力補正を組み合わせて流れを観察する、総合機械工学の体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261022-fixed-water">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261023-common-step"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261022-cavity400"></script><script defer src="app.js?v=20261023-common-step"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261023-cfl-control">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261023-cfl-control"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261022-cavity400"></script><script defer src="app.js?v=20261023-cfl-control"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -35,7 +35,8 @@
         <output id="reynolds" class="muted"></output>
         <p class="muted"><output id="cfl" title="境界速度Uを用いた UΔt/Δx。内部の安定判定では2方向の移流と粘性を別途考慮します。"></output></p>
       </div>
-      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="16">16分割</option><option value="32" selected>32分割 · 標準</option><option value="64">64分割</option><option value="96">96分割</option><option value="128">128分割</option></select><p class="muted" id="grid-info"></p></div>
+      <div class="control-section cfl-control"><label for="cfl-target">CFL上限 <output id="cfl-value" for="cfl-target">0.090</output></label><input id="cfl-target" type="range" min="0.001" max="0.131" step="0.001" value="0.09" aria-describedby="cfl-max" disabled><p class="muted cfl-scale"><span>0.001</span><span id="cfl-max">上限 0.131</span></p></div>
+      <div class="control-section"><label class="select-label" for="grid">高さ方向の格子数</label><select id="grid"><option value="16">16分割 · 0.5倍</option><option value="32" selected>32分割 · 標準</option><option value="48">48分割 · 1.5倍</option><option value="64">64分割 · 2倍</option></select><p class="muted" id="grid-info"></p></div>
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">
       <div class="simulation-view" id="simulation-view">
@@ -170,7 +171,7 @@
         </details>
       </div>
     </article>
-    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="H"></span> は領域の高さ、<span data-math="U"></span> は流入速度または上壁速度です。最も細かい128分割で移流・粘性の両方を見込み、上限以下の有効数字2桁へ切り下げます。Poiseuille flowは0.00013 s、Cavity flowは0.00025 sに固定。16〜128分割の格子変更や項のON/OFFでも変わりません。表示するCFL数は実際の格子幅 <span data-math="h"></span> を使った <span data-math="U\Delta t/h"></span> です。</p></details>
+    <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="C"></span> は設定したCFL上限、<span data-math="U"></span> は流入速度または上壁速度です。初期値は全ケース・全格子で0.09。移流・粘性を合わせた安全側の評価では、最も厳しいPoiseuille flowの64分割で上限が約0.096です。スライダー上限はさらに5%の余裕を取り、0.001刻みへ切り下げています。項のON/OFFでは上限も時間刻みも変えません。格子またはCFLを変更すると<span data-math="\Delta t"></span>が変わります。</p></details>
   </section>
   <details class="dimensional"><summary>Reynolds数と有次元化</summary>
     <p>同じ形状・境界条件でレイノルズ数をそろえると、無次元の速度分布を換算できます。Ghiaらの参照解は2次元の定常解で、開始直後の過渡的な流れとは区別します。<a href="#ref-1">[1]</a></p>

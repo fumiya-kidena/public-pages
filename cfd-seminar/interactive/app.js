@@ -4,6 +4,7 @@ const canvas = $('flow'), ctx = canvas.getContext('2d');
 const field = document.createElement('canvas'), fctx = field.getContext('2d');
 let frame = null, running = false, pending = 0, view = 'speed', worker, counter = 0;
 let axisLayoutKey = '';
+let cflEditing = false;
 const inflowSpeed = .01, lidSpeed = .04;
 const caseGrid = { channel: 32, cavity: 32 };
 const stageNames = ['移流', '粘性', '圧力補正'];
@@ -12,7 +13,7 @@ const explanations = [
   '② 粘性：速度差をならす',
   '③ 圧力補正：流入・流出を釣り合わせる'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: inflowSpeed, lid: lidSpeed });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: inflowSpeed, lid: lidSpeed, cfl: +$('cfl-target').value });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
@@ -46,7 +47,7 @@ function controlState() {
   $('boundary-left-arrow').hidden = !channel;
   $('boundary-right-arrow').hidden = !channel;
   const n = +$('grid').value;
-  for (const item of $('grid').options) item.textContent = `${item.value}分割${+item.value === 32 ? ' · 標準' : ''}`;
+  for (const item of $('grid').options) item.textContent = `${item.value}分割 · ${+item.value === 32 ? '標準' : (+item.value / 32) + '倍'}`;
   $('grid-info').textContent = `${channel ? 5*n : n} × ${n} セル / Δx = Δy = ${scaleLabel(domainHeight*1000/n)} mm`;
   $('reynolds').textContent = `Re = UH/ν = ${scaleLabel(speed * domainHeight / o.nu)} (H = ${domainHeight*1000} mm)${o.viscosity ? '' : ' / 粘性OFF'}`;
 }
@@ -172,7 +173,14 @@ function receive({ data }) {
   const timeDigits = Math.max(3, 1 - Math.floor(Math.log10(data.fixedDt)));
   $('time').textContent = data.time.toFixed(timeDigits) + ' s' + (data.phase ? '（途中）' : '');
   $('dt').textContent = data.fixedDt + ' s';
-  $('dt').title = '16〜128分割で共通。移流・粘性の両方で制限';
+  $('dt').title = 'CFLと格子幅から設定。移流・粘性の両方で制限';
+  if (pending === 0 && !cflEditing) {
+    $('cfl-target').disabled = false;
+    $('cfl-target').max = data.cflLimit;
+    $('cfl-target').value = data.options.cfl;
+    $('cfl-value').textContent = data.options.cfl.toFixed(3);
+    $('cfl-max').textContent = `上限 ${data.cflLimit.toFixed(3)}`;
+  }
   const speed = data.options.case === 'channel' ? data.options.inflow : data.options.lid;
   $('cfl').textContent = `CFL（境界速度）= ${(speed * data.fixedDt / data.h).toFixed(4)}`;
   $('energy').textContent = scientific(data.stats.energy); $('divergence').textContent = scientific(data.stats.divergence);
@@ -195,7 +203,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261023-common-step'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261023-cfl-control'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -203,6 +211,14 @@ $('play').onclick = () => { playState(!running); schedule(); };
 $('reset').onclick = () => { if (worker) reset(); };
 $('step').onclick = () => { playState(false); send('advance'); };
 $('stage-step').onclick = () => { playState(false); send('stage'); };
+$('cfl-target').oninput = () => {
+  cflEditing = true; playState(false);
+  $('cfl-value').textContent = (+$('cfl-target').value).toFixed(3);
+};
+$('cfl-target').onchange = () => {
+  cflEditing = false;
+  if (worker) send('configure', { options: options() });
+};
 for (const id of ['advection', 'viscosity', 'pressure', 'scheme-upwind', 'scheme-godunov']) $(id).addEventListener('input', () => {
   controlState(); if (worker) send('configure', { options: options() });
   const stage = ['advection', 'viscosity', 'pressure'].indexOf(id);
