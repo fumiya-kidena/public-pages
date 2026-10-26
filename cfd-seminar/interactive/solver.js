@@ -46,12 +46,19 @@
       this.s = this.nx + 2;
       for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
       this.fluid = new Uint8Array(this.u.length); this.fluidCount = 0;
+      // Rectangular walls on a 16-unit layout, snapped to the selected mesh.
+      const walls = (pool ? [
+        [7,9,5,16], [6,10,7,12], [7,10,5,7], [8,10,4,5],
+        [0,4,8,10], [0,2,10,12], [0,1,0,4],
+        [4,7,0,1], [14,16,9,12], [15,16,12,14], [14,16,0,3]
+      ] : []).map(([left,right,bottom,top]) => [
+        Math.round(left*this.nx/16), Math.round(right*this.nx/16),
+        Math.round(bottom*this.n/16), Math.round(top*this.n/16)
+      ]);
       for (let i = 1; i <= this.nx; i++) {
-        const x = (i - .5) / this.nx;
         for (let j = 1; j <= this.n; j++) {
-          const divider = pool && x >= .375 && x < .625 && j > Math.round(this.n / 4);
-          const overhang = pool && x < .25 && j > Math.round(this.n / 2) && j <= Math.round(this.n * .625);
-          if (!divider && !overhang) { this.fluid[this.index(i, j)] = 1; this.fluidCount++; }
+          const solid = walls.some(([left,right,bottom,top]) => i>left && i<=right && j>bottom && j<=top);
+          if (!solid) { this.fluid[this.index(i, j)] = 1; this.fluidCount++; }
         }
       }
       this.openU = new Uint8Array(this.u.length); this.openV = new Uint8Array(this.v.length);
