@@ -1,6 +1,8 @@
 'use strict';
 (() => {
   const equations = {
+  "disc-gravity": String.raw`\begin{gathered}\mathbf{g}=(0,-g),\quad g=9.81\ \mathrm{m/s^2}\\v^*_{i,j}\leftarrow v^*_{i,j}-g\Delta t\end{gathered}`,
+  "hydrostatic-equation": String.raw`\begin{aligned}0&=-\frac1\rho\frac{\partial p}{\partial y}-g\\p(y)-p_0&=\rho g(H-y),\quad H=10\ \mathrm{mm}\end{aligned}`,
   "disc-godunov-u": String.raw`\begin{aligned}u'_{i,j}={}&u^n_{i,j}\\&-\frac{\Delta t}h F(u^n_{i,j},u^n_{i+1,j})\\&+\frac{\Delta t}h F(u^n_{i-1,j},u^n_{i,j})\\&-\Delta t\,\bar v^n_{i,j}\frac{u^n_{i,j}-u^n_{i,j-1}}h\end{aligned}`,
   "disc-godunov-v": String.raw`\begin{aligned}v'_{i,j}={}&v^n_{i,j}\\&-\Delta t\,\bar u^n_{i,j}\frac{v^n_{i,j}-v^n_{i-1,j}}h\\&-\frac{\Delta t}h F(v^n_{i,j},v^n_{i,j+1})\\&+\frac{\Delta t}h F(v^n_{i,j-1},v^n_{i,j})\end{aligned}`,
   "disc-godunov-flux": String.raw`\begin{gathered}F(u_L,u_R)=\\\begin{cases}\max(u_L^2,u_R^2)/2&u_L>u_R\\[5pt]0&u_L\leq0\leq u_R\\[5pt]\min(u_L^2,u_R^2)/2&\text{otherwise}\end{cases}\end{gathered}`,

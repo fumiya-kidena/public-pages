@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261023-cfl-control');
+importScripts('solver.js?v=20261026-hydrostatic');
 let solver = new FlowSolver();
 let batch = null;
 const profileAges = [60, 120, 180];
@@ -14,7 +14,7 @@ function reply(request) {
   const state = solver.snapshot();
   const history = profileAges.map(age => profileHistory.find(item => item.steps === state.steps-age)).filter(Boolean);
   // History buffers stay in the worker; cloning these small profiles preserves the ring.
-  self.postMessage({ ...state, profileHistory: history, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.profileU.buffer, state.profileV.buffer]);
+  self.postMessage({ ...state, profileHistory: history, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.fluid.buffer, state.profileU.buffer, state.profileV.buffer, ...state.pressureProfiles.map(profile => profile.values.buffer)]);
 }
 function finishBatch(error) {
   if (!batch) return;

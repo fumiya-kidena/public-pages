@@ -18,13 +18,17 @@ const FlowProfile = (() => {
   const historyU = [.55, .35, .2].map(alpha => ({
     ...line('', 'rgba(162,44,75,' + alpha + ')'), borderWidth: 1.5, order: 2
   }));
+  const velocityDatasets = [currentU, theory, ghiaU, ...historyU, currentV, ghiaV];
+  const pressureCurves = [uColor, vColor].map(color => ({ ...line('', color), component: 'p' }));
+  const hydrostatic = { ...line('静水圧', '#168274'), component: 'p', borderDash: [6, 4] };
+  const velocityModelNote = document.getElementById('profile-model-note').textContent;
   const axis = (position, text, color = '#627078') => ({
     type: 'linear', position, title: { display: true, text, color },
     ticks: { maxTicksLimit: 5, color }, grid: { color: '#e6ebed' }
   });
   const plot = new Chart(document.getElementById('profile-chart'), {
     type: 'scatter',
-    data: { datasets: [currentU, theory, ghiaU, ...historyU, currentV, ghiaV] },
+    data: { datasets: velocityDatasets },
     plugins: [{
       id: 'profile-centerlines',
       beforeDatasetsDraw(chart) {
@@ -56,7 +60,9 @@ const FlowProfile = (() => {
         } },
         tooltip: { callbacks: {
           title: items => items[0]?.dataset.time === undefined ? '' : 't = ' + items[0].dataset.time.toFixed(5) + ' s',
-          label: item => item.dataset.component === 'v'
+          label: item => item.dataset.component === 'p'
+            ? item.dataset.label + ': p-p0 = ' + item.parsed.x.toFixed(3) + ' Pa, y = ' + item.parsed.y.toFixed(2) + ' mm'
+            : item.dataset.component === 'v'
             ? item.dataset.label + ': x = ' + item.parsed.x.toFixed(2) + ' mm, v = ' + item.parsed.y.toFixed(3) + ' mm/s'
             : item.dataset.label + ': u = ' + item.parsed.x.toFixed(3) + ' mm/s, y = ' + item.parsed.y.toFixed(2) + ' mm'
         } }
@@ -72,9 +78,55 @@ const FlowProfile = (() => {
     }
     if (Math.abs(holder.clientHeight - height) > .5) holder.style.height = height + 'px';
   }
+  function updatePool(frame) {
+    channelMode = true;
+    const mm = x => Number((x * 1000).toPrecision(4));
+    pressureCurves.forEach((dataset, i) => {
+      const profile = frame.pressureProfiles[i];
+      dataset.label = 'x = ' + mm(profile.x) + ' mm';
+      dataset.time = frame.time;
+      dataset.data = [];
+      for (let j = 1; j <= frame.n + 1; j++) {
+        if (!Number.isFinite(profile.values[j])) continue;
+        dataset.data.push({
+          x: profile.values[j],
+          y: (j === frame.n + 1 ? frame.ly : (j - .5) * frame.h) * 1000
+        });
+      }
+    });
+    hydrostatic.data = [
+      { x: frame.rho * frame.gravityAcceleration * frame.ly, y: 0 },
+      { x: 0, y: frame.ly * 1000 }
+    ];
+    plot.data.datasets = [...pressureCurves, hydrostatic];
+    const pressures = plot.data.datasets.flatMap(dataset => dataset.data.map(point => point.x));
+    const scales = plot.options.scales;
+    scales.x.title.text = 'p-p0 (Pa)';
+    scales.x.title.color = scales.x.ticks.color = '#627078';
+    scales.x.position = 'bottom'; scales.x.grid.drawOnChartArea = true;
+    scales.x.min = Math.min(0, ...pressures); scales.x.max = Math.max(...pressures);
+    scales.y.min = 0; scales.y.max = frame.ly * 1000;
+    scales.xPosition.display = scales.yVelocity.display = false;
+    document.getElementById('profile-title').textContent = '圧力 · 鉛直断面';
+    document.getElementById('profile-section').textContent = 'x = '
+      + frame.pressureProfiles.map(profile => mm(profile.x)).join(' / ') + ' mm';
+    document.getElementById('profile-reference-row').hidden = false;
+    document.getElementById('profile-reference').textContent = '静水圧（定常）';
+    document.getElementById('profile-citation').hidden = true;
+    document.getElementById('profile-citation').title = '';
+    const mismatch = [];
+    if (!frame.options.gravity) mismatch.push('重力OFF');
+    if (!frame.options.pressure) mismatch.push('圧力補正OFF');
+    document.getElementById('profile-model-note').textContent = mismatch.join(' · ');
+    document.getElementById('profile-model-note').hidden = mismatch.length === 0;
+    plot.canvas.setAttribute('aria-label', '2断面の圧力分布と静水圧。横軸p-p0 (Pa)、縦軸y (mm)。');
+    resize(); plot.update('none');
+  }
   function update(frame) {
+    if (frame.options.case === 'pool') { updatePool(frame); return; }
     const channel = frame.options.case === 'channel';
     channelMode = channel;
+    plot.data.datasets = velocityDatasets;
     const ref = GhiaReference.sample(frame);
     const pointsU = profile => Array.from(profile, (speed, j) => ({
       x: speed * 1000,
@@ -102,6 +154,8 @@ const FlowProfile = (() => {
     const allV = [currentV, ghiaV].flatMap(dataset => dataset.data.map(p => p.y));
     const extent = Math.max(.001, speed, ...allU.map(Math.abs), ...allV.map(Math.abs));
     const scales = plot.options.scales;
+    scales.x.title.text = 'u (mm/s)';
+    scales.x.title.color = scales.x.ticks.color = uColor;
     scales.x.position = channel ? 'bottom' : 'top';
     scales.x.grid.drawOnChartArea = channel;
     scales.x.min = channel ? Math.min(0, ...allU) : -extent;
@@ -121,6 +175,7 @@ const FlowProfile = (() => {
     document.getElementById('profile-citation').title = ref
       ? `Ghia, Ghia & Shin (1982), Tables I–II, Re=${ref.re}.` + (ref.re === 400 ? ' x/L=0.9063のvも原表値（−0.23827）を使用。' : '')
       : '';
+    document.getElementById('profile-model-note').textContent = velocityModelNote;
     document.getElementById('profile-model-note').hidden = (!channel && !ref)
       || (frame.options.advection && frame.options.viscosity && frame.options.pressure);
     plot.canvas.setAttribute('aria-label', channel
