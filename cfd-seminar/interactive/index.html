@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・重力・圧力補正を組み合わせて流れと静水圧を観察する体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-pool-steps">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-pool-steps"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261026-pool-steps"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-diagram-first">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-diagram-first"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261026-pool-steps"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -102,6 +102,11 @@
     <article class="discrete-row adv">
       <div class="discrete-formulas"><h3>① 移流項 <small id="advection-method">1次風上差分</small></h3>
         <div data-advection-scheme="upwind">
+        <div class="formula-pair" id="upwind-stencils">
+          <div><h4><span data-math="u"></span> の横方向の傾き</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-x-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-x-forward"></figure></div><div class="math-block" id="disc-upwind-ux"></div></div>
+          <div><h4><span data-math="u"></span> の縦方向の傾き</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-y-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-y-forward"></figure></div><div class="math-block" id="disc-upwind-uy"></div></div>
+        </div>
+        <p>流れが来る側の点を使います。各位置の <span data-math="u^n"></span> に係数を掛けて足し、<span data-math="h"></span> で割ります。<span data-math="v^n"></span> にも同じ係数を使います。</p>
         <p>右向き・上向きの流れの場合：</p>
         <div class="formula-pair">
           <div><h4>横方向の速度 <span data-math="u"></span> を更新</h4><p class="formula-condition"><span data-math="u^n_{i,j}\geq0,\ \bar v^n_{i,j}\geq0"></span> の場合</p><div class="math-block" id="disc-advection-u"></div></div>
@@ -124,14 +129,10 @@
         <p><span data-math="\bar v"></span> は <span data-math="u"></span> の位置の縦速度、<span data-math="\bar u"></span> は <span data-math="v"></span> の位置の横速度。周囲4点から求めます。</p>
         <div class="formula-pair"><div><div class="math-block" id="disc-average-v"></div></div><div><div class="math-block" id="disc-average-u"></div></div></div>
         </details>
-        <details class="formula-details"><summary>左向き・下向きに流れる場合の差分</summary>
-          <p data-advection-scheme="godunov" hidden>Godunovでは、以下のうち交差方向（<span data-math="\partial u/\partial y,\ \partial v/\partial x"></span>）だけに風上差分を使います。</p>
-          <p>風上差分では、流れが来る側の点を使います。横速度が負なら右隣、縦速度が負なら上隣との差分に変えます。上の更新式の差分だけを、次の式に置き換えます。差分に掛ける速度の符号はそのままです。</p>
-          <div class="formula-pair"><div><h4><span data-math="u"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-ux"></div><h4><span data-math="u"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-uy"></div></div><div><h4><span data-math="v"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-vx"></div><h4><span data-math="v"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-vy"></div></div></div>
-        </details>
-        <details class="formula-details" data-advection-scheme="upwind"><summary>差分の係数を格子に並べる</summary>
-          <p>各位置の <span data-math="u^n"></span> に表の係数を掛けて足し、全体を <span data-math="h"></span> で割ると速度の傾きになります。<span data-math="v^n"></span> にも同じ係数を使い、流れの向きは上の条件で選びます。</p>
-          <div class="formula-pair"><div><h4>横方向の差分</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-x-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-x-forward"></figure></div></div><div><h4>縦方向の差分</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-y-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-y-forward"></figure></div></div></div>
+        <details class="formula-details"><summary>縦速度の風上差分</summary>
+          <p data-advection-scheme="godunov" hidden>Godunovでは、縦速度の移流は交差方向（<span data-math="\partial v/\partial x"></span>）だけに風上差分を使います。</p>
+          <p>横速度が負なら右隣、縦速度が負なら上隣との差分に変えます。差分に掛ける速度の符号はそのままです。</p>
+          <div class="formula-pair"><div><h4><span data-math="v"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-vx"></div></div><div><h4><span data-math="v"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-vy"></div></div></div>
         </details>
         <p class="muted">OFF：<span data-math="u'=u^n,\ v'=v^n"></span></p>
         <details class="formula-details"><summary>ゼロ初期場での挙動</summary><p>1次風上の非保存形では、内部速度がゼロだと移流の更新量もゼロです。Godunovでは流入境界の流束が内部へ伝わります。どちらも移流だけでは非圧縮条件を満たしません。</p></details>
@@ -140,12 +141,9 @@
     <article class="discrete-row visc">
       <div class="discrete-formulas"><h3>② 粘性項 <small>2次中心差分</small></h3>
 
-        <div class="formula-pair"><div><h4>横方向の速度 <span data-math="u"></span></h4><div class="math-block" id="disc-diffusion-u"></div></div><div><h4>縦方向の速度 <span data-math="v"></span></h4><div class="math-block" id="disc-diffusion-v"></div></div></div>
+        <div class="formula-pair"><div><h4>横方向の速度 <span data-math="u"></span></h4><figure class="coefficient-kernel" data-kernel="laplacian-u"></figure><div class="math-block" id="disc-diffusion-u"></div></div><div><h4>縦方向の速度 <span data-math="v"></span></h4><figure class="coefficient-kernel" data-kernel="laplacian-v"></figure><div class="math-block" id="disc-diffusion-v"></div></div></div>
         <p>差分には①の前の <span data-math="u^n,\ v^n"></span> を使います。</p>
-        <details class="formula-details"><summary>粘性項の係数を格子に並べる</summary>
-          <figure class="coefficient-kernel" data-kernel="laplacian-u"></figure>
-          <p>各位置の <span data-math="u^n"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ります。中心の係数が <span data-math="-4"></span> なのは、横・縦の差分に <span data-math="-2"></span> ずつあるためです。さらに <span data-math="\nu\Delta t"></span> を掛けると、粘性による速度の変化量になります。<span data-math="v^n"></span> も同じ係数です。</p>
-        </details>
+        <p>各位置の速度に係数を掛けて足し、<span data-math="h^2"></span> で割ります。さらに <span data-math="\nu\Delta t"></span> を掛けると、粘性による速度の変化量になります。</p>
         <p class="muted">OFF：<span data-math="u^*=u',\ v^*=v'"></span></p>
       </div>
     </article>
@@ -160,14 +158,10 @@
     </article>
     <article class="discrete-row press">
       <div class="discrete-formulas"><h3>④ 圧力Poisson <small>2次中心差分</small></h3>
-        <p>流量が釣り合う圧力 <span data-math="p"></span> を求め、速度を補正します。<a class="cite" href="#ref-3" title="Chorin (1968), Numerical solution of the Navier–Stokes equations. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a></p>
         <h4>まず、各セルの圧力 <span data-math="p_{i,j}"></span> を求める</h4>
+        <figure class="coefficient-kernel" data-kernel="laplacian-p"></figure>
         <div class="math-block" id="disc-poisson"></div>
-        <p>全セルの式と境界条件をまとめて解きます。</p>
-        <details class="formula-details"><summary>圧力Poisson方程式の係数を格子に並べる</summary>
-          <figure class="coefficient-kernel" data-kernel="laplacian-p"></figure>
-          <p>各位置の圧力 <span data-math="p"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ると左辺になります。境界点では境界条件に合わせて式を変えます。</p>
-        </details>
+        <p>各位置の圧力 <span data-math="p"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ると左辺になります。全セルの式と境界条件をまとめて解き、速度を補正します。<a class="cite" href="#ref-3" title="Chorin (1968), Numerical solution of the Navier–Stokes equations. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a></p>
         <h4>次に、圧力差で速度を補正する</h4>
         <div class="formula-pair"><div><div class="math-block" id="disc-correction-u"></div></div><div><div class="math-block" id="disc-correction-v"></div></div></div>
         <h4>連続の式</h4>

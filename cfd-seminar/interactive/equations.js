@@ -36,6 +36,7 @@
     'upwind-y-back': { title: '\\partial u/\\partial y\\quad(\\bar v\\geq0)', factor: '\\frac1h', x: ['i'], y: ['j+1', 'j', 'j-1'], values: [[0], [1], [-1]] },
     'upwind-y-forward': { title: '\\partial u/\\partial y\\quad(\\bar v<0)', factor: '\\frac1h', x: ['i'], y: ['j+1', 'j', 'j-1'], values: [[1], [-1], [0]] },
     'laplacian-u': { title: '\\partial^2 u/\\partial x^2+\\partial^2 u/\\partial y^2', factor: '\\frac1{h^2}', x: ['i-1', 'i', 'i+1'], y: ['j+1', 'j', 'j-1'], values: [[0, 1, 0], [1, -4, 1], [0, 1, 0]] },
+    'laplacian-v': { title: '\\partial^2 v/\\partial x^2+\\partial^2 v/\\partial y^2', factor: '\\frac1{h^2}', x: ['i-1', 'i', 'i+1'], y: ['j+1', 'j', 'j-1'], values: [[0, 1, 0], [1, -4, 1], [0, 1, 0]] },
     'laplacian-p': { title: '\\partial^2 p/\\partial x^2+\\partial^2 p/\\partial y^2', factor: '\\frac1{h^2}', x: ['i-1', 'i', 'i+1'], y: ['j+1', 'j', 'j-1'], values: [[0, 1, 0], [1, -4, 1], [0, 1, 0]] }
   };
   const mathElement = (tag, tex) => {
