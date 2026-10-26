@@ -19,7 +19,7 @@ const FlowProfile = (() => {
     ...line('', 'rgba(162,44,75,' + alpha + ')'), borderWidth: 1.5, order: 2
   }));
   const velocityDatasets = [currentU, theory, ghiaU, ...historyU, currentV, ghiaV];
-  const pressureCurves = [uColor, vColor].map(color => ({ ...line('', color), component: 'p' }));
+  const pressureCurves = [uColor, vColor].map(color => ({ ...line('', color), component: 'p', spanGaps: false }));
   const hydrostatic = { ...line('静水圧', '#168274'), component: 'p', borderDash: [6, 4] };
   const velocityModelNote = document.getElementById('profile-model-note').textContent;
   const axis = (position, text, color = '#627078') => ({
@@ -87,9 +87,10 @@ const FlowProfile = (() => {
       dataset.time = frame.time;
       dataset.data = [];
       for (let j = 1; j <= frame.n + 1; j++) {
-        if (!Number.isFinite(profile.values[j])) continue;
+        const valid = Number.isFinite(profile.values[j]);
+        if (!valid && !dataset.data.length) continue;
         dataset.data.push({
-          x: profile.values[j],
+          x: valid ? profile.values[j] : null,
           y: (j === frame.n + 1 ? frame.ly : (j - .5) * frame.h) * 1000
         });
       }
@@ -99,7 +100,7 @@ const FlowProfile = (() => {
       { x: 0, y: frame.ly * 1000 }
     ];
     plot.data.datasets = [...pressureCurves, hydrostatic];
-    const pressures = plot.data.datasets.flatMap(dataset => dataset.data.map(point => point.x));
+    const pressures = plot.data.datasets.flatMap(dataset => dataset.data.map(point => point.x)).filter(Number.isFinite);
     const scales = plot.options.scales;
     scales.x.title.text = 'p-p0 (Pa)';
     scales.x.title.color = scales.x.ticks.color = '#627078';

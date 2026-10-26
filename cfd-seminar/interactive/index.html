@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・重力・圧力補正を組み合わせて流れと静水圧を観察する体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-hydrostatic">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-hydrostatic"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-hydrostatic"></script><script defer src="app.js?v=20261026-hydrostatic"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-pool-overhang">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-pool-overhang"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-overhang"></script><script defer src="app.js?v=20261026-pool-overhang"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -26,7 +26,7 @@
   </section>
   <div class="workspace">
     <aside class="controls" aria-label="計算条件">
-      <label class="select-label" for="case">計算ケース</label><select id="case"><option value="channel">Poiseuille flow</option><option value="cavity">Cavity flow</option><option value="pool">Hydrostatic pool</option></select>
+      <label class="select-label" for="case">計算ケース</label><select id="case"><option value="channel">Poiseuille flow</option><option value="pool">Hydrostatic pool</option><option value="cavity">Cavity flow</option></select>
       <p id="model-note" class="model-note">圧力補正OFF</p>
       <div class="control-section"><h2>水（約20℃・近似値）</h2>
         <p class="muted">密度 ρ = 1000 kg/m³</p>
@@ -154,7 +154,7 @@
         <div class="math-block" id="disc-gravity"></div>
         <details class="formula-details"><summary>静水圧と水たまりの境界条件</summary>
           <div class="math-block" id="hydrostatic-equation"></div>
-          <p class="muted">水面は水平・固定で <span data-math="p=p_0"></span>。底面と側壁は滑りなし。水面では接線方向のせん断応力をゼロとし、法線速度は圧力補正で求めます。表面の移動・波・空気は計算しません。重力と圧力補正がONなら、静水圧が重力と釣り合います。<a href="#ref-8">[8]</a></p>
+          <p class="muted">左右の水面は水平・固定で <span data-math="p=p_0"></span>。壁面は滑りなし。水面では接線方向のせん断応力をゼロとし、法線速度は圧力補正で求めます。表面の移動・波・空気は計算しません。重力と圧力補正がONなら、静水圧が重力と釣り合います。<a href="#ref-8">[8]</a></p>
         </details>
       </div>
     </article>

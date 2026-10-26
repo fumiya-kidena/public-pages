@@ -41,7 +41,7 @@ function controlState() {
   $('flow-domain').dataset.case = o.case;
   $('boundary-top').textContent = channel ? '静止壁  0 mm/s' : pool ? '水面（固定） ' : `上壁 →  ${(speed*1000).toFixed(1)} mm/s`;
   $('surface-pressure').hidden = !pool;
-  $('boundary-bottom').textContent = pool ? '底面・側壁：滑りなし' + (o.gravity ? ' / g ↓' : '') : '静止壁 0 mm/s';
+  $('boundary-bottom').textContent = pool ? '壁面：滑りなし' + (o.gravity ? ' / g ↓' : '') : '静止壁 0 mm/s';
   $('gravity-value').hidden = !pool && !o.gravity;
   $('boundary-left-kind').textContent = channel ? '流入' : '静止壁';
   $('boundary-right-kind').textContent = channel ? '自由流出' : '静止壁';
@@ -120,14 +120,25 @@ function draw() {
   canvas.style.aspectRatio = String(nx/n);
   $('section-u').style.left = `${100*(pool ? frame.pressureProfiles[0].x : frame.profileX)/frame.lx}%`;
   $('section-u').querySelector('span').textContent = pool ? 'p A' : 'u';
-  $('section-u').style.bottom = '0';
   $('section-p').hidden = !pool;
-  if (pool) {
-    for (const [index, id] of [[0,'section-u'],[1,'section-p']]) {
+  for (const [index, id] of [[0,'section-u'],[1,'section-p']]) {
+    const section = $(id), segments = [];
+    section.classList.toggle('pool-section', pool);
+    if (pool) {
       const profile = frame.pressureProfiles[index];
-      $(id).style.left = `${100*profile.x/frame.lx}%`;
-      $(id).style.bottom = `${100*(profile.values.findIndex(Number.isFinite)-1)/n}%`;
+      section.style.left = `${100*profile.x/frame.lx}%`;
+      for (let j = 1; j <= n; j++) {
+        if (!Number.isFinite(profile.values[j])) continue;
+        const first = j;
+        while (j < n && Number.isFinite(profile.values[j+1])) j++;
+        const segment = document.createElement('i');
+        segment.className = 'section-segment';
+        segment.style.bottom = `${100*(first-1)/n}%`;
+        segment.style.height = `${100*(j-first+1)/n}%`;
+        segments.push(segment);
+      }
     }
+    section.replaceChildren(section.querySelector('span'), ...segments);
   }
   $('section-v').style.top = `${100*(1-frame.profileY/frame.ly)}%`;
   $('section-v').hidden = o.case !== 'cavity';
@@ -164,8 +175,13 @@ function draw() {
       if (i===0 || !fluid[k-1]) { ctx.moveTo(x,y); ctx.lineTo(x,y+cell); }
       if (i===nx-1 || !fluid[k+1]) { ctx.moveTo(x+cell,y); ctx.lineTo(x+cell,y+cell); }
       if (j===0 || !fluid[k-nx]) { ctx.moveTo(x,y+cell); ctx.lineTo(x+cell,y+cell); }
+      if (j<n-1 && !fluid[k+nx]) { ctx.moveTo(x,y); ctx.lineTo(x+cell,y); }
     }
-    ctx.stroke(); ctx.strokeStyle='#326db4'; ctx.beginPath(); ctx.moveTo(0,1); ctx.lineTo(width,1); ctx.stroke();
+    ctx.stroke(); ctx.strokeStyle='#326db4'; ctx.beginPath();
+    for (let i = 0; i < nx; i++) if (fluid[i+nx*(n-1)]) {
+      ctx.moveTo(i*cell,1); ctx.lineTo((i+1)*cell,1);
+    }
+    ctx.stroke();
   }
   if ($('arrows').checked) {
     const screenCell = Math.max(1, canvas.getBoundingClientRect().height) / n;
@@ -238,7 +254,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261026-hydrostatic'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261026-pool-overhang'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }

@@ -149,6 +149,8 @@ main{max-width:1600px}
 .flow-domain[data-case="pool"] .boundary-top{color:var(--press)}
 .flow-domain[data-case="pool"] .boundary-top>span+span{margin-left:6px}
 .section-line span{white-space:nowrap}
+.pool-section{border-left:0;box-shadow:none}
+.section-segment{position:absolute;left:0;border-left:2px dashed currentColor;box-shadow:0 0 0 1px rgb(255 255 255 / 85%)}
 @media(max-width:380px){.equation-system{column-gap:2px}.equation-system .equation-toggle{padding-inline:1px}.equation-system .katex{font-size:1em}.equation-toggle .term-number{font-size:12px}}
 .cfl-control label,.cfl-scale{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .cfl-control label{font-size:12px}.cfl-control output{font-variant-numeric:tabular-nums}

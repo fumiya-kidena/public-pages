@@ -48,8 +48,11 @@
       this.fluid = new Uint8Array(this.u.length); this.fluidCount = 0;
       for (let i = 1; i <= this.nx; i++) {
         const x = (i - .5) / this.nx;
-        const bottom = pool ? Math.round(this.n * (x < .125 ? 6 : x < .25 ? 3 : x < .4375 ? 0 : x < .5625 ? 8 : x < .6875 ? 4 : x < .875 ? 2 : 5) / 16) : 0;
-        for (let j = bottom + 1; j <= this.n; j++) { this.fluid[this.index(i, j)] = 1; this.fluidCount++; }
+        for (let j = 1; j <= this.n; j++) {
+          const divider = pool && x >= .375 && x < .625 && j > Math.round(this.n / 4);
+          const overhang = pool && x < .25 && j > Math.round(this.n / 2) && j <= Math.round(this.n * .625);
+          if (!divider && !overhang) { this.fluid[this.index(i, j)] = 1; this.fluidCount++; }
+        }
       }
       this.openU = new Uint8Array(this.u.length); this.openV = new Uint8Array(this.v.length);
       for (let j = 1; j <= this.n; j++) for (let i = 1; i <= this.nx; i++) {
@@ -70,7 +73,10 @@
           if (!this.openU[k]) u[k] = 0;
           if (!this.openV[k]) v[k] = 0;
         }
-        if (refreshOutlet) for (let i = 1; i <= nx; i++) v[i + s*n] = v[i + s*(n-1)];
+        if (refreshOutlet) for (let i = 1; i <= nx; i++) {
+          const k = i + s*n;
+          if (this.openV[k]) v[k] = v[k-s];
+        }
         return;
       }
       const channel = this.options.case === 'channel';
@@ -240,6 +246,7 @@
       }
       if (this.options.case === 'pool') for (let i = 1; i <= nx; i++) {
         const k = i + s*n;
+        if (!this.openV[k]) continue;
         p[k+s] = -p[k]; v[k] += 2*dt*p[k]/h;
       }
       // Keep the pressure-corrected outlet face so the discrete divergence stays consistent.
@@ -291,7 +298,7 @@
     }
     pressureProfiles() {
       if (this.options.case !== 'pool') return [];
-      return [.3125, .75].map(fraction => {
+      return [.1875, .8125].map(fraction => {
         const i = Math.floor(this.nx*fraction)+1, values = new Float32Array(this.n+2).fill(NaN);
         for (let j = 1; j <= this.n; j++) if (this.fluid[this.index(i,j)]) values[j] = this.rho*this.p[this.index(i,j)];
         values[this.n+1] = 0;
