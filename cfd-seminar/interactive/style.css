@@ -134,6 +134,8 @@ main{max-width:1600px}
 .math-block{overflow-x:auto;max-width:100%;font-size:16px;padding:6px 0}
 .math-block .katex-display{margin:8px 0;text-align:left}
 .math-block .katex-display>.katex{text-align:left}
+.discretization-arrow{display:flex;align-items:center;gap:10px;margin:12px 0;color:var(--accent);font-weight:600}
+.discretization-arrow>[data-math]{font-size:24px;line-height:1}
 .water-table{border-collapse:collapse;width:100%;max-width:620px;font-size:13px;text-align:left}
 .water-table th,.water-table td{border-bottom:1px solid var(--line);padding:10px 12px}
 @media(max-width:900px){.math-block{font-size:14px}}

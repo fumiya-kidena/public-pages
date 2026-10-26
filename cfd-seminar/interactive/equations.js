@@ -17,6 +17,7 @@
   "disc-upwind-vy": String.raw`\left(\frac{\partial v}{\partial y}\right)^n_{i,j}\!\approx\begin{cases}\dfrac{v^n_{i,j}-v^n_{i,j-1}}h&v^n_{i,j}\geq0\\[8pt]\dfrac{v^n_{i,j+1}-v^n_{i,j}}h&v^n_{i,j}<0\end{cases}`,
   "disc-diffusion-u": String.raw`\begin{aligned}u^*_{i,j}={}&u'_{i,j}\\&+\nu\Delta t\,\frac{u^n_{i+1,j}-2u^n_{i,j}+u^n_{i-1,j}}{h^2}\\&+\nu\Delta t\,\frac{u^n_{i,j+1}-2u^n_{i,j}+u^n_{i,j-1}}{h^2}\end{aligned}`,
   "disc-diffusion-v": String.raw`\begin{aligned}v^*_{i,j}={}&v'_{i,j}\\&+\nu\Delta t\,\frac{v^n_{i+1,j}-2v^n_{i,j}+v^n_{i-1,j}}{h^2}\\&+\nu\Delta t\,\frac{v^n_{i,j+1}-2v^n_{i,j}+v^n_{i,j-1}}{h^2}\end{aligned}`,
+  "poisson-equation": String.raw`\begin{aligned}&\frac{\partial^2 p}{\partial x^2}+\frac{\partial^2 p}{\partial y^2}\\&=\frac\rho{\Delta t}\left(\frac{\partial u^*}{\partial x}+\frac{\partial v^*}{\partial y}\right)\end{aligned}`,
   "disc-poisson": String.raw`\begin{aligned}&\frac{p_{i+1,j}-2p_{i,j}+p_{i-1,j}}{h^2}\\&\quad+\frac{p_{i,j+1}-2p_{i,j}+p_{i,j-1}}{h^2}\\&=\frac\rho{\Delta t}\left(\frac{u^*_{i,j}-u^*_{i-1,j}}h\right.\\&\qquad\qquad\left.+\frac{v^*_{i,j}-v^*_{i,j-1}}h\right)\end{aligned}`,
   "disc-correction-u": String.raw`\begin{aligned}u^{n+1}_{i,j}={}&u^*_{i,j}\\&-\frac{\Delta t}{\rho h}(p_{i+1,j}-p_{i,j})\end{aligned}`,
   "disc-correction-v": String.raw`\begin{aligned}v^{n+1}_{i,j}={}&v^*_{i,j}\\&-\frac{\Delta t}{\rho h}(p_{i,j+1}-p_{i,j})\end{aligned}`,

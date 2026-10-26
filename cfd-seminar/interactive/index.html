@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・重力・圧力補正を組み合わせて流れと静水圧を観察する体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-diagram-first">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-diagram-first"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261026-pool-steps"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-poisson-flow">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261026-poisson-flow"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261026-pool-steps"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -158,7 +158,9 @@
     </article>
     <article class="discrete-row press">
       <div class="discrete-formulas"><h3>④ 圧力Poisson <small>2次中心差分</small></h3>
-        <h4>まず、各セルの圧力 <span data-math="p_{i,j}"></span> を求める</h4>
+        <div class="math-block" id="poisson-equation"></div>
+        <p class="muted"><span data-math="u^*,\ v^*"></span>：①〜③の後の予測速度</p>
+        <p class="discretization-arrow" id="poisson-discretize"><span data-math="\Downarrow" aria-hidden="true"></span><span>離散化</span></p>
         <figure class="coefficient-kernel" data-kernel="laplacian-p"></figure>
         <div class="math-block" id="disc-poisson"></div>
         <p>各位置の圧力 <span data-math="p"></span> に係数を掛けて足し、<span data-math="h^2"></span> で割ると左辺になります。全セルの式と境界条件をまとめて解き、速度を補正します。<a class="cite" href="#ref-3" title="Chorin (1968), Numerical solution of the Navier–Stokes equations. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a></p>
