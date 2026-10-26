@@ -1,6 +1,11 @@
 'use strict';
 (() => {
   const equations = {
+  "disc-upwind2-ux": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial x}\right)_{i,j}\approx\\\begin{cases}\dfrac{3u_{i,j}-4u_{i-1,j}+u_{i-2,j}}{2h}&u_{i,j}\geq0\\[8pt]\dfrac{-3u_{i,j}+4u_{i+1,j}-u_{i+2,j}}{2h}&u_{i,j}<0\end{cases}\end{gathered}`,
+  "disc-upwind2-uy": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial y}\right)_{i,j}\approx\\\begin{cases}\dfrac{3u_{i,j}-4u_{i,j-1}+u_{i,j-2}}{2h}&\bar v_{i,j}\geq0\\[8pt]\dfrac{-3u_{i,j}+4u_{i,j+1}-u_{i,j+2}}{2h}&\bar v_{i,j}<0\end{cases}\end{gathered}`,
+  "disc-upwind2-u": String.raw`\begin{aligned}u^{(m+1)}_{i,j}={}&u^{(m)}_{i,j}\\&-\Delta t_a\,u^{(m)}_{i,j}\\&\quad\cdot\frac{3u^{(m)}_{i,j}-4u^{(m)}_{i-1,j}+u^{(m)}_{i-2,j}}{2h}\\&-\Delta t_a\,\bar v^{(m)}_{i,j}\\&\quad\cdot\frac{3u^{(m)}_{i,j}-4u^{(m)}_{i,j-1}+u^{(m)}_{i,j-2}}{2h}\end{aligned}`,
+  "disc-upwind2-v": String.raw`\begin{aligned}v^{(m+1)}_{i,j}={}&v^{(m)}_{i,j}\\&-\Delta t_a\,\bar u^{(m)}_{i,j}\\&\quad\cdot\frac{3v^{(m)}_{i,j}-4v^{(m)}_{i-1,j}+v^{(m)}_{i-2,j}}{2h}\\&-\Delta t_a\,v^{(m)}_{i,j}\\&\quad\cdot\frac{3v^{(m)}_{i,j}-4v^{(m)}_{i,j-1}+v^{(m)}_{i,j-2}}{2h}\end{aligned}`,
+  "disc-upwind2-rk": String.raw`\begin{gathered}u^{(0)}=u_{\rm start},\quad v^{(0)}=v_{\rm start}\\m=0,1,\qquad\Delta t_a=\Delta t/N_a\\u_{\rm end}=\tfrac12(u^{(0)}+u^{(2)})\\v_{\rm end}=\tfrac12(v^{(0)}+v^{(2)})\end{gathered}`,
   "disc-gravity": String.raw`\begin{gathered}\mathbf{g}=(0,-g),\quad g=9.81\ \mathrm{m/s^2}\\v^*_{i,j}\leftarrow v^*_{i,j}-g\Delta t\end{gathered}`,
   "hydrostatic-equation": String.raw`\begin{aligned}0&=-\frac1\rho\frac{\partial p}{\partial y}-g\\p(y)-p_0&=\rho g(H-y),\quad H=10\ \mathrm{mm}\end{aligned}`,
   "disc-godunov-u": String.raw`\begin{aligned}u'_{i,j}={}&u^n_{i,j}\\&-\frac{\Delta t}h F(u^n_{i,j},u^n_{i+1,j})\\&+\frac{\Delta t}h F(u^n_{i-1,j},u^n_{i,j})\\&-\Delta t\,\bar v^n_{i,j}\frac{u^n_{i,j}-u^n_{i,j-1}}h\end{aligned}`,
@@ -32,6 +37,10 @@
   for (const [id, tex] of Object.entries(equations)) render(document.getElementById(id), tex, true);
   document.querySelectorAll('[data-math]').forEach(el => render(el, el.dataset.math));
   const kernels = {
+    'upwind2-x-back': { title: '\\partial u/\\partial x\\quad(u\\geq0)', factor: '\\frac1{2h}', x: ['i-2', 'i-1', 'i'], y: ['j'], values: [[1, -4, 3]] },
+    'upwind2-x-forward': { title: '\\partial u/\\partial x\\quad(u<0)', factor: '\\frac1{2h}', x: ['i', 'i+1', 'i+2'], y: ['j'], values: [[-3, 4, -1]] },
+    'upwind2-y-back': { title: '\\partial u/\\partial y\\quad(\\bar v\\geq0)', factor: '\\frac1{2h}', x: ['i'], y: ['j', 'j-1', 'j-2'], values: [[3], [-4], [1]] },
+    'upwind2-y-forward': { title: '\\partial u/\\partial y\\quad(\\bar v<0)', factor: '\\frac1{2h}', x: ['i'], y: ['j+2', 'j+1', 'j'], values: [[-1], [4], [-3]] },
     'upwind-x-back': { title: '\\partial u/\\partial x\\quad(u\\geq0)', factor: '\\frac1h', x: ['i-1', 'i', 'i+1'], y: ['j'], values: [[-1, 1, 0]] },
     'upwind-x-forward': { title: '\\partial u/\\partial x\\quad(u<0)', factor: '\\frac1h', x: ['i-1', 'i', 'i+1'], y: ['j'], values: [[0, -1, 1]] },
     'upwind-y-back': { title: '\\partial u/\\partial y\\quad(\\bar v\\geq0)', factor: '\\frac1h', x: ['i'], y: ['j+1', 'j', 'j-1'], values: [[0], [1], [-1]] },

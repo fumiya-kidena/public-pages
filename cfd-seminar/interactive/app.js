@@ -14,7 +14,7 @@ const explanations = [
   '③ 重力：下向きに加速する',
   '④ 圧力補正：流入・流出を釣り合わせる'
 ];
-const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: $('scheme-godunov').checked ? 'godunov' : 'upwind', viscosity: $('viscosity').checked, gravity: $('gravity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: inflowSpeed, lid: lidSpeed, cfl: +$('cfl-target').value });
+const options = () => ({ case: $('case').value, advection: $('advection').checked, advectionScheme: document.querySelector('input[name="advection-scheme"]:checked').value, viscosity: $('viscosity').checked, gravity: $('gravity').checked, pressure: $('pressure').checked, nu: 1e-6, inflow: inflowSpeed, lid: lidSpeed, cfl: +$('cfl-target').value });
 const scientific = x => x < 1e-12 ? '≈ 0' : x.toExponential(2);
 const scaleLabel = x => x === 0 ? '0' : Math.abs(x) < .01 ? x.toExponential(2) : Number(x.toPrecision(3)).toString();
 function equation() {
@@ -29,12 +29,13 @@ function controlState() {
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.gravity, o.pressure][i]));
   $('advection-schemes').disabled = !o.advection;
   document.querySelectorAll('[data-advection-scheme]').forEach(el => { el.hidden = el.dataset.advectionScheme !== o.advectionScheme; });
-  $('advection-method').textContent = o.advectionScheme === 'godunov' ? '1次Godunov' : '1次風上差分';
+  $('advection-method').textContent = { upwind: '1次風上差分', godunov: '1次Godunov', upwind2: '2次風上差分' }[o.advectionScheme];
+  $('vertical-upwind-details').hidden = o.advectionScheme === 'upwind2';
   const channel = o.case === 'channel', pool = o.case === 'pool', speed = channel ? o.inflow : o.lid;
   const domainHeight = channel ? .004 : .01;
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '全項ON' : !o.pressure ? '圧力補正OFF · 非圧縮条件なし' : '一部の項がOFF';
-  if (!o.gravity && ((channel && o.advection && o.advectionScheme === 'upwind' && !o.viscosity && !o.pressure) || (!channel && !o.viscosity))) $('model-note').textContent += ' / ゼロ初期場では内部静止';
+  if (!o.gravity && ((channel && o.advection && o.advectionScheme !== 'godunov' && !o.viscosity && !o.pressure) || (!channel && !o.viscosity))) $('model-note').textContent += ' / ゼロ初期場では内部静止';
   if (pool) $('model-note').textContent = '水面固定 · ' + (!o.pressure ? '圧力補正OFF' : !o.gravity ? '重力OFF' : '静水圧');
   $('model-note').classList.toggle('complete', pool ? o.gravity && o.pressure : count === 3);
   $('wall-label').textContent = channel ? 'Poiseuille flow' : pool ? 'Hydrostatic pool' : 'Cavity flow';
@@ -254,7 +255,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261026-pool-steps'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261027-upwind2'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -270,7 +271,7 @@ $('cfl-target').onchange = () => {
   cflEditing = false;
   if (worker) send('configure', { options: options() });
 };
-for (const id of ['advection', 'viscosity', 'gravity', 'pressure', 'scheme-upwind', 'scheme-godunov']) $(id).addEventListener('input', () => {
+for (const id of ['advection', 'viscosity', 'gravity', 'pressure', 'scheme-upwind', 'scheme-godunov', 'scheme-upwind2']) $(id).addEventListener('input', () => {
   controlState(); if (worker) send('configure', { options: options() });
   const stage = ['advection', 'viscosity', 'gravity', 'pressure'].indexOf(id);
   if (stage >= 0) $('stage-description').textContent = explanations[stage];
