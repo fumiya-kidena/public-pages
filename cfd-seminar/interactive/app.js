@@ -249,7 +249,7 @@ function receive({ data }) {
   // Leave time for UI and paint; there is at most one automatic batch in flight.
   if (running) setTimeout(schedule, 25);
 }
-equation(); controlState(); $('stage-step').disabled = true;
+equation(); configureCaseView(); $('stage-step').disabled = true;
 new ResizeObserver(pressureOutline).observe($('equation-system'));
 document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
@@ -280,13 +280,16 @@ $('grid').onchange = () => {
   caseGrid[$('case').value] = +$('grid').value;
   controlState(); if (worker) reset();
 };
-$('case').onchange = () => {
+function configureCaseView() {
   $('grid').value = caseGrid[$('case').value];
   const pool = $('case').value === 'pool';
   $('gravity').checked = pool;
   if (pool) $('pressure').checked = true;
   setView(pool ? 'pressure' : 'speed');
-  controlState(); if (worker) reset();
+  controlState();
+}
+$('case').onchange = () => {
+  configureCaseView(); if (worker) reset();
 };
 $('arrows').onchange = draw;
 new ResizeObserver(() => { draw(); FlowProfile.resize(); }).observe(canvas);

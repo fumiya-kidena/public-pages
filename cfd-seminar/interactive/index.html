@@ -6,7 +6,7 @@
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261027-kk">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-kk"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261027-kk"></script>
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-kk"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261027-pool-first"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -28,7 +28,7 @@
   </section>
   <div class="workspace">
     <aside class="controls" aria-label="計算条件">
-      <label class="select-label" for="case">計算ケース</label><select id="case"><option value="channel">Poiseuille flow</option><option value="pool">Hydrostatic pool</option><option value="cavity">Cavity flow</option></select>
+      <label class="select-label" for="case">計算ケース</label><select id="case"><option value="pool" selected>Hydrostatic pool</option><option value="channel">Poiseuille flow</option><option value="cavity">Cavity flow</option></select>
       <p id="model-note" class="model-note">圧力補正OFF</p>
       <div class="control-section"><h2>水（約20℃・近似値）</h2>
         <p class="muted">密度 ρ = 1000 kg/m³</p>
