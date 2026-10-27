@@ -1,6 +1,8 @@
 'use strict';
 (() => {
   const equations = {
+  "disc-kk-ux-back": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial x}\right)_{i,j}\approx\\\dfrac{\begin{gathered}2u_{i-2,j}-10u_{i-1,j}+9u_{i,j}\\-2u_{i+1,j}+u_{i+2,j}\end{gathered}}{6h}\end{gathered}`,
+  "disc-kk-ux-forward": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial x}\right)_{i,j}\approx\\\dfrac{\begin{gathered}-u_{i-2,j}+2u_{i-1,j}-9u_{i,j}\\+10u_{i+1,j}-2u_{i+2,j}\end{gathered}}{6h}\end{gathered}`,
   "disc-upwind2-ux": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial x}\right)_{i,j}\approx\\\begin{cases}\dfrac{3u_{i,j}-4u_{i-1,j}+u_{i-2,j}}{2h}&u_{i,j}\geq0\\[8pt]\dfrac{-3u_{i,j}+4u_{i+1,j}-u_{i+2,j}}{2h}&u_{i,j}<0\end{cases}\end{gathered}`,
   "disc-upwind2-uy": String.raw`\begin{gathered}\left(\frac{\partial u}{\partial y}\right)_{i,j}\approx\\\begin{cases}\dfrac{3u_{i,j}-4u_{i,j-1}+u_{i,j-2}}{2h}&\bar v_{i,j}\geq0\\[8pt]\dfrac{-3u_{i,j}+4u_{i,j+1}-u_{i,j+2}}{2h}&\bar v_{i,j}<0\end{cases}\end{gathered}`,
   "disc-upwind2-u": String.raw`\begin{aligned}u^{(m+1)}_{i,j}={}&u^{(m)}_{i,j}\\&-\Delta t_a\,u^{(m)}_{i,j}\\&\quad\cdot\frac{3u^{(m)}_{i,j}-4u^{(m)}_{i-1,j}+u^{(m)}_{i-2,j}}{2h}\\&-\Delta t_a\,\bar v^{(m)}_{i,j}\\&\quad\cdot\frac{3u^{(m)}_{i,j}-4u^{(m)}_{i,j-1}+u^{(m)}_{i,j-2}}{2h}\end{aligned}`,
@@ -37,6 +39,8 @@
   for (const [id, tex] of Object.entries(equations)) render(document.getElementById(id), tex, true);
   document.querySelectorAll('[data-math]').forEach(el => render(el, el.dataset.math));
   const kernels = {
+    'kk-x-back': { title: '\\partial u/\\partial x\\quad(u\\geq0)', factor: '\\frac1{6h}', x: ['i-2', 'i-1', 'i', 'i+1', 'i+2'], y: ['j'], values: [[2, -10, 9, -2, 1]] },
+    'kk-x-forward': { title: '\\partial u/\\partial x\\quad(u<0)', factor: '\\frac1{6h}', x: ['i-2', 'i-1', 'i', 'i+1', 'i+2'], y: ['j'], values: [[-1, 2, -9, 10, -2]] },
     'upwind2-x-back': { title: '\\partial u/\\partial x\\quad(u\\geq0)', factor: '\\frac1{2h}', x: ['i-2', 'i-1', 'i'], y: ['j'], values: [[1, -4, 3]] },
     'upwind2-x-forward': { title: '\\partial u/\\partial x\\quad(u<0)', factor: '\\frac1{2h}', x: ['i', 'i+1', 'i+2'], y: ['j'], values: [[-3, 4, -1]] },
     'upwind2-y-back': { title: '\\partial u/\\partial y\\quad(\\bar v\\geq0)', factor: '\\frac1{2h}', x: ['i'], y: ['j', 'j-1', 'j-2'], values: [[3], [-4], [1]] },

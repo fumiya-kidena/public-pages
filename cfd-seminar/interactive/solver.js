@@ -18,7 +18,7 @@
         next.case = options.case;
       }
       if ('advectionScheme' in options) {
-        if (!['upwind', 'godunov', 'upwind2'].includes(options.advectionScheme)) throw new Error('Unsupported advection scheme');
+        if (!['upwind', 'godunov', 'upwind2', 'kk'].includes(options.advectionScheme)) throw new Error('Unsupported advection scheme');
         next.advectionScheme = options.advectionScheme;
       }
       for (const key of ['advection', 'viscosity', 'gravity', 'pressure']) if (key in options) next[key] = !!options[key];
@@ -134,8 +134,11 @@
     static secondOrderUpwind(center, upstream, upstream2, speed, h) {
       return (speed >= 0 ? 1 : -1) * (3 * center - 4 * upstream + upstream2) / (2 * h);
     }
-    secondOrderEuler(sourceU, sourceV, dt) {
-      const { n, nx, s, h } = this, pool = this.options.case === 'pool';
+    static kawamuraKuwahara(center, upstream, upstream2, downstream, downstream2, speed, h) {
+      return (speed >= 0 ? 1 : -1) * (2*upstream2 - 10*upstream + 9*center - 2*downstream + downstream2) / (6*h);
+    }
+    upwindEuler(sourceU, sourceV, dt) {
+      const { n, nx, s, h } = this, pool = this.options.case === 'pool', kk = this.options.advectionScheme === 'kk';
       this.u.set(sourceU); this.v.set(sourceV);
       for (const [a, old, active, horizontal] of [[this.u, sourceU, this.openU, true], [this.v, sourceV, this.openV, false]]) {
         for (let j = 1; j <= (horizontal ? n : n-1); j++) for (let i = 1; i <= (horizontal ? nx-1 : nx); i++) {
@@ -145,6 +148,10 @@
             const sign = speed >= 0 ? 1 : -1, offset = -sign*stride;
             const coordinate = stride === 1 ? i : j, limit = stride === 1 ? (horizontal ? nx : nx+1) : (horizontal ? n+1 : n);
             const upstream2 = coordinate - 2*sign;
+            if (kk && coordinate >= 2 && coordinate + 2 <= limit && (!pool ||
+              (active[k-stride] && active[k-2*stride] && active[k+stride] && active[k+2*stride]))) {
+              return FlowSolver.kawamuraKuwahara(old[k], old[k+offset], old[k+2*offset], old[k-offset], old[k-2*offset], speed, h);
+            }
             if (upstream2 >= 0 && upstream2 <= limit && (!pool || (active[k+offset] && active[k+2*offset]))) {
               return FlowSolver.secondOrderUpwind(old[k], old[k+offset], old[k+2*offset], speed, h);
             }
@@ -161,26 +168,35 @@
       }
       this.boundary();
     }
-    secondOrderAdvection() {
+    rungeKuttaAdvection() {
       if (!this.advectionBuffers) this.advectionBuffers = Object.fromEntries(['u0','v0','u1','v1'].map(key => [key, new Float64Array(this.u.length)]));
       const { u0, v0, u1, v1 } = this.advectionBuffers;
-      // RK2 avoids the forward-Euler instability of a second-order upwind derivative.
-      // Internal advection substeps keep its two-direction CFL below 0.45 without changing the global dt.
+      // RK2 for second-order upwind, SSP RK3 for KK; substeps bound the two-direction CFL.
+      const kk = this.options.advectionScheme === 'kk';
       const substeps = Math.max(1, Math.ceil(this.cfl / .45)), dt = this.dt / substeps;
       for (let step = 0; step < substeps; step++) {
         u0.set(this.u); v0.set(this.v);
-        this.secondOrderEuler(u0, v0, dt);
+        this.upwindEuler(u0, v0, dt);
         u1.set(this.u); v1.set(this.v);
-        this.secondOrderEuler(u1, v1, dt);
+        this.upwindEuler(u1, v1, dt);
         for (let k = 0; k < this.u.length; k++) {
-          this.u[k] = (u0[k] + this.u[k]) / 2;
-          this.v[k] = (v0[k] + this.v[k]) / 2;
+          this.u[k] = kk ? .75*u0[k] + .25*this.u[k] : (u0[k] + this.u[k]) / 2;
+          this.v[k] = kk ? .75*v0[k] + .25*this.v[k] : (v0[k] + this.v[k]) / 2;
         }
         this.boundary();
+        if (kk) {
+          u1.set(this.u); v1.set(this.v);
+          this.upwindEuler(u1, v1, dt);
+          for (let k = 0; k < this.u.length; k++) {
+            this.u[k] = u0[k]/3 + 2*this.u[k]/3;
+            this.v[k] = v0[k]/3 + 2*this.v[k]/3;
+          }
+          this.boundary();
+        }
       }
     }
     advection() {
-      if (this.options.advectionScheme === 'upwind2') { this.secondOrderAdvection(); return; }
+      if (['upwind2', 'kk'].includes(this.options.advectionScheme)) { this.rungeKuttaAdvection(); return; }
       if (this.options.case === 'pool') { this.poolTransport(false); return; }
       const { n, nx, s, un, vn, u, v, dt, h } = this;
       // cfd-seminar/advection.f90 MAC interpolation; first-order upwind from advection2.html.

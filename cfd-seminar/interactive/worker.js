@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261027-upwind2');
+importScripts('solver.js?v=20261027-kk');
 let solver = new FlowSolver();
 let batch = null;
 const profileAges = [60, 120, 180];

@@ -29,8 +29,8 @@ function controlState() {
   document.querySelectorAll('.stage').forEach((el, i) => el.classList.toggle('enabled', [o.advection, o.viscosity, o.gravity, o.pressure][i]));
   $('advection-schemes').disabled = !o.advection;
   document.querySelectorAll('[data-advection-scheme]').forEach(el => { el.hidden = el.dataset.advectionScheme !== o.advectionScheme; });
-  $('advection-method').textContent = { upwind: '1次風上差分', godunov: '1次Godunov', upwind2: '2次風上差分' }[o.advectionScheme];
-  $('vertical-upwind-details').hidden = o.advectionScheme === 'upwind2';
+  $('advection-method').textContent = { upwind: '1次精度 風上差分', godunov: '1次精度 Godunov', upwind2: '2次精度 風上差分', kk: '3次精度 KK（河村・桑原）' }[o.advectionScheme];
+  $('vertical-upwind-details').hidden = ['upwind2', 'kk'].includes(o.advectionScheme);
   const channel = o.case === 'channel', pool = o.case === 'pool', speed = channel ? o.inflow : o.lid;
   const domainHeight = channel ? .004 : .01;
   const count = +o.advection + +o.viscosity + +o.pressure;
@@ -255,7 +255,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261027-upwind2'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261027-kk'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -271,7 +271,7 @@ $('cfl-target').onchange = () => {
   cflEditing = false;
   if (worker) send('configure', { options: options() });
 };
-for (const id of ['advection', 'viscosity', 'gravity', 'pressure', 'scheme-upwind', 'scheme-godunov', 'scheme-upwind2']) $(id).addEventListener('input', () => {
+for (const id of ['advection', 'viscosity', 'gravity', 'pressure', 'scheme-upwind', 'scheme-godunov', 'scheme-upwind2', 'scheme-kk']) $(id).addEventListener('input', () => {
   controlState(); if (worker) send('configure', { options: options() });
   const stage = ['advection', 'viscosity', 'gravity', 'pressure'].indexOf(id);
   if (stage >= 0) $('stage-description').textContent = explanations[stage];

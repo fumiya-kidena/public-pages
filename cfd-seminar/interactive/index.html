@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・重力・圧力補正を組み合わせて流れと静水圧を観察する体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261026-poisson-flow">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-upwind2"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261027-upwind2"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261027-kk">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-kk"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261027-kk"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -19,9 +19,10 @@
     <div class="equation-caption">Navier–Stokes方程式</div>
     <div class="equation-line"><span id="eq-time"></span><label class="equation-toggle adv"><input id="advection" type="checkbox" checked aria-label="① 移流項"><span id="eq-advection"></span><small><b class="term-number">①</b> 移流項</small></label><span>=</span><label class="equation-toggle press"><input id="pressure" type="checkbox" aria-label="④ 圧力項・圧力補正"><span id="eq-pressure"></span><small><b class="term-number">④</b> 圧力項</small></label><label class="equation-toggle visc"><input id="viscosity" type="checkbox" aria-label="② 粘性項"><span id="eq-viscosity"></span><small><b class="term-number">②</b> 粘性項</small></label><label class="equation-toggle grav"><input id="gravity" type="checkbox" aria-label="③ 重力項"><span id="eq-gravity"></span><small><b class="term-number">③</b> 重力項</small></label></div>
     <fieldset class="advection-schemes" id="advection-schemes" aria-label="移流の計算法">
-      <label><input type="radio" name="advection-scheme" id="scheme-upwind" value="upwind" checked>1次風上</label>
-      <label title="自己移流にBurgersのGodunov流束、交差方向には1次風上差分を使用"><input type="radio" name="advection-scheme" id="scheme-godunov" value="godunov">1次Godunov</label>
-      <label title="上流側3点の差分。空間2次、移流の時間積分はRK2"><input type="radio" name="advection-scheme" id="scheme-upwind2" value="upwind2">2次風上</label>
+      <label title="空間1次精度の風上差分"><input type="radio" name="advection-scheme" id="scheme-upwind" value="upwind" checked>1次精度 風上</label>
+      <label title="空間1次精度。自己移流にBurgersのGodunov流束、交差方向には1次風上差分を使用"><input type="radio" name="advection-scheme" id="scheme-godunov" value="godunov">1次精度 Godunov</label>
+      <label title="中心と上流2点の3点差分。空間2次、移流の時間積分はRK2"><input type="radio" name="advection-scheme" id="scheme-upwind2" value="upwind2">2次精度 風上</label>
+      <label title="河村・桑原法。中心と前後2点の5点差分。空間3次、移流の時間積分はRK3"><input type="radio" name="advection-scheme" id="scheme-kk" value="kk">3次精度 KK</label>
     </fieldset>
     </div>
   </section>
@@ -101,7 +102,7 @@
     <p class="muted">式はSI単位系。<span data-math="\nu"></span>：動粘性係数 (m²/s)、<span data-math="\rho"></span>：密度 (kg/m³)。</p>
     </details>
     <article class="discrete-row adv">
-      <div class="discrete-formulas"><h3>① 移流項 <small id="advection-method">1次風上差分</small></h3>
+      <div class="discrete-formulas"><h3>① 移流項 <small id="advection-method">1次精度 風上差分</small></h3>
         <div data-advection-scheme="upwind">
         <div class="formula-pair" id="upwind-stencils">
           <div><h4><span data-math="u"></span> の横方向の傾き</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind-x-back"></figure><figure class="coefficient-kernel" data-kernel="upwind-x-forward"></figure></div><div class="math-block" id="disc-upwind-ux"></div></div>
@@ -131,7 +132,7 @@
             <div><h4><span data-math="u"></span> の横方向の傾き</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind2-x-back"></figure><figure class="coefficient-kernel" data-kernel="upwind2-x-forward"></figure></div><div class="math-block" id="disc-upwind2-ux"></div></div>
             <div><h4><span data-math="u"></span> の縦方向の傾き</h4><div class="kernel-pair"><figure class="coefficient-kernel" data-kernel="upwind2-y-back"></figure><figure class="coefficient-kernel" data-kernel="upwind2-y-forward"></figure></div><div class="math-block" id="disc-upwind2-uy"></div></div>
           </div>
-          <p>上流側の3点を使います。<span data-math="v"></span> にも同じ係数を使います。</p>
+          <p>中心と上流2点の3点を使います。<span data-math="v"></span> にも同じ係数を使います。</p>
           <p class="muted">急な変化では数値振動が出る場合があります。壁際など3点がそろわない位置は1次風上です。</p>
           <details class="formula-details"><summary>速度の更新・時間積分</summary>
             <p>右向き・上向きの場合の1回の更新：</p>
@@ -140,6 +141,19 @@
             <div class="math-block" id="disc-upwind2-rk"></div>
             <p class="muted"><span data-math="N_a"></span>：内部の分割数（通常1）。start / end：分割区間の初め / 終わり。<span data-math="N_a"></span> 回進めた値が <span data-math="u',v'"></span> です。</p>
             <p class="muted">空間2次・移流単独は時間2次。粘性・圧力補正を含む全体の時間精度は1次です。CFLが大きい場合は移流だけ内部で分割し、1時間ステップの <span data-math="\Delta t"></span> は変えません。</p>
+          </details>
+        </div>
+        <div data-advection-scheme="kk" hidden>
+          <div class="formula-pair">
+            <div><h4>右向きの流れ</h4><figure class="coefficient-kernel" data-kernel="kk-x-back"></figure><div class="math-block" id="disc-kk-ux-back"></div></div>
+            <div><h4>左向きの流れ</h4><figure class="coefficient-kernel" data-kernel="kk-x-forward"></figure><div class="math-block" id="disc-kk-ux-forward"></div></div>
+          </div>
+          <p>中心と前後2点の5点を使います。縦方向は <span data-math="j"></span> に沿って同じ係数を使い、<span data-math="\bar v"></span> の符号で風上を選びます。縦速度 <span data-math="v"></span> にも同じ係数を使います。<a class="cite" href="#ref-9" title="Shimizu, Hydraulics for Practitioners, Appendix I: Kawamura-Kuwahara scheme, equation (8)">[9]</a></p>
+          <details class="formula-details"><summary>2次風上との違い・精度</summary>
+            <p>2次風上は中心と上流2点、KKは風下2点も使います。滑らかな内部点の微分では、格子幅を半分にすると主な空間誤差は2次で約1/4、3次で約1/8になります。</p>
+            <p>KKは4次中心差分に数値的な減衰を加えた3次風上差分です。急な変化では、2次風上・KKとも数値振動が出る場合があります。<a class="cite" href="#ref-9" title="Shimizu, Hydraulics for Practitioners, Appendix I: Kawamura-Kuwahara scheme, equation (8)">[9]</a></p>
+            <p>KKの移流は時間3次のRK3。壁際など5点がそろわない位置は2次風上、上流の3点もそろわなければ1次風上に戻します。CFLが大きい場合は移流だけ内部で分割し、1時間ステップの <span data-math="\Delta t"></span> は変えません。</p>
+            <p class="muted">「3次精度」は内部の移流差分についてです。交差速度の補間・粘性・圧力の空間精度は2次で、境界では精度が下がります。粘性・圧力補正を含む全体の時間精度は1次です。</p>
           </details>
         </div>
         <details class="formula-details"><summary>平均速度</summary>
@@ -152,7 +166,7 @@
           <div class="formula-pair"><div><h4><span data-math="v"></span> の横方向の傾き</h4><div class="math-block" id="disc-upwind-vx"></div></div><div><h4><span data-math="v"></span> の縦方向の傾き</h4><div class="math-block" id="disc-upwind-vy"></div></div></div>
         </details>
         <p class="muted">OFF：<span data-math="u'=u^n,\ v'=v^n"></span></p>
-        <details class="formula-details"><summary>ゼロ初期場での挙動</summary><p>1次・2次風上の非保存形では、内部速度がゼロだと移流の更新量もゼロです。Godunovでは流入境界の流束が内部へ伝わります。いずれも移流だけでは非圧縮条件を満たしません。</p></details>
+        <details class="formula-details"><summary>ゼロ初期場での挙動</summary><p>1次・2次風上とKKの非保存形では、内部速度がゼロだと移流の更新量もゼロです。Godunovでは流入境界の流束が内部へ伝わります。いずれも移流だけでは非圧縮条件を満たしません。</p></details>
       </div>
     </article>
     <article class="discrete-row visc">
@@ -203,7 +217,7 @@
     <table class="water-table"><thead><tr><th>Re</th><th>上壁速度</th><th>時間の基準 L/U</th></tr></thead><tbody><tr><td>100</td><td>10 mm/s</td><td>1 s</td></tr><tr><td>400</td><td>40 mm/s</td><td>0.25 s</td></tr><tr><td>1000</td><td>100 mm/s</td><td>0.1 s</td></tr></tbody></table>
     <p class="muted">水の近似値としてρ = 1000 kg/m³、μ = 0.001 Pa·s、ν = μ/ρ = 1 mm²/sを使います。Poiseuille flowは流入速度10 mm/s・高さ4 mmでRe = 40、Cavity flowは上壁速度40 mm/s・高さ10 mmでRe = 400です。領域寸法は固定で、格子数を変えると格子幅が変わります。表はキャビティの定常参照解と比較するための換算例です。実際の水槽の奥行き方向・自由表面・温度変化は含みません。</p>
   </details>
-  <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが10 × 10 mm、Poiseuille flowが20 × 4 mm。速度はmm/s、圧力はPa（Poiseuille flowは出口の基準圧力との差、Cavity flowは領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数は基準圧力との差を密度で割った値で、表示時にρ = 1000 kg/m³を掛けます。流入速度は10 mm/s、上壁速度は40 mm/sに固定しています。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowの出口は自由流出とし、圧力を基準値に固定します。出口の予測速度は内側から外挿し、圧力補正で出口速度を決めます。流出流量は直接指定しません。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は1次風上（既定）・1次Godunov・2次風上を選べます。Godunovは自己移流にBurgers流束、交差方向に1次風上差分を使います。2次風上は非保存形の3点差分とRK2を使い、壁際など上流の点が不足する場所は1次風上に戻します。粘性・圧力補正を含む全体の時間精度は1次です。圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>内部の速度ベクトルは向きを示します。低速でも向きを読めるよう最低表示長を設け、長さには上限もあります。駆動速度の1%未満のベクトルは省略します。速さは色で確認できます。周囲の矢印と速度は境界条件です。出口の流速は計算により決まります。速さの色の最大値はPoiseuille flowでは15 mm/s（十分に発達した平行平板間流れの理論最大値）、Cavity flowでは上壁速度の40 mm/sです。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは色の上限値より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。横方向速度uのグラフはPoiseuille flowではx = 18 mm（出口の2 mm手前）、Cavity flowでは中央の縦断面を用います。Poiseuille flowはu分布だけを表示します。Cavity flowは中央横断面のv分布も同じ図に重ねます。上軸がu、左軸がy、下軸がx、右軸がvで、速度ゼロの破線が中央で交わります。可視化上のu・vの線が断面位置です。MAC格子の速度を断面位置へ線形補間し、境界の値も含めます。Poiseuille flowの薄い実線は60・120・180ステップ前の速度分布です。履歴は完了した時間ステップの値だけを保存し、条件変更・リセットで消去します。Ghiaらの参照点（uは丸印、vは四角印）は現在のReに対応する定常参照値（Re = 100または400）を上壁速度と領域寸法で有次元化したものです。Reが一致するときだけ表示し、異なるRe間の補間は行いません。計算値は現在の時刻の値なので、開始直後や一部の項がOFFのときに定常参照値とは一致しません。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
-  <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p id="ref-7">[7] Ketcheson, LeVeque &amp; del Razo. <a href="https://www.clawpack.org/riemann_book/html/Burgers_approximate.html" target="_blank" rel="noopener">Riemann Problems and Jupyter Solutions: Burgers equation</a>（オンライン版、DOI表記なし）</p><p id="ref-8">[8] Hodanbosi, C., Fairman, J. G. (1996). NASA Glenn. <a href="https://www.grc.nasa.gov/WWW/K-12/WindTunnel/Activities/fluid_pressure.html" target="_blank" rel="noopener">Fluids Pressure and Depth</a>（DOI表記なし）</p><p>Charts: <a href="../assets/chartjs.LICENSE.md">Chart.js / MIT</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
+  <details class="notes"><summary>計算条件・教材としての限界</summary><p>2次元・一定密度の単相流。自由表面、物体、乱流モデルは含みません。計算内部はSI単位系です。領域はCavity flowが10 × 10 mm、Poiseuille flowが20 × 4 mm。速度はmm/s、圧力はPa（Poiseuille flowは出口の基準圧力との差、Cavity flowは領域平均をゼロとした相対圧力）、時間はsで表示します。圧力の計算変数は基準圧力との差を密度で割った値で、表示時にρ = 1000 kg/m³を掛けます。流入速度は10 mm/s、上壁速度は40 mm/sに固定しています。両ケースとも速度ゼロから始まり、最初の時間ステップで境界条件を適用します。Poiseuille flowの出口は自由流出とし、圧力を基準値に固定します。出口の予測速度は内側から外挿し、圧力補正で出口速度を決めます。流出流量は直接指定しません。画面上の色や矢印は計算結果であり、録画ではありません。</p><p>CFD seminarのMAC格子・陽的な予測速度・圧力による速度補正をJavaScriptへ移したものです。移流は1次精度 風上（既定）・1次精度 Godunov・2次精度 風上・3次精度 KKを選べます。Godunovは自己移流にBurgers流束、交差方向に1次風上差分を使います。2次風上は非保存形の3点差分とRK2を使い、壁際など上流の点が不足する場所は1次風上に戻します。KKは非保存形の5点差分とRK3を使い、点が不足する場所は2次・1次風上へ戻します。KKの3次精度は内部の移流差分に限り、交差速度の補間・粘性・圧力の空間精度は2次です。粘性・圧力補正を含む全体の時間精度は1次です。圧力計算は共役勾配法です。数値的な減衰もあるため、粘性OFFでも速度が減衰する場合があります。粗い格子の定性教材であり、精密な実験予測用ではありません。</p><p>「処理を1つ進める」では1時間ステップ内の途中状態を表示します。物理時刻は圧力補正（またはそのスキップ）の完了後に進みます。Δtは実際に使った秒単位の時間刻みです。1更新のステップ数は画面更新までの計算回数であり、実時間に対する再生倍率ではありません。途中で条件を変えた場合、そのステップ開始時に戻ります。圧力表示は直近に求めた圧力です。</p><p>内部の速度ベクトルは向きを示します。低速でも向きを読めるよう最低表示長を設け、長さには上限もあります。駆動速度の1%未満のベクトルは省略します。速さは色で確認できます。周囲の矢印と速度は境界条件です。出口の流速は計算により決まります。速さの色の最大値はPoiseuille flowでは15 mm/s（十分に発達した平行平板間流れの理論最大値）、Cavity flowでは上壁速度の40 mm/sです。圧力と発散の色の尺度はゼロを中心に、現在の値域に合わせて自動調整します。速さは色の上限値より大きいと上限の色になります。範囲外の値は端の色になります。格子・ケースの変更では計算をリセットします。色はセルごとの値で、格子間の色補間は行いません。ベクトルは表示用にセル中心へ平均した速度です。横方向速度uのグラフはPoiseuille flowではx = 18 mm（出口の2 mm手前）、Cavity flowでは中央の縦断面を用います。Poiseuille flowはu分布だけを表示します。Cavity flowは中央横断面のv分布も同じ図に重ねます。上軸がu、左軸がy、下軸がx、右軸がvで、速度ゼロの破線が中央で交わります。可視化上のu・vの線が断面位置です。MAC格子の速度を断面位置へ線形補間し、境界の値も含めます。Poiseuille flowの薄い実線は60・120・180ステップ前の速度分布です。履歴は完了した時間ステップの値だけを保存し、条件変更・リセットで消去します。Ghiaらの参照点（uは丸印、vは四角印）は現在のReに対応する定常参照値（Re = 100または400）を上壁速度と領域寸法で有次元化したものです。Reが一致するときだけ表示し、異なるRe間の補間は行いません。計算値は現在の時刻の値なので、開始直後や一部の項がOFFのときに定常参照値とは一致しません。</p><p>計算・操作値の送信、解析用アクセス計測、外部CDNは使用していません。配信元には通常のページ取得リクエストが送られます。</p></details>
+  <footer><a href="../">元のCFD seminar</a><a href="LICENSE.txt">MIT License</a><span>2026 / KIDENA-Fumiya</span><p id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></p><p id="ref-3">[3] Chorin, A. J. (1968). Numerical solution of the Navier–Stokes equations. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2">doi:10.1090/S0025-5718-1968-0242392-2</a></p><p id="ref-7">[7] Ketcheson, LeVeque &amp; del Razo. <a href="https://www.clawpack.org/riemann_book/html/Burgers_approximate.html" target="_blank" rel="noopener">Riemann Problems and Jupyter Solutions: Burgers equation</a>（オンライン版、DOI表記なし）</p><p id="ref-8">[8] Hodanbosi, C., Fairman, J. G. (1996). NASA Glenn. <a href="https://www.grc.nasa.gov/WWW/K-12/WindTunnel/Activities/fluid_pressure.html" target="_blank" rel="noopener">Fluids Pressure and Depth</a>（DOI表記なし）</p><p id="ref-9">[9] Shimizu, Y. <a href="https://i-ric.org/yasu/nbook_e/20_Appendix01_e.html#kawamura-kuwahara-scheme-k-k-scheme-ref-2" target="_blank" rel="noopener">Hydraulics for Practitioners, Appendix I: Kawamura-Kuwahara scheme, 式(8)</a>（オンライン教材、DOI表記なし）</p><p>Charts: <a href="../assets/chartjs.LICENSE.md">Chart.js / MIT</a></p><p>Icons: <a href="icons/LICENSE">Lucide / ISC</a></p></footer>
 </main>
 </body></html>

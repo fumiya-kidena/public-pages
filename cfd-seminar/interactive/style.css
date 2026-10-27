@@ -21,7 +21,7 @@
 .equation-system .equation-name{position:static;color:inherit}
 .equation-system .equation-caption{grid-column:1/6;grid-row:2;margin:0}
 .equation-system .equation-line{display:contents}
-.advection-schemes{grid-column:2;grid-row:4;border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:11px}
+.advection-schemes{grid-column:2/-1;grid-row:4;justify-self:start;border:0;padding:0;margin:0;min-width:0;display:flex;flex-direction:column;gap:4px;font-size:11px}
 .advection-schemes label{display:flex;align-items:center;gap:4px;min-height:24px;cursor:pointer;white-space:nowrap}
 .advection-schemes input{margin:0;width:14px;height:14px;accent-color:var(--adv)}
 .advection-schemes:disabled{opacity:.45}
