@@ -1,5 +1,5 @@
 'use strict';
-importScripts('solver.js?v=20261027-kk');
+importScripts('solver.js?v=20261029-ink');
 let solver = new FlowSolver();
 let batch = null;
 const profileAges = [60, 120, 180];
@@ -14,7 +14,7 @@ function reply(request) {
   const state = solver.snapshot();
   const history = profileAges.map(age => profileHistory.find(item => item.steps === state.steps-age)).filter(Boolean);
   // History buffers stay in the worker; cloning these small profiles preserves the ring.
-  self.postMessage({ ...state, profileHistory: history, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.fluid.buffer, state.profileU.buffer, state.profileV.buffer, ...state.pressureProfiles.map(profile => profile.values.buffer)]);
+  self.postMessage({ ...state, profileHistory: history, request }, [state.u.buffer, state.v.buffer, state.p.buffer, state.div.buffer, state.fluid.buffer, state.ink.buffer, state.profileU.buffer, state.profileV.buffer, ...state.pressureProfiles.map(profile => profile.values.buffer)]);
 }
 function finishBatch(error) {
   if (!batch) return;
@@ -40,6 +40,7 @@ self.onmessage = ({ data }) => {
     if (data.type === 'stop') return;
     if (data.type === 'reset') { solver = new FlowSolver(data.n || solver.n); solver.configure(data.options || {}); solver.reset(); }
     if (data.type === 'configure') solver.configure(data.options);
+    if (data.type === 'ink') solver.dropInk();
     if (data.type === 'reset' || data.type === 'configure') { profileHistory = []; recordProfile(); }
     if (data.type === 'advance') {
       const count = Number.isFinite(data.count) ? Math.max(1, Math.min(60, Math.floor(data.count))) : 1;

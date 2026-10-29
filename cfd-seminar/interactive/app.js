@@ -32,6 +32,10 @@ function controlState() {
   $('advection-method').textContent = { upwind: '1次精度 風上差分', godunov: '1次精度 Godunov', upwind2: '2次精度 風上差分', kk: '3次精度 KK（河村・桑原）' }[o.advectionScheme];
   $('vertical-upwind-details').hidden = ['upwind2', 'kk'].includes(o.advectionScheme);
   const channel = o.case === 'channel', pool = o.case === 'pool', speed = channel ? o.inflow : o.lid;
+  $('ink-controls').hidden = pool;
+  document.querySelector('[data-view="ink"]').hidden = pool;
+  $('ink-drop').disabled = !frame || frame.options.case !== o.case || pool;
+  $('ink-position').textContent = channel ? '固定位置：x = 2 mm、y = 2 mm' : '固定位置：x = 2.5 mm、y = 7.5 mm';
   const domainHeight = channel ? .004 : .01;
   const count = +o.advection + +o.viscosity + +o.pressure;
   $('model-note').textContent = count === 3 ? '全項ON' : !o.pressure ? '圧力補正OFF · 非圧縮条件なし' : '一部の項がOFF';
@@ -81,6 +85,7 @@ function schedule() {
 }
 function reset() {
   playState(false); $('error').hidden = true;
+  $('ink-drop').disabled = true;
   send('reset', { n: +$('grid').value, options: options() });
 }
 function color(t, signed) {
@@ -88,6 +93,10 @@ function color(t, signed) {
   const stops = signed ? [[45, 107, 180], [255, 255, 255], [188, 61, 86]] : [[255, 255, 255], [186, 223, 235], [42, 157, 164], [234, 166, 68]];
   const a = t * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(a)), f = a - i;
   return stops[i].map((x, c) => Math.round(x * (1 - f) + stops[i + 1][c] * f));
+}
+function inkColor(value) {
+  const t = Math.sqrt(Math.max(0, Math.min(1, value)));
+  return [92, 51, 160].map(x => Math.round(255 + (x-255)*t));
 }
 function spatialAxes() {
   const { width, height } = canvas.getBoundingClientRect();
@@ -114,7 +123,7 @@ function spatialAxes() {
 }
 function draw() {
   if (!frame) return;
-  const { n, nx, u, v, p, div, fluid, options: o } = frame;
+  const { n, nx, u, v, p, div, ink, fluid, options: o } = frame;
   const pool = o.case === 'pool';
   canvas.width = 720 * nx/n; canvas.height = 720;
   canvas.classList.toggle('wide', nx !== n);
@@ -148,12 +157,12 @@ function draw() {
   const pixels = fctx.createImageData(nx, n), signed = view === 'divergence' || (view === 'pressure' && !pool);
   const referenceSpeed = o.case === 'channel' ? o.inflow : pool ? .01 : o.lid;
   const speedMax = referenceSpeed * (o.case === 'channel' ? 1.5 : 1);
-  let max = view === 'speed' ? speedMax : view === 'pressure' ? (pool ? frame.gravityAcceleration*frame.ly : Math.max(referenceSpeed**2, 1e-12)) : Math.max(referenceSpeed/frame.ly, 1e-12);
+  let max = view === 'ink' ? 1 : view === 'speed' ? speedMax : view === 'pressure' ? (pool ? frame.gravityAcceleration*frame.ly : Math.max(referenceSpeed**2, 1e-12)) : Math.max(referenceSpeed/frame.ly, 1e-12);
   if (signed) for (const value of (view === 'pressure' ? p : div)) max = Math.max(max, Math.abs(value));
   for (let j = 0; j < n; j++) for (let i = 0; i < nx; i++) {
     const k = i + nx * j, pixel = (i + nx * (n - 1 - j)) * 4;
     const value = view === 'speed' ? Math.hypot(u[k], v[k]) : view === 'pressure' ? p[k] : div[k];
-    const rgb = fluid[k] ? color(signed ? 0.5 + value / (2 * max) : max > 0 ? value / max : 0, signed) : [216,222,226];
+    const rgb = !fluid[k] ? [216,222,226] : view === 'ink' ? inkColor(ink[k]) : color(signed ? 0.5 + value / (2 * max) : max > 0 ? value / max : 0, signed);
     pixels.data.set([...rgb, 255], pixel);
   }
   fctx.putImageData(pixels, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(field, 0, 0, width, height);
@@ -204,13 +213,13 @@ function draw() {
     ctx.strokeStyle = '#202a30'; ctx.fillStyle = '#202a30'; ctx.lineWidth = 1.1*pixelScale;
     ctx.stroke(shafts); ctx.fill(heads);
   }
-  const names = { speed: '速さ (mm/s)', pressure: o.case !== 'cavity' ? '圧力差 (Pa)' : '圧力 (Pa)', divergence: '発散 (s⁻¹)' };
+  const names = { speed: '速さ (mm/s)', pressure: o.case !== 'cavity' ? '圧力差 (Pa)' : '圧力 (Pa)', divergence: '発散 (s⁻¹)', ink: 'インク濃度（相対値）' };
   const displayMax = max * (view === 'speed' ? 1000 : view === 'pressure' ? frame.rho : 1);
   $('legend-name').textContent = names[view]; $('scale-max').textContent = scaleLabel(displayMax);
   $('domain-label').textContent = `${scaleLabel(frame.lx*1000)} × ${scaleLabel(frame.ly*1000)} mm · ${nx} × ${n} セル · 格子幅 ${scaleLabel(frame.h*1000)} mm`;
   $('colorbar').previousElementSibling.textContent = signed ? scaleLabel(-displayMax) : '0';
-  $('colorbar').style.background = signed ? 'linear-gradient(90deg,#2d6bb4,#fff,#bc3d56)' : '';
-  $('speed-scale-note').hidden = signed || o.case !== 'channel';
+  $('colorbar').style.background = view === 'ink' ? 'linear-gradient(90deg,' + Array.from({length:11},(_,i)=>`rgb(${inkColor(i/10).join(',')}) ${i*10}%`).join(',') + ')' : signed ? 'linear-gradient(90deg,#2d6bb4,#fff,#bc3d56)' : '';
+  $('speed-scale-note').hidden = view !== 'speed' || o.case !== 'channel';
   $('speed-scale-note').textContent = `理論最大 ${(speedMax*1000).toFixed(1)} mm/s`;
   spatialAxes();
 }
@@ -232,6 +241,9 @@ function receive({ data }) {
     $('cfl-max').textContent = `上限 ${data.cflLimit.toFixed(3)}`;
   }
   const pool = data.options.case === 'pool';
+  $('ink-drop').disabled = pool || data.options.case !== $('case').value;
+  const inkStatus = data.inkDrops ? `${data.inkDrops}滴投入済み` : '未投入';
+  if ($('ink-status').textContent !== inkStatus) $('ink-status').textContent = inkStatus;
   const speed = data.referenceSpeed;
   $('cfl').textContent = `CFL（${pool ? '基準速度' : '境界速度'}）= ${(speed * data.fixedDt / data.h).toFixed(4)}`;
   $('cfl').title = pool ? '時間刻み用の基準速度 sqrt(gH) によるCFL。静水中の実流速ではありません。' : '境界速度Uを用いた UΔt/Δx。内部の安定判定では2方向の移流と粘性を別途考慮します。';
@@ -255,7 +267,7 @@ document.fonts.ready.then(pressureOutline);
 document.addEventListener('pointerdown', () => $('equation-system').classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key === ' ') $('equation-system').classList.add('keyboard-focus'); });
 try {
-  worker = new Worker('worker.js?v=20261027-kk'); worker.onmessage = receive;
+  worker = new Worker('worker.js?v=20261029-ink'); worker.onmessage = receive;
   worker.onerror = () => { playState(false); $('error').hidden = false; $('error').textContent = '計算を起動できませんでした。公開URLから開き直してください。'; };
   send('reset', { n: +$('grid').value, options: options() });
 } catch (error) { $('error').hidden = false; $('error').textContent = 'このブラウザでは計算を起動できません。公開URLを対応ブラウザで開いてください。'; }
@@ -263,6 +275,7 @@ $('play').onclick = () => { playState(!running); schedule(); };
 $('reset').onclick = () => { if (worker) reset(); };
 $('step').onclick = () => { playState(false); send('advance'); };
 $('stage-step').onclick = () => { playState(false); send('stage'); };
+$('ink-drop').onclick = () => { if (worker && !$('ink-drop').disabled) { setView('ink'); send('ink'); } };
 $('cfl-target').oninput = () => {
   cflEditing = true; playState(false);
   $('cfl-value').textContent = (+$('cfl-target').value).toFixed(3);
@@ -296,7 +309,7 @@ new ResizeObserver(() => { draw(); FlowProfile.resize(); }).observe(canvas);
 function setView(value) {
   view = value;
   document.querySelectorAll('[data-view]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.view === view)));
-  canvas.setAttribute('aria-label', `計算した${{speed: '速度', pressure: '圧力', divergence: '発散'}[view]}場。横軸x・縦軸yはmm単位、原点は左下。周囲に境界条件を表示。`);
+  canvas.setAttribute('aria-label', `計算した${{speed: '速度', pressure: '圧力', divergence: '発散', ink: 'インク濃度'}[view]}場。横軸x・縦軸yはmm単位、原点は左下。周囲に境界条件を表示。`);
   draw();
 }
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => setView(button.dataset.view));

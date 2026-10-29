@@ -5,8 +5,8 @@
   <meta name="description" content="移流・粘性・重力・圧力補正を組み合わせて流れと静水圧を観察する体験教材。計算はブラウザ内で実行します。">
   <title>CFD Seminar Mini</title>
   <link rel="icon" href="icons/rotate-ccw.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261027-kk">
-  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-kk"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261027-pool-first"></script>
+  <link rel="stylesheet" href="../assets/katex.min.css"><link rel="stylesheet" href="style.css?v=20261029-ink">
+  <script defer src="../assets/katex.min.js"></script><script defer src="../assets/chart.umd.min.js"></script><script defer src="equations.js?v=20261027-kk"></script><script defer src="ghia.js?v=20261022-cavity400"></script><script defer src="profile.js?v=20261026-pool-steps"></script><script defer src="app.js?v=20261029-ink"></script>
 </head>
 <body>
 <header class="masthead"><h1><a class="brand" href="./">CFD Seminar <b>Mini</b></a></h1><a class="seminar" href="../">CFD Seminar <span aria-hidden="true">↗</span></a></header>
@@ -43,8 +43,9 @@
     </aside>
     <section class="simulation" aria-label="流れのシミュレーション">
       <div class="simulation-view" id="simulation-view">
-      <div class="view-toolbar"><div class="segmented" role="group" aria-label="表示する量"><button data-view="speed" aria-pressed="true">速さ</button><button data-view="pressure" aria-pressed="false">圧力</button><button data-view="divergence" aria-pressed="false">発散</button></div><label class="arrow-toggle"><input id="arrows" type="checkbox" checked>ベクトル</label><button class="icon-button" id="fullscreen" title="全画面表示" aria-label="全画面表示" aria-pressed="false"><img src="icons/maximize.svg" alt=""></button></div>
+      <div class="view-toolbar"><div class="segmented" role="group" aria-label="表示する量"><button data-view="speed" aria-pressed="true">速さ</button><button data-view="pressure" aria-pressed="false">圧力</button><button data-view="divergence" aria-pressed="false">発散</button><button data-view="ink" aria-pressed="false" hidden>インク</button></div><label class="arrow-toggle"><input id="arrows" type="checkbox" checked>ベクトル</label><button class="icon-button" id="fullscreen" title="全画面表示" aria-label="全画面表示" aria-pressed="false"><img src="icons/maximize.svg" alt=""></button></div>
       <div class="transport"><div class="transport-buttons"><button id="play" class="primary" disabled><img id="play-icon" src="icons/play.svg" alt=""><img id="pause-icon" src="icons/pause.svg" alt="" hidden><span id="play-label">再生</span></button><button id="step" class="icon-button" title="1時間ステップ進む" aria-label="1時間ステップ進む" disabled><img src="icons/step-forward.svg" alt=""></button><button id="reset" class="icon-button" title="同じ開始状態に戻す" aria-label="同じ開始状態に戻す"><img src="icons/rotate-ccw.svg" alt=""></button></div><div class="time"><span>時刻 <output id="time">0.000 s</output></span><span>Δt（固定） <output id="dt">— s</output></span></div><label class="rate-label">計算/更新 <select id="rate"><option value="1">1 step</option><option value="3">3 steps</option><option value="6" selected>6 steps</option><option value="12">12 steps</option><option value="24">24 steps</option><option value="60">60 steps</option></select></label></div>
+      <div class="ink-controls" id="ink-controls" hidden><button id="ink-drop" disabled aria-describedby="ink-position ink-help">インクを1滴落とす</button><span id="ink-position"></span><output id="ink-status" aria-live="polite">未投入</output><p id="ink-help">押した瞬間だけ投入します。再生すると流れに沿って動き、リセットで消えます。</p></div>
       <p id="error" role="alert" hidden></p>
       <div class="visualization-grid">
       <div class="canvas-wrap" id="canvas-wrap">
@@ -210,6 +211,7 @@
     </article>
     <details class="formula-details time-step-details"><summary>時間刻みの決め方</summary><div class="math-block" id="time-step-equation"></div><p class="muted"><span data-math="C"></span> は設定したCFL上限、<span data-math="U"></span> は流入速度または上壁速度です。水たまりでは時間刻み用の基準速度 <span data-math="U=\sqrt{gH}"></span> を使います（実流速ではありません）。初期値は全ケース・全格子で0.09。移流・粘性を合わせた安全側の評価では、最も厳しいPoiseuille flowの64分割で上限が約0.096です。スライダー上限はさらに5%の余裕を取り、0.001刻みへ切り下げています。項のON/OFFでは上限も時間刻みも変えません。格子またはCFLを変更すると<span data-math="\Delta t"></span>が変わります。</p></details>
   </section>
+  <details class="notes"><summary>インクの可視化</summary><p>「インクを1滴落とす」を押すたびに、固定位置へインクを一度だけ加えます。Poiseuille flowは入口寄りの中央（x = 2 mm、y = 2 mm）、Cavity flowは左上寄り（x = 2.5 mm、y = 7.5 mm）です。自動で追加投入はしません。</p><p>インクは計算した速度場に沿って運ぶ目印で、速度・圧力・密度・粘性は変えません。濃度は無次元の相対値0〜1で、薄い部分も見えるよう色を強調しています。セル境界の速度を使う1次風上差分で、時間ステップの完了時に濃度を更新します。数値的なにじみはありますが、分子拡散やインク自体の沈降は計算しません。①移流のON/OFFは運動量式の切り替えで、インクはその設定にかかわらず現在の速度場に沿って動きます。停止中は投入位置にとどまり、速度がゼロなら再生中も移動しません。リセット・ケース変更・格子変更でインクを消去します。</p></details>
   <details class="dimensional"><summary>Reynolds数と有次元化</summary>
     <p>同じ形状・境界条件でレイノルズ数をそろえると、無次元の速度分布を換算できます。Ghiaらの参照解は2次元の定常解で、開始直後の過渡的な流れとは区別します。<a href="#ref-1">[1]</a></p>
     <div class="math-block" id="dimensional-equation"></div>

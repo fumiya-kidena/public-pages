@@ -44,7 +44,8 @@
       const pool = this.options.case === 'pool';
       this.nx = (channel ? 5 : pool ? 2 : 1) * this.n;
       this.s = this.nx + 2;
-      for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad']) this[key] = new Float64Array(this.s * (this.n + 2));
+      for (const key of ['u', 'v', 'un', 'vn', 'p', 'rhs', 'r', 'd', 'ad', 'ink', 'inkNext']) this[key] = new Float64Array(this.s * (this.n + 2));
+      this.inkDrops = 0;
       this.fluid = new Uint8Array(this.u.length); this.fluidCount = 0;
       // Rectangular walls on a 16-unit layout, snapped to the selected mesh.
       const walls = (pool ? [
@@ -328,6 +329,45 @@
       if (!this.converged) throw new Error('圧力計算が収束しませんでした。条件を戻してリセットしてください。');
       this.projectionCount++;
     }
+    inkSource() {
+      return this.options.case === 'pool' ? null : {
+        x: this.options.case === 'channel' ? .002 : .0025,
+        y: this.options.case === 'channel' ? .002 : .0075,
+        radius: .09 * this.ly
+      };
+    }
+    dropInk() {
+      const source = this.inkSource();
+      if (!source) return;
+      for (let j = 1; j <= this.n; j++) for (let i = 1; i <= this.nx; i++) {
+        const r2 = (((i-.5)*this.h-source.x)**2 + ((j-.5)*this.h-source.y)**2) / source.radius**2;
+        if (r2 < 1) {
+          const k = this.index(i,j);
+          this.ink[k] = Math.min(1, this.ink[k] + (1-r2)**2);
+        }
+      }
+      this.inkDrops++;
+    }
+    transportInk() {
+      if (!this.inkDrops) return;
+      const { n, nx, s, h, u, v } = this;
+      let rate = 0;
+      for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
+        const k = i+s*j;
+        rate = Math.max(rate, Math.max(u[k-1],0)+Math.max(-u[k],0)+Math.max(v[k-s],0)+Math.max(-v[k],0));
+      }
+      const substeps = Math.max(1, Math.ceil(this.dt*rate/h/.9)), scale = this.dt/h/substeps;
+      // Passive concentration: donor-cell transport with fresh (zero-ink) inflow.
+      for (let step = 0; step < substeps; step++) {
+        const c = this.ink, next = this.inkNext;
+        for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
+          const k = i+s*j;
+          next[k] = c[k] - scale * (Math.max(u[k-1],0)*(c[k]-c[k-1]) + Math.max(-u[k],0)*(c[k]-c[k+1])
+            + Math.max(v[k-s],0)*(c[k]-c[k-s]) + Math.max(-v[k],0)*(c[k]-c[k+s]));
+        }
+        this.ink = next; this.inkNext = c;
+      }
+    }
     stage() {
       if (this.phase === 0) this.begin();
       const stage = this.phase;
@@ -342,6 +382,7 @@
       this.phase = (stage + 1) % 4;
       this.stats = this.measure();
       if (!Number.isFinite(this.stats.energy) || this.stats.maxSpeed > 1) throw new Error('速度が計算範囲を超えました。リセットしてください。');
+      if (stage === 3) this.transportInk();
       return stage;
     }
     step() { do { this.stage(); } while (this.phase !== 0); }
@@ -380,15 +421,16 @@
     }
     snapshot() {
       const { n, nx, s, h } = this, u = new Float32Array(nx * n), v = new Float32Array(nx * n), p = new Float32Array(nx * n), div = new Float32Array(nx * n);
-      const fluid = new Uint8Array(nx*n);
+      const fluid = new Uint8Array(nx*n), ink = new Float32Array(nx*n);
       for (let j = 1; j <= n; j++) for (let i = 1; i <= nx; i++) {
         const k = i + s * j, a = i - 1 + nx * (j - 1);
         fluid[a] = this.fluid[k];
+        ink[a] = this.ink[k];
         if (!fluid[a]) continue;
         u[a] = (this.u[k] + this.u[k - 1]) / 2; v[a] = (this.v[k] + this.v[k - s]) / 2; p[a] = this.p[k];
         div[a] = ((this.u[k] - this.u[k - 1]) + (this.v[k] - this.v[k - s])) / h;
       }
-      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, gravityAcceleration: this.gravityAcceleration, referenceSpeed: this.referenceSpeed(), fluid, pressureProfiles:this.pressureProfiles(), u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, fixedDt: this.timeStep(), cflLimit: this.cflLimit(), cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
+      return { n, nx, h, lx: nx * h, ly: this.ly, rho: this.rho, gravityAcceleration: this.gravityAcceleration, referenceSpeed: this.referenceSpeed(), fluid, ink, inkDrops: this.inkDrops, inkSource: this.inkSource(), pressureProfiles:this.pressureProfiles(), u, v, p, div, ...this.profiles(), time: this.time, steps: this.steps, phase: this.phase, dt: this.dt, fixedDt: this.timeStep(), cflLimit: this.cflLimit(), cfl: this.cfl, diffusionNumber: this.diffusionNumber, projectionCount: this.projectionCount, stage: this.lastStage, stats: this.stats, before: this.beforeProjection, after: this.afterProjection, iterations: this.iterations, options: { ...this.options } };
     }
   }
   if (typeof module !== 'undefined' && module.exports) module.exports = FlowSolver;
