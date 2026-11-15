@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="ブラウザで流れを計算するCFD Seminar Mini。Navier–Stokes方程式の各項の働きを体験します。">
+<title>CFD Seminar Mini</title>
+<style>
+  :root{color-scheme:dark;--bg:#0c0d10;--ink:#e9e9ec;--mut:#a4a8b2;--line:#30343d;--accent:#6fd6c8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.8 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:760px;margin:auto;padding:64px 24px 80px}
+  nav{margin-bottom:48px;font-size:14px}a{color:var(--accent);text-underline-offset:4px}
+  h1{font-size:clamp(30px,6vw,44px);line-height:1.25;letter-spacing:-.02em;margin:0 0 24px}
+  p{color:var(--mut);margin:16px 0;max-width:38em}
+  .open{display:inline-block;margin:16px 0 32px;padding:12px 20px;border:1px solid var(--accent);border-radius:8px;text-decoration:none;font-weight:600}
+  a:focus-visible{outline:3px solid var(--accent);outline-offset:6px}
+  section{border-top:1px solid var(--line);padding-top:24px}h2{font-size:20px;margin:0 0 12px}
+  footer{margin-top:48px;color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <nav aria-label="ナビゲーション"><a href="../">PublicPages 一覧</a></nav>
+  <h1>CFD Seminar Mini</h1>
+  <p>Navier–Stokes方程式の各項を切り替えながら、流れの変化をブラウザで確かめる体験教材です。</p>
+  <p>Poiseuille flowとCavity flowを題材に、移流・粘性・重力・圧力の働きを見ていきます。</p>
+  <a class="open" href="../cfd-seminar/interactive/">体験教材を開く</a>
+  <section aria-labelledby="materials">
+    <h2 id="materials">関連資料</h2>
+    <p><a href="../slides/">スライド一覧</a> — 総合機械工学「数値流体力学のウソ・ホント」</p>
+    <p><a href="../cfd-seminar/">CFD セミナー</a></p>
+  </section>
+  <footer>KIDENA Fumiya</footer>
+</main>
+</body>
+</html>

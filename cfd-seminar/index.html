@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>cfd-seminar — 概要</title>
+        <link rel="stylesheet" href="assets/style.css" />
+    </head>
+    <body>
+        <nav class="sidebar">
+            <h2>cfd-seminar</h2>
+                <ul>
+      <li><a href="index.html" class="current">概要</a></li>
+      <li><a href="setup.html">0. 環境構築</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
+        </nav>
+        <main>
+            <h1>cfd-seminar まとめ</h1>
+            <p class="updated">最終更新: 2026-07-08</p>
+
+            <p>
+                Fortranベースの、ごくシンプルな2次元非圧縮<abbr
+                    class="tip"
+                    title="Computational Fluid Dynamics（数値流体力学）"
+                    >CFD</abbr
+                >コード。速度をセルの面・圧力をセル中心に置く<abbr
+                    class="tip"
+                    title="Marker-And-Cell法。速度uをセル境界面、圧力pをセル中心に配置する格子の取り方。連続の式・運動量の式の離散化が自然になり、圧力と速度の間のチェッカーボード状の数値振動が起きにくい。"
+                    >MAC（スタガード）格子</abbr
+                ><a class="cite" href="#ref-4" title="Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. doi:10.1063/1.1761178">[4]</a>の上で、<abbr
+                    class="tip"
+                    title="速度・圧力を時間分離して解く手法。まず圧力を無視して仮の速度を計算し、その発散を打ち消すように圧力を求めて速度を補正する。"
+                    >Fractional Step法</abbr
+                >（射影法）<a class="cite" href="#ref-3" title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a>で解く。
+            </p>
+
+            <p>
+                ソースは
+                <a href="https://github.com/KIDENA-Fumiya/cfd-seminar" target="_blank" rel="noopener"
+                    >GitHubリポジトリ</a
+                >（<abbr
+                    class="tip"
+                    title="MIT License（Copyright © 2026 KIDENA-Fumiya）。著作権表示とこの許諾表示を残せば、商用利用も含めて自由に使用・複製・改変・再配布・販売してよい寛容なライセンス。ソフトウェアは無保証で、作者は生じた損害の責任を負わない。全文はリポジトリの LICENSE ファイルにある。"
+                    >MITライセンス</abbr
+                >）にある。
+            </p>
+
+            <p>
+                このテキストは
+                <code>wrk/</code>
+                のひな形（重要な計算部分が空欄）を、実際に自分の手で埋めながら
+                2次元CFDコードを完成させていくための<b>手順書</b>。
+            </p>
+
+            <h2>進め方</h2>
+            <ol>
+                <li>
+                    <a href="intro.html">初期条件</a> —
+                    格子・物性設定・ビルド方法・可視化（Fortranの基礎練習を兼ねる）
+                </li>
+                <li>
+                    <a href="advection.html">移流項</a> —
+                    運動量方程式の移流項を離散化する（境界条件は完成形を与える）
+                </li>
+                <li>
+                    <a href="diffusion.html">粘性項</a> —
+                    拡散項（粘性）を追加する
+                </li>
+                <li>
+                    <a href="bc.html">境界条件</a> —
+                    lid-driven cavity に切り替え、壁の境界条件（ゴーストセル）を自分で書く
+                </li>
+                <li>
+                    <a href="poisson.html">圧力Poisson</a> —
+                    圧力を求めて速度を非圧縮に補正する（ここで初めて cavity らしい渦ができる）
+                </li>
+                <li>
+                    <a href="advection2.html">移流項の改良</a> —
+                    素朴な移流項が高いセルPeclet数で破綻する様子を見て、改良の方向を考える
+                </li>
+            </ol>
+
+            <h2>ディレクトリ構成</h2>
+            <pre>
+cfd-seminar/
+├── src/               # 完成形（独立したmakefile・config.csv）
+├── wrk/               # 自習用未成コード（重要部分が空欄のひな形、src/と同じ構成）
+├── post/              # 後処理・可視化スクリプト（Python）
+├── data/              # シミュレーション出力（.gitignore対象）
+└── docs/              # まとめ資料一式（GitHub Pagesで公開）
+    ├── index.html     #   まとめの入口（このページ）
+    ├── setup.html …   #   各ステップのページ（setup / intro / advection / …）
+    └── assets/        #   共有CSS・JS・画像（assets/img/）
+</pre>
+            <p>
+                <code>src/</code
+                >は動作確認・検証済みの完成形、<code>wrk/</code>は同じファイル構成で重要な計算部分が
+                空欄になっているひな形（ビルド方法は<a href="intro.html"
+                    >初期条件</a
+                >を参照）。
+            </p>
+            <h2 id="references">参考文献</h2>
+            <ul class="ref-list">
+  <li id="ref-3">[3] Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2" target="_blank" rel="noopener">doi:10.1090/S0025-5718-1968-0242392-2</a></li>
+  <li id="ref-4">[4] Harlow, F.H., Welch, J.E. (1965). Numerical calculation of time-dependent viscous incompressible flow of fluid with free surface. Physics of Fluids, 8(12), 2182-2189. <a href="https://doi.org/10.1063/1.1761178" target="_blank" rel="noopener">doi:10.1063/1.1761178</a></li>
+            </ul>
+        </main>
+    </body>
+</html>

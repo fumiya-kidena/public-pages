@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cfd-seminar — 5. 圧力Poisson</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/katex.min.css">
+<script defer src="assets/katex.min.js"></script>
+<script defer src="assets/auto-render.min.js"></script>
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+  <nav class="sidebar">
+    <h2>cfd-seminar</h2>
+        <ul>
+      <li><a href="index.html">概要</a></li>
+      <li><a href="setup.html">0. 環境構築</a></li>
+      <li><a href="intro.html">1. 初期条件</a></li>
+      <li><a href="advection.html">2. 移流項</a></li>
+      <li><a href="diffusion.html">3. 粘性項</a></li>
+      <li><a href="bc.html">4. 境界条件</a></li>
+      <li><a href="poisson.html" class="current">5. 圧力Poisson</a></li>
+      <li><a href="advection2.html">6. 移流項の改良</a></li>
+      <li><a href="references.html">参考文献</a></li>
+    </ul>
+  </nav>  <main>
+<noscript><div class="warn">数式の表示にJavaScriptを使っています。数式が見えない場合は、ブラウザでJavaScriptが有効か確認してください。</div></noscript>
+
+<h1>5. 圧力Poisson</h1>
+<p>
+前の<a href="bc.html">境界条件</a>で cavity に切り替えたが、移流・粘性だけでは蓋の運動がその場に伝わるだけで、cavity らしい渦ができなかった。
+このステップでは<b>圧力</b>を解いて仮の速度を非圧縮に補正し、壁沿いの循環を作る。これで分数ステップ（移流 → 粘性 → 圧力）が完成する。
+</p>
+
+<h2>支配方程式</h2>
+<p>
+運動量式に残る<b>圧力項</b>（下線部）と、まだ使っていない<b>連続の式</b>（非圧縮条件）を、このステップで扱う:
+</p>
+<p class="eq">$$ \frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u}\cdot\nabla)\mathbf{u} = \underbrace{-\frac{1}{\rho}\nabla p}_{\text{圧力項}} + \nu\nabla^2\mathbf{u} \tag{1} $$</p>
+<p class="eq">$$ \nabla\cdot\mathbf{u} = 0 \tag{2} $$</p>
+<p>
+圧力項のx成分は $-\frac{1}{\rho}\frac{\partial p}{\partial x}$。移流・粘性で進めた仮の速度
+$\mathbf{u}^{\mathrm{diff}}$ は連続の式を満たさないので、圧力を解いて速度を補正し、非圧縮
+（$\nabla\cdot\mathbf{u}=0$）にするのがこのステップ。
+</p>
+
+<h3>圧力の境界条件（Neumann）</h3>
+<p>
+圧力（射影ポテンシャル）$\phi$にも境界条件が要る。壁を横切る流れが無い
+（壁に垂直な速度が0）ということは、あとで出てくる速度補正 $\mathbf{u}^{n+1} = \mathbf{u}^{\mathrm{diff}} - \Delta t\,\nabla\phi$ の壁に垂直な成分も0、
+すなわち<b>壁で圧力の法線方向勾配が0</b>（$\frac{\partial \phi}{\partial n} = 0$、<abbr class="tip" title="境界で法線方向の勾配をゼロに固定する境界条件。ここでは壁に垂直な圧力の傾きを0にする。">Neumann条件</abbr>）を意味する。
+コードでは<code>poisson.f90</code>のSORで、領域端の隣接値を内側に折り返して参照する
+（<code>pe = p(min(i+1,Nx),j)</code>のように添字を<code>min/max</code>で頭打ちにする）ことで勾配ゼロを表している——ここはすでに書いてある。
+</p>
+
+<h2>圧力（射影ポテンシャル）を解く意味</h2>
+<p>
+仮の速度 $\mathbf{u}^{\mathrm{diff}}$ は移流項と粘性項を足しただけで、連続の式 $\nabla\cdot\mathbf{u}=0$ を満たしていない。
+最終的な $\mathbf{u}^{n+1}$ には運動量の式と連続の式の<b>両方</b>を満たしてほしい。そこで $\mathbf{u}^{\mathrm{diff}}$ を発散ゼロの場へ射影する。
+<abbr class="tip" title="任意のベクトル場を『発散がゼロの部分』と『あるスカラーの勾配』に一意に分解できるという定理。">Helmholtz–Hodge分解</abbr>により、
+仮の速度から勾配部分 $\Delta t\,\nabla\phi$ を引けば、発散ゼロの速度が残る:
+</p>
+<p class="eq">$$ \mathbf{u}^{n+1} = \mathbf{u}^{\mathrm{diff}} - \Delta t\,\nabla\phi \tag{3} $$</p>
+<p>
+発散ゼロ（$\nabla\cdot\mathbf{u}^{n+1}=0$）を課すと、$\phi$ は次の圧力Poisson方程式を満たす:
+</p>
+<p class="eq">$$ \nabla^2\phi = \frac{1}{\Delta t}\,\nabla\cdot\mathbf{u}^{\mathrm{diff}} \tag{4} $$</p>
+<p>
+ここで $\phi$ は<b>物理的な圧力そのものではない</b>。速度を非圧縮に保つための
+<abbr class="tip" title="射影で速度を発散ゼロにするためのスカラー。物理圧力を近似するが、同一ではない。">射影ポテンシャル（擬圧力）</abbr>で、
+物理圧力を近似する（Δt→0で一致）が、分数ステップの分離誤差（特に壁の近くで $O(\Delta t)$ 程度）を
+このスカラーが引き受ける分だけ厳密な圧力とはずれる。この「圧力もどき」で毎ステップ速度を非圧縮に引き戻すのが、
+<abbr class="tip" title="速度・圧力を時間分離して解く手法。仮の速度を作り、その発散を打ち消すよう圧力を解いて速度を補正する。">Fractional Step法</abbr>（射影法）<a class="cite" href="#ref-3" title="Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. doi:10.1090/S0025-5718-1968-0242392-2">[3]</a>の肝である。
+</p>
+<p>
+コードでは $\phi$ を配列 <code>p</code> で表し、<code>1/ρ</code>は<code>p</code>に吸収させている。
+全周<abbr class="tip" title="境界で法線方向の勾配をゼロに固定する境界条件（∂φ/∂n=0）。">Neumann</abbr>境界では
+$\phi$ は定数分だけ不定なので、毎ステップ平均をゼロに引いてある。
+</p>
+
+<h2>離散化と演習（<code>poisson.f90</code>）</h2>
+
+<h3>1. 発散（Poissonの右辺 <code>rhs_p</code>）</h3>
+<p>
+セル(i,j)の発散は、隣り合う面の速度の差で作る（<code>u(i,j)</code>が $u_{i+1/2,\,j}$）。それを<code>dt</code>で割ったものが右辺:
+</p>
+<p class="eq">$$ \mathrm{rhs}_{i,j} = \frac{1}{\Delta t}\left(\frac{u^{\mathrm{diff}}_{i+1/2,\,j}-u^{\mathrm{diff}}_{i-1/2,\,j}}{\Delta x} + \frac{v^{\mathrm{diff}}_{i,\,j+1/2}-v^{\mathrm{diff}}_{i,\,j-1/2}}{\Delta y}\right) \tag{5} $$</p>
+<details class="answer">
+<summary>答えを見る</summary>
+<pre>
+rhs_p(i,j) = ((u(i,j)-u(i-1,j))/dx + (v(i,j)-v(i,j-1))/dy) / dt
+</pre>
+</details>
+
+<h3>2. SOR（Gauss-Seidel＋緩和係数）</h3>
+<p>
+Poisson方程式は<abbr class="tip" title="Successive Over-Relaxation（逐次過緩和）。">SOR</abbr>で反復的に解く。これは
+<abbr class="tip" title="連立一次方程式を反復で解く古典的な手法。各格子点を順に、周囲の最新値を使って更新していく。">Gauss-Seidel法</abbr>
+に緩和係数 ω（1〜2）を掛けて収束を速めただけの手法。まず各格子点で Gauss-Seidel の新値を作り:
+</p>
+<p class="eq">$$ \phi^{\mathrm{GS}}_{i,j} = \frac{1}{\text{coef}}\left(\frac{\phi_{i+1,j}+\phi_{i-1,j}}{\Delta x^2} + \frac{\phi_{i,j+1}+\phi_{i,j-1}}{\Delta y^2} - \mathrm{rhs}_{i,j}\right) \tag{6} $$</p>
+<p>
+（$\text{coef} = \frac{2}{\Delta x^2}+\frac{2}{\Delta y^2}$）。次に、旧値からの変化量を ω 倍して適用する（<code>ω=1</code>なら Gauss-Seidel そのもの、<code>1&lt;ω&lt;2</code>で加速）:
+</p>
+<p class="eq">$$ \phi^{\mathrm{new}}_{i,j} = \phi_{i,j} + \omega\left(\phi^{\mathrm{GS}}_{i,j} - \phi_{i,j}\right) \tag{7} $$</p>
+<details class="answer">
+<summary>答えを見る</summary>
+<pre>
+p_new = (pe/dx**2 + pw/dx**2 + pn/dy**2 + ps/dy**2 - rhs_p(i,j)) / coef
+p_new = omega*p_new + (1.0d0 - omega)*p(i,j)
+</pre>
+</details>
+<p>
+境界条件（Neumann、平均をゼロに固定）と、隣接値<code>pe,pw,pn,ps</code>・<code>coef</code>はすでに書いてある。埋めるのはこの2行だけ。
+</p>
+
+<h3>3. 速度補正</h3>
+<p>
+求めた $\phi$ の勾配を仮の速度から引くと、発散ゼロの $\mathbf{u}^{n+1}$ になる:
+</p>
+<p class="eq">$$ u^{n+1}_{i+1/2,\,j} = u^{\mathrm{diff}}_{i+1/2,\,j} - \Delta t\,\frac{\phi_{i+1,j}-\phi_{i,j}}{\Delta x} \tag{8} $$</p>
+<p class="eq">$$ v^{n+1}_{i,\,j+1/2} = v^{\mathrm{diff}}_{i,\,j+1/2} - \Delta t\,\frac{\phi_{i,j+1}-\phi_{i,j}}{\Delta y} \tag{9} $$</p>
+<details class="answer">
+<summary>答えを見る</summary>
+<pre>
+u(i,j) = u(i,j) - dt*(p(i+1,j) - p(i,j))/dx
+v(i,j) = v(i,j) - dt*(p(i,j+1) - p(i,j))/dy
+</pre>
+</details>
+<h2>実行して確認: 圧力を入れて Ghia 基準解と比較する</h2>
+<p>
+lid-driven cavity flow の定番の検証には、Ghia ら<a class="cite" href="#ref-1" title="Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. Journal of Computational Physics, 48(3), 387-411. doi:10.1016/0021-9991(82)90058-4">[1]</a>
+の数値解が使われる。これは非常に細かい格子＋マルチグリッド法で解いたもので、中心線上の離散点データ
+（Re=100, 400, 1000, ...）がCFDコードの比較用ベンチマークとして広く用いられている。
+</p>
+<ol>
+<li>上の演習の3か所（<code>rhs_p</code>・SOR更新・速度補正）を<code>poisson.f90</code>に埋める。</li>
+<li><code>wrk/main.f90</code> の最後の<b>1行</b>の行頭の <code>! </code> を消す:
+<pre>
+    ! call poisson(u, v, p)          ! 5. 圧力Poissonのステップで解除
+</pre>
+これで分数ステップの呼び出し列（移流 → 粘性 → 圧力）がすべて有効になる。</li>
+<li><code>wrk/config.csv</code> は①と同じ（<code>case=cavity, U0=0.01, nstep=30000</code>）。</li>
+<li>ビルドして実行し、絵にする:
+<pre>
+cd wrk
+make
+./cfd.exe
+cd ..
+python post/plot.py wrk/config.csv
+</pre>
+まず<code>nstep=3000</code>程度で渦ができ始めるのを確かめてから、3万ステップまで回すと定常になる。</li>
+<li>結果を確認する。今度は蓋の下で押しのけられた流体が壁沿いに循環して渦ができ、
+    右パネルの中心線の速度分布が Ghia 基準解（赤四角）に重なれば完成。</li>
+</ol>
+
+<details class="answer">
+<summary>実行結果を見る</summary>
+<img src="assets/img/cavity_re1000.png" alt="lid-driven cavity, Re=1000, converged">
+<p class="figcap">
+Re=1000, 48×48格子。圧力を解くことで蓋の下に押しのけられた流体が壁沿いに循環し、
+Ghia基準解（赤四角）とよく一致する渦が再現されている。左下・右下には小さな二次渦もうっすら見える。
+</p>
+</details>
+
+<div class="warn">
+<b>channel flow の答え合わせ（発展）</b>: せっかくここまで channel 用の<code>bc.f90</code>・
+<code>initial.f90</code>を作ってきたので、余裕があれば元に戻して同じ<code>poisson</code>で
+確認してみるとよい。<code>config.csv</code>を<code>case=channel, U0=1.0×10⁻⁴</code>（この低いU0の
+理由は<a href="advection2.html">6. 移流項の改良</a>で扱う）に戻し、発達まで回せば（<code>nstep</code>は粘性項ステップと同じく30万程度）、
+出口の速度分布が plane Poiseuille flow の解析解とほぼ完全に一致する。
+<details class="answer">
+<summary>実行結果を見る</summary>
+<img src="assets/img/answer_poisson.png" alt="channel flow, fully converged">
+<p class="figcap">Re=10, 48×48格子。発散は<code>max|div|≈5.4×10⁻⁷</code>まで収束し、plane Poiseuille flow の解析解とほぼ完全に一致する。</p>
+</details>
+</div>
+
+<div class="ok">
+<b>変更を保存する</b>: これで分数ステップの全体（移流→粘性→圧力）が完成した。<code>poisson.f90</code> と <code>main.f90</code> を<a href="setup.html#push">コミット・プッシュ</a>しておく（<code>bc.f90</code>・<code>initial.f90</code> は前のステップで保存済み）。
+</div>
+
+<h2 id="references">参考文献</h2>
+<ul class="ref-list">
+  <li id="ref-1">[1] Ghia, U., Ghia, K.N., Shin, C.T. (1982). High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method. Journal of Computational Physics, 48(3), 387-411. <a href="https://doi.org/10.1016/0021-9991(82)90058-4" target="_blank" rel="noopener">doi:10.1016/0021-9991(82)90058-4</a></li>
+  <li id="ref-3">[3] Chorin, A.J. (1968). Numerical solution of the Navier-Stokes equations. Mathematics of Computation, 22(104), 745-762. <a href="https://doi.org/10.1090/S0025-5718-1968-0242392-2" target="_blank" rel="noopener">doi:10.1090/S0025-5718-1968-0242392-2</a></li>
+</ul>
+  </main>
+</body>
+</html>

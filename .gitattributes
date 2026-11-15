@@ -1,0 +1,16 @@
+* text=auto eol=lf
+
+*.enc binary
+*.glb binary
+*.gltf binary
+*.bin binary
+*.usdz binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.svg text eol=lf

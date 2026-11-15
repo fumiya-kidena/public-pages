@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>FLOW AR</title>
+  <script>
+  (() => {
+    "use strict";
+
+    // Printed-QR compatibility contract: keep /public-pages/f/, the fragment
+    // grammar, and every issued code valid. Destinations may move, but an
+    // issued code must be updated here rather than renamed or repurposed.
+    const routes = Object.freeze({
+      b: "../_p/flow-ar/markerAr.html?case=bagBreakup&mode=bagFixed",
+      d: "../_p/flow-ar/markerAr.html?case=oscillatingDroplet&mode=glass",
+      w: "../_p/flow-ar/markerAr.html?case=windWave&mode=surface",
+      m: "../_p/flow-ar/markerAr.html?case=medullaryCavity"
+    });
+    const match = window.location.hash.slice(1).match(/^([bdwm])([0-9]{78})$/);
+    if (!match || !Object.prototype.hasOwnProperty.call(routes, match[1])) {
+      document.documentElement.dataset.invalid = "true";
+      return;
+    }
+
+    try {
+      const token = match[2];
+      const credentialValue = BigInt(token);
+      const canonicalToken = credentialValue.toString(10).padStart(78, "0");
+      if (credentialValue >= (BigInt(1) << BigInt(256)) || canonicalToken !== token) {
+        throw new Error("invalid token");
+      }
+      const credentialHex = credentialValue.toString(16).padStart(64, "0");
+      const target = new URL(routes[match[1]], window.location.href);
+      // Refresh the destination HTML, whose encrypted asset map is release-specific.
+      // The printed URL/token stay unchanged; this value contains no credential.
+      target.searchParams.set("_flowArOpen", String(Date.now()));
+      target.hash = `staticrypt_pwd=${credentialHex}&remember_me`;
+      window.location.replace(target.href);
+    } catch {
+      document.documentElement.dataset.invalid = "true";
+    }
+  })();
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+      background: #071f2a;
+      color: #f3efe5;
+    }
+    body {
+      display: none;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      text-align: center;
+    }
+    html[data-invalid="true"] body {
+      display: grid;
+    }
+  </style>
+  <noscript><style>body { display: grid; }</style></noscript>
+</head>
+<body>
+  <p>FLOW AR link could not be opened.<noscript><br>JavaScript is required.</noscript></p>
+</body>
+</html>
